@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>1. New Block</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_new_block</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_new_block.py</dependency>
+
+  <param name="use_page_size" type="bool" gui-text="Use current page size for block (ignores inputs below)">false</param>
+  <param name="block_w_in" type="float" min="0.5" max="120" precision="3" gui-text="Block width (inches)">6.0</param>
+  <param name="block_h_in" type="float" min="0.5" max="120" precision="3" gui-text="Block height (inches)">6.0</param>
+  <separator/>
+  <label appearance="header">Initial Sectioning</label>
+  <param name="grid_rows" type="int" min="1" max="50" gui-text="Pre-cut grid rows">1</param>
+  <param name="grid_cols" type="int" min="1" max="50" gui-text="Pre-cut grid columns">1</param>
+  <separator/>
+  <label appearance="header">Setup Actions</label>
+  <param name="resize_page" type="bool" gui-text="Resize page to fit this block">false</param>
+  <param name="scale_mode" type="optiongroup" appearance="combo" gui-text="Selected object scaling">
+      <option value="none">Do not scale</option>
+      <option value="fit">Fit within (preserve aspect, leave blank space)</option>
+      <option value="crop">Crop to fit (preserve aspect, fill entirely)</option>
+      <option value="stretch">Stretch to fit (ignore aspect ratio)</option>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_new_block.py</command></script>
+</inkscape-extension>

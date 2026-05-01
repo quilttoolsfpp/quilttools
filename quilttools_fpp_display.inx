@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>4. Display Settings &amp; Colors</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_display</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_display.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="refresh_only">Refresh Display (Apply Settings Below)</option>
+    <option value="save_colors">Save Canvas Colors to Block Memory</option>
+    <option value="clear_colors">Clear Custom Colors (Revert to Default)</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Display Preferences</label>
+  <param name="color_mode" type="optiongroup" appearance="combo" gui-text="Default Palette">
+    <option value="piece">Rainbow Pieces</option>
+    <option value="section">Section Colors</option>
+  </param>
+
+  <separator/>
+  <param name="show_sa" type="bool" gui-text="Show Seam Allowances on Canvas">false</param>
+  <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
+
+  <label>Note: To use custom colors, fill pieces with the Inkscape paint tool, then run 'Save Canvas Colors'.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_display.py</command></script>
+</inkscape-extension>

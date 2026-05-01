@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>5. Heal &amp; Guides</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_heal</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_heal.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="smart_heal">Smart Heal (Auto-Collapse Sections)</option>
+    <option value="to_guides">Convert Whole Block to Guides</option>
+    <option value="clear_guides">Clear All Guides</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Heal Settings</label>
+  <param name="preserve_guides" type="bool" gui-text="Preserve healed seams as reference guides">true</param>
+
+  <separator/>
+  <label appearance="header">Convert Block Settings</label>
+  <param name="guide_color" type="optiongroup" appearance="combo" gui-text="Guide Line Color">
+      <option value="#00ffff">Neon Cyan</option>
+      <option value="#0000ff">Standard Blue</option>
+      <option value="#ff00ff">Neon Magenta</option>
+      <option value="#00ff00">Lime Green</option>
+      <option value="#ff0000">Bright Red</option>
+  </param>
+  <param name="clear_guides" type="bool" gui-text="Clear previous guides before generating">true</param>
+  <param name="guides_new_block" type="bool" gui-text="Automatically replace with a fresh grid block">true</param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_heal.py</command></script>
+</inkscape-extension>

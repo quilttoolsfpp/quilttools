@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>2. Guillotine Cut</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_cut</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_cut.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="cut">Guillotine Cut</option>
+    <option value="heal">Two-Piece Merge (Adjacent Only)</option>
+    <option value="undo">Undo last cut</option>
+  </param>
+
+  <separator/>
+  <param name="mark_boundary" type="bool" gui-text="Mark as Section Boundary [ADVANCED: Creates new letter section]">false</param>
+  <param name="auto_cut" type="bool" gui-text="Auto-detect last drawn line (if none selected)">true</param>
+  <separator/>
+  <param name="angle_snap" type="float" min="0" max="90" precision="1" gui-text="Angle snap (degrees, 0=off)">15.0</param>
+  <param name="min_piece_area" type="float" min="0.0" max="10.0" precision="2" gui-text="Warn if piece is smaller than (sq inches)">0.25</param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_cut.py</command></script>
+</inkscape-extension>

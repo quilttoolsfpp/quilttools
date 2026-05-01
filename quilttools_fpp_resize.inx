@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>8. Resize Block</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_resize</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_resize.py</dependency>
+
+  <param name="new_w_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Width (inches)">12.0</param>
+  <param name="new_h_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Height (inches)">12.0</param>
+
+  <label>Note: This will stretch your block to exactly match the target dimensions. It works on finished, cut, and labeled blocks.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_resize.py</command></script>
+</inkscape-extension>

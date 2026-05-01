@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>6. Export &amp; Layout</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_export</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_export.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="1. Workflow Action">
+    <option value="layout">Step 1: Generate Layout (Smart Pack or Open Canvas)</option>
+    <option value="finalize">Step 2: Finalize Open Canvas (Slice &amp; Add Glue Tabs)</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Layout Options (For Step 1)</label>
+  <param name="layout_mode" type="optiongroup" appearance="combo" gui-text="Layout Strategy">
+    <option value="compact_rotate">Smart Pack (Auto-Rotate &amp; Fit to Pages)</option>
+    <option value="explode">Open Canvas (Contiguous Grid for Manual Placement)</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Document Settings</label>
+  <param name="page_size" type="optiongroup" appearance="combo" gui-text="Paper Size">
+    <option value="letter">US Letter (8.5 x 11 in)</option>
+    <option value="a4">A4 (8.27 x 11.69 in)</option>
+    <option value="a3">A3 (11.69 x 16.54 in)</option>
+  </param>
+
+  <param name="orientation" type="optiongroup" appearance="combo" gui-text="Orientation">
+    <option value="portrait">Portrait</option>
+    <option value="landscape">Landscape</option>
+  </param>
+
+  <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
+  <param name="spacing_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Minimum Spacing Between Pieces (inches)">0.2</param>
+
+  <param name="include_preview" type="bool" gui-text="Include 'Block Preview' &amp; 1-inch scale square">true</param>
+  <param name="color_templates" type="bool" gui-text="Export pieces with color fills (uses more ink)">false</param>
+  <param name="show_section_labels" type="bool" gui-text="Show section header labels (e.g., 'Section A')">false</param>
+
+  <separator/>
+  <label>Note: To use the manual layout, run Step 1 using 'Open Canvas'. Drag your pieces across the blue dashed page boundaries to position them, then run Step 2 to mathematically slice them and generate glue tabs.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_export.py</command></script>
+</inkscape-extension>
