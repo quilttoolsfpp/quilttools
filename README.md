@@ -1,6 +1,6 @@
 # ✂️ Quilt Tools for Inkscape
 
-![Inkscape Compatibility](https://img.shields.io/badge/Inkscape-1.x%2B-blue)
+![Inkscape Compatibility](https://img.shields.io/badge/Inkscape-1.3%2B-blue)
 ![License](https://img.shields.io/badge/License-GPLv3-green) 
 ![Version](https://img.shields.io/badge/Version-1.0.0-orange)
 
