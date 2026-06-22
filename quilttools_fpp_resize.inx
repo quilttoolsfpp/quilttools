@@ -4,10 +4,31 @@
   <id>org.quilttoolsplugin.quilttools_fpp_resize</id>
   <dependency type="executable" location="extensions">quilttools_fpp_resize.py</dependency>
 
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="resize">Resize / Stretch Block</option>
+    <option value="crop">Crop to Shape (use selected rectangle)</option>
+    <option value="mirror">Mirror Block Geometry (Design Time)</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Resize Settings</label>
   <param name="new_w_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Width (inches)">12.0</param>
   <param name="new_h_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Height (inches)">12.0</param>
 
-  <label>Note: This will stretch your block to exactly match the target dimensions. It works on finished, cut, and labeled blocks.</label>
+  <separator/>
+  <label appearance="header">Crop to Shape Settings</label>
+  <label>Draw a rectangle over the block, select it, then run with Action = "Crop to Shape". The block is reshaped to match the rectangle.</label>
+  <param name="crop_min_area" type="float" min="0.0" max="10.0" precision="3" gui-text="Drop pieces smaller than (sq in)">0.05</param>
+  <param name="crop_relabel" type="bool" gui-text="Re-label pieces after cropping (A1, A2...)">true</param>
+  <param name="crop_remove_rect" type="bool" gui-text="Delete the crop rectangle when done">true</param>
+  <label>Smaller rectangle = trims/reshapes pieces. Larger rectangle = adds spacing pieces around the edge (handy for border spacing). Growing keeps your existing pieces and labels intact.</label>
+
+  <separator/>
+  <label appearance="header">Mirror Settings</label>
+  <param name="mirror_bg" type="bool" gui-text="Mirror background tracing images/elements also">true</param>
+
+  <separator/>
+  <label>Note: Resize stretches your block to exact dimensions. Crop to Shape reshapes the block to a drawn rectangle (separate from Resize). Mirror flips your block geometry horizontally.</label>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>

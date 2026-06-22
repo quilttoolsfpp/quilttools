@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>9. EQ Export</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_eq_export</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_eq_export.py</dependency>
+
+  <label appearance="header">Export to Electric Quilt</label>
+  <label>Exports your current FPP block as an EasyDraw project file
+that opens directly in EQ6 or EQ8.
+
+After opening in EQ8 the block appears in:
+  Libraries > Block Library > Sketchbook
+You can then colour, resize, and use it in any quilt layout.</label>
+  <separator/>
+
+  <label appearance="header">Block information</label>
+  <param name="block_name" type="string"
+         gui-text="Block name (shown in EQ library)">My FPP Block</param>
+
+  <separator/>
+  <label appearance="header">Finished block size (no seam allowance)</label>
+  <label>The block size is normally auto-detected from your block geometry.
+The fields below are only used as a fallback if auto-detection fails.</label>
+  <param name="block_w_in" type="float" min="0.5" max="60"
+         precision="3" gui-text="Width fallback (inches)">6.0</param>
+  <param name="block_h_in" type="float" min="0.5" max="60"
+         precision="3" gui-text="Height fallback (inches)">6.0</param>
+
+  <separator/>
+  <label appearance="header">Output format</label>
+  <param name="target" type="optiongroup" appearance="combo"
+         gui-text="File format">
+    <option value="pj6">PJ6 - EQ6 format (also opens in EQ8, recommended)</option>
+    <option value="pj8">PJ8 - EQ8 native format</option>
+  </param>
+  <label>PJ6 is recommended. EQ8 opens PJ6 files natively and
+block geometry is identical in both formats.</label>
+
+  <separator/>
+  <label appearance="header">Where to save</label>
+  <label>By default the file saves to your Documents folder as
+[block name].pj6 (or .pj8). You can override below:
+
+  - Leave blank: saves as Documents\[block name].pj6
+  - Filename only (e.g. mystar.pj6): saves to Documents\mystar.pj6
+  - Full path (e.g. C:\Users\Bron\Desktop\mystar.pj6): saves there
+
+After saving, this dialog will show you the exact full path
+of the file it wrote. Look for that message in the popup.</label>
+  <param name="output_path" type="string"
+         gui-text="Output path (optional)"></param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_eq_export.py</command></script>
+</inkscape-extension>

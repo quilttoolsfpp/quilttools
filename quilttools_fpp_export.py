@@ -61,17 +61,54 @@ def get_line_extents(poly, axis, val):
     return min(pts), max(pts)
 
 
+def pack_fabric_strip(boxes, fabric_width_px):
+    # Sort boxes by height descending
+    sorted_boxes = sorted(boxes, key=lambda b: b[1], reverse=True)
+    shelves = [] # Each shelf is: [used_width, shelf_height]
+    total_height = 0
+    
+    for w, h in sorted_boxes:
+        if w > fabric_width_px:
+            # Try to swap dimensions
+            if h <= fabric_width_px:
+                w, h = h, w
+            else:
+                # Piece exceeds width in both directions; place on its own shelf
+                total_height += max(w, h)
+                continue
+                
+        placed = False
+        for idx, (used_w, shelf_h) in enumerate(shelves):
+            if used_w + w <= fabric_width_px:
+                shelves[idx] = (used_w + w, shelf_h)
+                placed = True
+                break
+        if not placed:
+            shelves.append([w, h])
+            
+    total_height += sum(s[1] for s in shelves)
+    return total_height
+
+
 class ExportPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--action", type=str, default="layout")
         pars.add_argument("--layout_mode", type=str, default="compact_rotate")
         pars.add_argument("--include_preview", type=inkex.Boolean, default=True)
-        pars.add_argument("--color_templates", type=inkex.Boolean, default=False)
+        pars.add_argument("--include_fabric_estimation", type=inkex.Boolean, default=True)
         pars.add_argument("--show_section_labels", type=inkex.Boolean, default=False)
         pars.add_argument("--page_size", type=str, default="letter")
         pars.add_argument("--orientation", type=str, default="portrait")
         pars.add_argument("--sa_in", type=float, default=0.25)
         pars.add_argument("--spacing_in", type=float, default=0.2)
+        pars.add_argument("--template_color_mode", type=str, default="none")
+        pars.add_argument("--export_preview_mode", type=str, default="color")
+        pars.add_argument("--mirror_templates", type=inkex.Boolean, default=True)
+        pars.add_argument("--mirror_preview", type=inkex.Boolean, default=False)
+        pars.add_argument("--block_name", type=str, default="My Quilt Block")
+        pars.add_argument("--designer_name", type=str, default="")
+        pars.add_argument("--finished_size_in", type=float, default=12.0)
+        pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
 
     def effect(self):
         # MASTER ROUTER
@@ -82,6 +119,14 @@ class ExportPlugin(inkex.Effect):
                 self._generate_smart_pack()
         elif self.options.action == "finalize":
             self._finalize_open_canvas()
+
+    def _get_start_page(self):
+        start_page = 0
+        if self.options.include_preview:
+            start_page += 1
+            if self.options.include_fabric_estimation:
+                start_page += 1
+        return start_page
 
     def _get_processed_sections(self, allow_rotate):
         g, block_data = core.find_fpp_group(self.svg)
@@ -112,10 +157,12 @@ class ExportPlugin(inkex.Effect):
                 valid_sections[prefix] = []
             valid_sections[prefix].append((int(num), r))
 
+        if not valid_sections:
+            inkex.errormsg("ERROR: Block has not been labeled. You must run '3. Labels & Guides > Fully Auto-Label' (or define sections manually) before exporting.")
+            return None, None, None
+
         if bad_labels:
             inkex.errormsg(f"WARNING: Invalid labels ignored: {', '.join(bad_labels)}")
-            if not valid_sections:
-                return None, None, None
 
         pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
         if self.options.orientation == "landscape":
@@ -134,35 +181,57 @@ class ExportPlugin(inkex.Effect):
             if not hull_poly:
                 continue
 
+            cx_hull, cy_hull = core.polygon_centroid(hull_poly)
+
+            # Local copy of regions and hull_poly to avoid mutating master LOM
+            if self.options.mirror_templates:
+                hull_poly_local = [(2.0 * cx_hull - pt[0], pt[1]) for pt in hull_poly]
+                regions_local = []
+                for r in regions:
+                    regions_local.append({
+                        "label": r.label,
+                        "id": r.id,
+                        "polygon": [(2.0 * cx_hull - pt[0], pt[1]) for pt in r.polygon]
+                    })
+            else:
+                hull_poly_local = list(hull_poly)
+                regions_local = []
+                for r in regions:
+                    regions_local.append({
+                        "label": r.label,
+                        "id": r.id,
+                        "polygon": list(r.polygon)
+                    })
+
             best_angle = 0
             if allow_rotate:
-                best_angle = get_longest_edge_angle(hull_poly)
-                cx, cy = core.polygon_centroid(hull_poly)
-                test_poly = rotate_poly(hull_poly, cx, cy, best_angle)
+                best_angle = get_longest_edge_angle(hull_poly_local)
+                cx, cy = core.polygon_centroid(hull_poly_local)
+                test_poly = rotate_poly(hull_poly_local, cx, cy, best_angle)
                 tw = max(p[0] for p in test_poly) - min(p[0] for p in test_poly)
                 th = max(p[1] for p in test_poly) - min(p[1] for p in test_poly)
                 if (tw > avail_w or th > avail_h) and (th <= avail_w and tw <= avail_h):
                     best_angle -= 90
 
             export_regions = []
-            cx, cy = core.polygon_centroid(hull_poly)
+            cx, cy = core.polygon_centroid(hull_poly_local)
             if best_angle != 0:
-                hull_poly = rotate_poly(hull_poly, cx, cy, best_angle)
-                for r in regions:
+                hull_poly_local = rotate_poly(hull_poly_local, cx, cy, best_angle)
+                for r in regions_local:
                     export_regions.append(
                         {
-                            "label": r.label,
-                            "id": r.id,
-                            "polygon": rotate_poly(r.polygon, cx, cy, best_angle),
+                            "label": r["label"],
+                            "id": r["id"],
+                            "polygon": rotate_poly(r["polygon"], cx, cy, best_angle),
                         }
                     )
             else:
-                for r in regions:
+                for r in regions_local:
                     export_regions.append(
-                        {"label": r.label, "id": r.id, "polygon": list(r.polygon)}
+                        {"label": r["label"], "id": r["id"], "polygon": list(r["polygon"])}
                     )
 
-            sa_poly = core.offset_polygon(hull_poly, sa_px, miter_limit=2.0)
+            sa_poly = core.offset_polygon(hull_poly_local, sa_px, miter_limit=2.0)
             if not sa_poly:
                 continue
 
@@ -223,7 +292,7 @@ class ExportPlugin(inkex.Effect):
             return
 
         scale = min(
-            (fit_w - 0.5 * core.PX_PER_INCH) / bw, (fit_h - 0.5 * core.PX_PER_INCH) / bh
+            (fit_w - 0.2 * core.PX_PER_INCH) / bw, (fit_h - 0.2 * core.PX_PER_INCH) / bh
         )
         center_x, center_y = px + (fit_w / 2), py + (fit_h / 2)
         block_cx, block_cy = min_x + (bw / 2), min_y + (bh / 2)
@@ -232,11 +301,16 @@ class ExportPlugin(inkex.Effect):
             target_g, "{%s}g" % core.SVG_NS, id="fpp-block-preview"
         )
         color_mode = prefs.get("color_mode", "piece")
+        
+        is_outline = (self.options.export_preview_mode == "outline")
+        has_custom = (len(user_colors) > 0)
 
-        for r in tree.leaf_regions():
+        for idx, r in enumerate(tree.leaf_regions()):
+            # Handle preview mirroring toggle
+            sign_x = -1 if self.options.mirror_preview else 1
             scaled_poly = [
                 (
-                    center_x + (p[0] - block_cx) * scale,
+                    center_x + sign_x * (p[0] - block_cx) * scale,
                     center_y + (p[1] - block_cy) * scale,
                 )
                 for p in r.polygon
@@ -246,9 +320,17 @@ class ExportPlugin(inkex.Effect):
                 + " ".join("L {:.4f},{:.4f}".format(*p) for p in scaled_poly[1:])
                 + " Z"
             )
-            fill_color = user_colors.get(
-                r.id, core.get_color_for_label(r.label, color_mode, 0)
-            )
+            
+            # Determine color according to preview state
+            if is_outline:
+                fill_color = "#ffffff"
+            elif has_custom:
+                fill_color = user_colors.get(str(r.id)) or user_colors.get(r.id)
+                if not fill_color:
+                    fill_color = core.get_color_for_label(r.label, color_mode, idx)
+            else:
+                fill_color = "#d6eaf8" # default blue tripwire warning
+                
             etree.SubElement(
                 preview_g,
                 "{%s}path" % core.SVG_NS,
@@ -263,14 +345,6 @@ class ExportPlugin(inkex.Effect):
                 y=f"{r_cy:.2f}",
                 style="font-size:12px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
             ).text = r.label
-
-        etree.SubElement(
-            preview_g,
-            "{%s}text" % core.SVG_NS,
-            x=str(center_x),
-            y=str(py + 20),
-            style="font-size:18px;font-family:sans-serif;font-weight:bold;text-anchor:middle;fill:#333333;",
-        ).text = "Block Preview"
 
     def _generate_open_canvas(self):
         g, block_data, processed_sections = self._get_processed_sections(
@@ -287,7 +361,7 @@ class ExportPlugin(inkex.Effect):
         avail_w, avail_h = pw - (margin * 2), ph - (margin * 2)
         spacing_px = self.options.spacing_in * core.PX_PER_INCH
 
-        start_page = 1 if self.options.include_preview else 0
+        start_page = self._get_start_page()
         sim_page, sim_x, sim_y, sim_row_h = start_page, 0, 0, 0.0
 
         # Calculate Required Grid Size
@@ -454,10 +528,97 @@ class ExportPlugin(inkex.Effect):
         margin = 0.5 * core.PX_PER_INCH
         avail_w, avail_h = pw - (margin * 2), ph - (margin * 2)
 
+        # ----------------------------------------------------
+        # RUN PRE-EXPORT VALIDATION (LINT) PASS
+        # ----------------------------------------------------
+        placed_polys = {}
+        for sec in processed_sections:
+            sec_g = layout_layer.find(f".//{{{core.SVG_NS}}}g[@id='manual-sec-{sec['prefix']}']")
+            if sec_g is not None:
+                user_transform = inkex.Transform(sec_g.get("transform", ""))
+                placed_polys[sec["prefix"]] = [
+                    user_transform.apply_to_point((p[0], p[1])) for p in sec["sa_poly"]
+                ]
+
+        spacing_px = self.options.spacing_in * core.PX_PER_INCH
+        start_page = self._get_start_page()
+        sim_page, sim_x, sim_y, sim_row_h = start_page, 0, 0, 0.0
+        for sec in processed_sections:
+            if sim_x + sec["width"] > avail_w:
+                sim_x, sim_y, sim_row_h = 0, sim_y + sim_row_h + spacing_px, 0.0
+            if sim_y + sec["height"] > avail_h:
+                sim_page += 1
+                sim_x, sim_y, sim_row_h = 0, 0, 0.0
+            if sec["width"] > avail_w or sec["height"] > avail_h:
+                sim_page += 1
+                sim_x, sim_y, sim_row_h = 0, 0, sec["height"]
+            sim_row_h = max(sim_row_h, sec["height"])
+            sim_x += sec["width"] + spacing_px
+
+        MAX_COLUMNS = 5
+        total_pages = max(start_page + 1, sim_page + 1)
+        grid_cols = min(total_pages, MAX_COLUMNS)
+        grid_rows = math.ceil(total_pages / MAX_COLUMNS)
+        grid_w, grid_h = grid_cols * avail_w, grid_rows * avail_h
+
+        validation_report = []
+        validation_report.append("=========================================")
+        validation_report.append("      FPP PATTERN VALIDATION REPORT      ")
+        validation_report.append("=========================================")
+
+        # Check metadata
+        if not self.options.block_name or self.options.block_name == "My Quilt Block":
+            validation_report.append("[!] Metadata: Block name is default or empty.")
+        if not self.options.designer_name:
+            validation_report.append("[!] Metadata: Designer Name is empty.")
+
+        # Check colors
+        user_colors = block_data.prefs.get("custom_colors", {})
+        if not user_colors:
+            validation_report.append("[!] Color: 0 custom colors saved. All pieces use default-blue.")
+
+        # Check sewing order
+        steps, has_sewing_warning = core.calculate_section_sewing_order(block_data)
+        if has_sewing_warning:
+            validation_report.append("[!] Sewing Order: WARNING: No Y-seam-free assembly sequence exists!")
+        else:
+            validation_report.append("[✓] Sewing Order: Valid Y-seam-free assembly sequence found.")
+
+        # Check overlaps
+        has_overlap = False
+        for sec1_prefix, poly1 in placed_polys.items():
+            for sec2_prefix, poly2 in placed_polys.items():
+                if sec1_prefix < sec2_prefix:
+                    if core.polygons_overlap(poly1, poly2):
+                        validation_report.append(f"[!] CRITICAL: Section {sec1_prefix} overlaps with Section {sec2_prefix}!")
+                        has_overlap = True
+
+        # Check layout grid bounds
+        has_bleed = False
+        for sec_prefix, poly in placed_polys.items():
+            out_of_bounds = False
+            for p in poly:
+                if p[0] < -1.0 or p[0] > grid_w + 1.0 or p[1] < -1.0 or p[1] > grid_h + 1.0:
+                    out_of_bounds = True
+                    break
+            if out_of_bounds:
+                validation_report.append(f"[!] WARNING: Section {sec_prefix} extends outside the page layout boundaries!")
+                has_bleed = True
+
+        if not has_overlap and not has_bleed:
+            validation_report.append("[✓] Layout: No overlaps or out-of-bounds pieces detected.")
+        validation_report.append("=========================================")
+
+        inkex.utils.debug("\n".join(validation_report))
+        # ----------------------------------------------------
+
         packable_items = []
         global_tab_counter = 1
         max_page_idx = 0
-        MAX_COLUMNS = 5
+
+        grid_max_page = total_pages - 1
+        next_extra_page = grid_max_page + 1
+        finalized_polys = {}
 
         # MAGICAL ABSOLUTE TRANSFORM SLICER
         for sec in processed_sections:
@@ -470,82 +631,140 @@ class ExportPlugin(inkex.Effect):
             # Read exact user transformation (Handles manual Translation and Rotation perfectly)
             user_transform = inkex.Transform(sec_g.get("transform", ""))
 
-            # Transform original coordinates to find true absolute bounds on canvas
-            abs_x_vals = []
-            abs_y_vals = []
-            for p in sec["sa_poly"]:
-                tp = user_transform.apply_to_point((p[0], p[1]))
-                abs_x_vals.append(tp[0])
-                abs_y_vals.append(tp[1])
+            # Get the current placed polygon
+            placed_poly = [user_transform.apply_to_point((p[0], p[1])) for p in sec["sa_poly"]]
 
-            abs_x0, abs_x1 = min(abs_x_vals), max(abs_x_vals)
-            abs_y0, abs_y1 = min(abs_y_vals), max(abs_y_vals)
+            # Check overlap with previously finalized sections
+            overlaps = False
+            overlap_partner = None
+            for other_prefix, other_poly in finalized_polys.items():
+                if core.polygons_overlap(placed_poly, other_poly):
+                    overlaps = True
+                    overlap_partner = other_prefix
+                    break
 
-            # Determine exact page grid cells overlapped
-            c_start = int(math.floor(abs_x0 / avail_w))
-            c_end = int(math.floor((abs_x1 - 1e-4) / avail_w))
-            r_start = int(math.floor(abs_y0 / avail_h))
-            r_end = int(math.floor((abs_y1 - 1e-4) / avail_h))
+            if overlaps:
+                # Relocate to its own page at the back of the pattern
+                target_page = next_extra_page
+                next_extra_page += 1
+                max_page_idx = max(max_page_idx, target_page)
 
-            v_tabs, h_tabs = {}, {}
-            for r in range(r_start, r_end + 1):
-                for c in range(c_start, c_end):
-                    v_tabs[(c, r)] = global_tab_counter
-                    global_tab_counter += 1
-            for c in range(c_start, c_end + 1):
-                for r in range(r_start, r_end):
-                    h_tabs[(c, r)] = global_tab_counter
-                    global_tab_counter += 1
+                validation_report.append(f"[!] Layout: Section {sec['prefix']} overlaps with Section {overlap_partner} on canvas. Automatically relocated to new Page {target_page + 1} at the back.")
 
-            for r in range(r_start, r_end + 1):
+                # Calculate bounding box of the transformed shape
+                rot_min_x = min(p[0] for p in placed_poly)
+                rot_max_x = max(p[0] for p in placed_poly)
+                rot_min_y = min(p[1] for p in placed_poly)
+                rot_max_y = max(p[1] for p in placed_poly)
+                rot_w = rot_max_x - rot_min_x
+                rot_h = rot_max_y - rot_min_y
+
+                # Center the piece on the new page
+                page_x = (avail_w - rot_w) / 2.0
+                page_y = (avail_h - rot_h) / 2.0
+                
+                # Transform to align it relative to the centered page coordinates
+                inner_transform = inkex.Transform(f"translate({-rot_min_x}, {-rot_min_y})") @ user_transform
+
+                packable_items.append({
+                    "prefix": sec["prefix"],
+                    "part_str": "",
+                    "target_page": target_page,
+                    "page_x": page_x,
+                    "page_y": page_y,
+                    "core_w": rot_w,
+                    "core_h": rot_h,
+                    "pad_l": 0,
+                    "pad_r": 0,
+                    "pad_t": 0,
+                    "pad_b": 0,
+                    "inner_transform": str(inner_transform),
+                    "right_glue": None,
+                    "left_align": None,
+                    "bottom_glue": None,
+                    "top_align": None,
+                    "sa_poly": sec["sa_poly"],
+                    "regions": sec["regions"],
+                })
+            else:
+                finalized_polys[sec["prefix"]] = placed_poly
+
+                # Transform original coordinates to find true absolute bounds on canvas
+                abs_x_vals = []
+                abs_y_vals = []
+                for p in sec["sa_poly"]:
+                    tp = user_transform.apply_to_point((p[0], p[1]))
+                    abs_x_vals.append(tp[0])
+                    abs_y_vals.append(tp[1])
+
+                abs_x0, abs_x1 = min(abs_x_vals), max(abs_x_vals)
+                abs_y0, abs_y1 = min(abs_y_vals), max(abs_y_vals)
+
+                # Determine exact page grid cells overlapped
+                c_start = int(math.floor(abs_x0 / avail_w))
+                c_end = int(math.floor((abs_x1 - 1e-4) / avail_w))
+                r_start = int(math.floor(abs_y0 / avail_h))
+                r_end = int(math.floor((abs_y1 - 1e-4) / avail_h))
+
+                v_tabs, h_tabs = {}, {}
+                for r in range(r_start, r_end + 1):
+                    for c in range(c_start, c_end):
+                        v_tabs[(c, r)] = global_tab_counter
+                        global_tab_counter += 1
                 for c in range(c_start, c_end + 1):
-                    cell_x0, cell_y0 = c * avail_w, r * avail_h
-                    cell_x1, cell_y1 = cell_x0 + avail_w, cell_y0 + avail_h
+                    for r in range(r_start, r_end):
+                        h_tabs[(c, r)] = global_tab_counter
+                        global_tab_counter += 1
 
-                    # Calculate local clipping boundary
-                    core_x0, core_x1 = max(abs_x0, cell_x0), min(abs_x1, cell_x1)
-                    core_y0, core_y1 = max(abs_y0, cell_y0), min(abs_y1, cell_y1)
-                    core_w, core_h = core_x1 - core_x0, core_y1 - core_y0
-                    if core_w <= 0 or core_h <= 0:
-                        continue
+                for r in range(r_start, r_end + 1):
+                    for c in range(c_start, c_end + 1):
+                        cell_x0, cell_y0 = c * avail_w, r * avail_h
+                        cell_x1, cell_y1 = cell_x0 + avail_w, cell_y0 + avail_h
 
-                    target_page = r * MAX_COLUMNS + c
-                    max_page_idx = max(max_page_idx, target_page)
+                        # Calculate local clipping boundary
+                        core_x0, core_x1 = max(abs_x0, cell_x0), min(abs_x1, cell_x1)
+                        core_y0, core_y1 = max(abs_y0, cell_y0), min(abs_y1, cell_y1)
+                        core_w, core_h = core_x1 - core_x0, core_y1 - core_y0
+                        if core_w <= 0 or core_h <= 0:
+                            continue
 
-                    # Matrix Magic: Align original geometry precisely into the page clip mask
-                    inner_transform = (
-                        inkex.Transform(f"translate({-core_x0}, {-core_y0})")
-                        @ user_transform
-                    )
+                        target_page = r * MAX_COLUMNS + c
+                        max_page_idx = max(max_page_idx, target_page)
 
-                    packable_items.append(
-                        {
-                            "prefix": sec["prefix"],
-                            "part_str": f" (Part {r - r_start + 1}-{c - c_start + 1})"
-                            if (c_end > c_start or r_end > r_start)
-                            else "",
-                            "target_page": target_page,
-                            "page_x": core_x0 - cell_x0,
-                            "page_y": core_y0 - cell_y0,
-                            "core_w": core_w,
-                            "core_h": core_h,
-                            "pad_l": 0,
-                            "pad_r": 0,
-                            "pad_t": 0,
-                            "pad_b": 0,
-                            "inner_transform": str(inner_transform),
-                            "right_glue": v_tabs.get((c, r)) if c < c_end else None,
-                            "left_align": v_tabs.get((c - 1, r))
-                            if c > c_start
-                            else None,
-                            "bottom_glue": h_tabs.get((c, r)) if r < r_end else None,
-                            "top_align": h_tabs.get((c, r - 1))
-                            if r > r_start
-                            else None,
-                            "sa_poly": sec["sa_poly"],
-                            "regions": sec["regions"],
-                        }
-                    )
+                        # Matrix Magic: Align original geometry precisely into the page clip mask
+                        inner_transform = (
+                            inkex.Transform(f"translate({-core_x0}, {-core_y0})")
+                            @ user_transform
+                        )
+
+                        packable_items.append(
+                            {
+                                "prefix": sec["prefix"],
+                                "part_str": f" (Part {r - r_start + 1}-{c - c_start + 1})"
+                                if (c_end > c_start or r_end > r_start)
+                                else "",
+                                "target_page": target_page,
+                                "page_x": core_x0 - cell_x0,
+                                "page_y": core_y0 - cell_y0,
+                                "core_w": core_w,
+                                "core_h": core_h,
+                                "pad_l": 0,
+                                "pad_r": 0,
+                                "pad_t": 0,
+                                "pad_b": 0,
+                                "inner_transform": str(inner_transform),
+                                "right_glue": v_tabs.get((c, r)) if c < c_end else None,
+                                "left_align": v_tabs.get((c - 1, r))
+                                if c > c_start
+                                else None,
+                                "bottom_glue": h_tabs.get((c, r)) if r < r_end else None,
+                                "top_align": h_tabs.get((c, r - 1))
+                                if r > r_start
+                                else None,
+                                "sa_poly": sec["sa_poly"],
+                                "regions": sec["regions"],
+                            }
+                        )
 
         self._render_pdf_pages(
             packable_items, max_page_idx + 1, g.getparent(), block_data
@@ -661,7 +880,7 @@ class ExportPlugin(inkex.Effect):
                             }
                         )
 
-        start_page = 1 if self.options.include_preview else 0
+        start_page = self._get_start_page()
         current_page, current_x, current_y, row_max_h = start_page, 0.0, 0.0, 0.0
         spacing_px = self.options.spacing_in * core.PX_PER_INCH
 
@@ -751,23 +970,164 @@ class ExportPlugin(inkex.Effect):
 
         if self.options.include_preview and 0 in page_offsets:
             p0_x, p0_y = page_offsets[0]
+            
+            # 1. Main Header Title
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(p0_x + margin),
+                y=str(p0_y + margin + 30),
+                style="font-size:24px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+            ).text = self.options.block_name
+
+            # 2. Sub-header / Designer Credit & Copyright
+            credit_str = f"Designed by: {self.options.designer_name}" if self.options.designer_name else "Designer: Unknown"
+            size_str = f"Finished Size: {self.options.finished_size_in:.1f}\" x {self.options.finished_size_in:.1f}\""
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(p0_x + margin),
+                y=str(p0_y + margin + 55),
+                style="font-size:12px;font-family:sans-serif;fill:#666666;",
+            ).text = f"{credit_str}  |  {size_str}  |  {self.options.copyright_notice}"
+
+            # 3. Dynamic Block Preview (left side) - scaled to 62% of available width
+            preview_w = int(avail_w * 0.62)
+            preview_h = preview_w
             user_colors = block_data.prefs.get("custom_colors", {})
             self._draw_preview_block(
                 layout_layer,
                 p0_x + margin,
-                p0_y + margin,
-                avail_w,
-                avail_h,
+                p0_y + margin + 80,
+                preview_w,
+                preview_h,
                 block_data.tree,
                 block_data.prefs,
                 user_colors,
             )
 
-            # Calibration Square
+            # 4. Right side panel: Sewing Order & Legend
+            panel_x = p0_x + margin + preview_w + 25
+            panel_y = p0_y + margin + 100
+
+            # recommended sewing order
+            steps, has_sewing_warning = core.calculate_section_sewing_order(block_data)
+            
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(panel_y),
+                style="font-size:14px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+            ).text = "Recommended Assembly Sequence"
+            
+            curr_y = panel_y + 20
+            if has_sewing_warning:
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(panel_x),
+                    y=str(curr_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#cc0000;font-weight:bold;",
+                ).text = "WARNING: No Y-seam-free assembly sequence exists!"
+                curr_y += 15
+
+            if not steps:
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(panel_x),
+                    y=str(curr_y),
+                    style="font-size:12px;font-family:sans-serif;fill:#666666;font-style:italic;",
+                ).text = "No section joins required (single section block)."
+                curr_y += 20
+            else:
+                for idx, step in enumerate(steps):
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(panel_x),
+                        y=str(curr_y),
+                        style="font-size:12px;font-family:sans-serif;fill:#444444;",
+                    ).text = f"{idx + 1}. {step}"
+                    curr_y += 18
+
+            # Legend
+            curr_y += 20
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(curr_y),
+                style="font-size:14px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+            ).text = "Pattern Key & Legend"
+            curr_y += 20
+
+            # Draw solid line
+            etree.SubElement(
+                layout_layer,
+                "{%s}line" % core.SVG_NS,
+                x1=str(panel_x),
+                y1=str(curr_y - 4),
+                x2=str(panel_x + 30),
+                y2=str(curr_y - 4),
+                style="stroke:#000000;stroke-width:2.0;",
+            )
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x + 40),
+                y=str(curr_y),
+                style="font-size:11px;font-family:sans-serif;fill:#444444;",
+            ).text = "Stitch Line (sew fabric here)"
+            curr_y += 20
+
+            # Draw dashed line
+            etree.SubElement(
+                layout_layer,
+                "{%s}line" % core.SVG_NS,
+                x1=str(panel_x),
+                y1=str(curr_y - 4),
+                x2=str(panel_x + 30),
+                y2=str(curr_y - 4),
+                style="stroke:#000000;stroke-width:1.5;stroke-dasharray:4,4;",
+            )
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x + 40),
+                y=str(curr_y),
+                style="font-size:11px;font-family:sans-serif;fill:#444444;",
+            ).text = "Cut/Trim Line (outer 1/4\" seam allowance)"
+            curr_y += 25
+
+            # Reassembly Legend Note
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(curr_y),
+                style="font-size:11px;font-family:sans-serif;fill:#555555;font-weight:bold;",
+            ).text = "Align / Glue Tabs:"
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(curr_y + 16),
+                style="font-size:10px;font-family:sans-serif;fill:#888888;font-style:italic;",
+            ).text = "Used to reassemble sections printed across page boundaries."
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(curr_y + 28),
+                style="font-size:10px;font-family:sans-serif;fill:#888888;font-style:italic;",
+            ).text = "Glue the shaded tab over the matching Align dashed line."
+
+            # 5. Calibration Square
             sq_size = 1.0 * core.PX_PER_INCH
-            sq_rect = (avail_w - sq_size - 10, 10, avail_w - 10, 10 + sq_size)
-            sq_abs_x = p0_x + margin + sq_rect[0]
-            sq_abs_y = p0_y + margin + sq_rect[1]
+            sq_abs_x = p0_x + margin
+            sq_abs_y = p0_y + ph - margin - sq_size
             sq_g = etree.SubElement(layout_layer, "{%s}g" % core.SVG_NS)
             etree.SubElement(
                 sq_g,
@@ -785,6 +1145,205 @@ class ExportPlugin(inkex.Effect):
                 y=str(sq_abs_y + sq_size / 2),
                 style="font-size:12px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
             ).text = "1 in"
+
+        # 6. Optional Page 2: Fabric Requirements
+        if self.options.include_preview and self.options.include_fabric_estimation and 1 in page_offsets:
+            p1_x, p1_y = page_offsets[1]
+            
+            # Title
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(p1_x + margin),
+                y=str(p1_y + margin + 30),
+                style="font-size:22px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+            ).text = "Fabric Requirements"
+
+            # Sub-header
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(p1_x + margin),
+                y=str(p1_y + margin + 55),
+                style="font-size:12px;font-family:sans-serif;fill:#666666;",
+            ).text = "Estimates based on 40\" usable Width of Fabric (WOF) and include 3/4\" padding around each piece."
+
+            # Calculate fabric requirements
+            def get_padded_poly(poly):
+                padded = core.offset_polygon(poly, 72.0, miter_limit=2.0)
+                if not padded:
+                    xs = [pt[0] for pt in poly]
+                    ys = [pt[1] for pt in poly]
+                    padded = [
+                        (min(xs) - 72.0, min(ys) - 72.0),
+                        (max(xs) + 72.0, min(ys) - 72.0),
+                        (max(xs) + 72.0, max(ys) + 72.0),
+                        (min(xs) - 72.0, max(ys) + 72.0)
+                    ]
+                return padded
+
+            def get_fixed_box(poly):
+                padded = get_padded_poly(poly)
+                w = max(pt[0] for pt in padded) - min(pt[0] for pt in padded)
+                h = max(pt[1] for pt in padded) - min(pt[1] for pt in padded)
+                return w, h
+
+            def get_free_box(poly):
+                padded = get_padded_poly(poly)
+                min_area = float('inf')
+                best_w, best_h = 0, 0
+                n = len(padded)
+                for i in range(n):
+                    p1, p2 = padded[i], padded[(i + 1) % n]
+                    dx = p2[0] - p1[0]
+                    dy = p2[1] - p1[1]
+                    d_len = math.hypot(dx, dy)
+                    if d_len < 1e-4:
+                        continue
+                    rad = -math.atan2(dy, dx)
+                    cos_a, sin_a = math.cos(rad), math.sin(rad)
+                    rotated = []
+                    for pt in padded:
+                        rotated.append((pt[0]*cos_a - pt[1]*sin_a, pt[0]*sin_a + pt[1]*cos_a))
+                    min_x = min(pt[0] for pt in rotated)
+                    max_x = max(pt[0] for pt in rotated)
+                    min_y = min(pt[1] for pt in rotated)
+                    max_y = max(pt[1] for pt in rotated)
+                    w = max_x - min_x
+                    h = max_y - min_y
+                    area = w * h
+                    if area < min_area:
+                        min_area = area
+                        best_w, best_h = w, h
+                if best_w > best_h:
+                    best_w, best_h = best_h, best_w
+                return best_w, best_h
+
+            regions = block_data.tree.leaf_regions()
+            color_mode = block_data.prefs.get("color_mode", "piece")
+            user_colors = block_data.prefs.get("custom_colors", {})
+            
+            fabric_groups = {}
+            for idx, r in enumerate(sorted(regions, key=lambda x: x.label)):
+                color_hex = user_colors.get(str(r.id)) or user_colors.get(r.id)
+                if not color_hex:
+                    color_hex = core.get_color_for_label(r.label, color_mode, idx)
+                if color_hex not in fabric_groups:
+                    fabric_groups[color_hex] = []
+                fabric_groups[color_hex].append(r)
+
+            wof_px = 3840.0
+            fabric_estimates = []
+            for color_hex, grp in fabric_groups.items():
+                fixed_boxes = [get_fixed_box(r.polygon) for r in grp]
+                free_boxes = [get_free_box(r.polygon) for r in grp]
+                
+                fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
+                free_height_px = pack_fabric_strip(free_boxes, wof_px)
+                
+                fabric_estimates.append({
+                    "color": color_hex,
+                    "pieces_count": len(grp),
+                    "fixed_in": fixed_height_px / 96.0,
+                    "free_in": free_height_px / 96.0
+                })
+
+            table_x = p1_x + margin + 40
+            table_y = p1_y + margin + 100
+            
+            headers = ["Fabric", "Hex", "Pieces", "Direction-Fixed", "Direction-Free", "Suggested Purchase"]
+            col_offsets = [0, 60, 150, 220, 350, 480]
+            
+            header_y = table_y + 18
+            etree.SubElement(
+                layout_layer,
+                "{%s}line" % core.SVG_NS,
+                x1=str(table_x),
+                y1=str(header_y + 6),
+                x2=str(p1_x + pw - margin - 40),
+                y2=str(header_y + 6),
+                style="stroke:#cccccc;stroke-width:1.0;",
+            )
+            for text, offset in zip(headers, col_offsets):
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + offset),
+                    y=str(header_y),
+                    style="font-size:11px;font-family:sans-serif;font-weight:bold;fill:#555555;",
+                ).text = text
+                
+            row_y = header_y + 30
+            for est in fabric_estimates:
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}rect" % core.SVG_NS,
+                    x=str(table_x),
+                    y=str(row_y - 10),
+                    width="35",
+                    height="14",
+                    style=f"fill:{est['color']};stroke:#999999;stroke-width:0.5;",
+                )
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + 60),
+                    y=str(row_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                ).text = est['color']
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + 150),
+                    y=str(row_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                ).text = str(est['pieces_count'])
+                
+                fixed_yd = est['fixed_in'] / 36.0
+                fixed_str = f"{est['fixed_in']:.1f}\" ({fixed_yd:.2f} yd)"
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + 220),
+                    y=str(row_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                ).text = fixed_str
+                
+                free_yd = est['free_in'] / 36.0
+                free_str = f"{est['free_in']:.1f}\" ({free_yd:.2f} yd)"
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + 350),
+                    y=str(row_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                ).text = free_str
+                
+                if est['free_in'] <= 9.0:
+                    suggested = "Fat Eighth (FE) / Scrap"
+                elif est['free_in'] <= 18.0:
+                    suggested = "Fat Quarter (FQ)"
+                else:
+                    eighths = math.ceil(free_yd * 8.0)
+                    suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(table_x + 480),
+                    y=str(row_y),
+                    style="font-size:10px;font-family:sans-serif;fill:#333333;font-weight:bold;",
+                ).text = suggested
+                
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}line" % core.SVG_NS,
+                    x1=str(table_x),
+                    y1=str(row_y + 8),
+                    x2=str(p1_x + pw - margin - 40),
+                    y2=str(row_y + 8),
+                    style="stroke:#eeeeee;stroke-width:0.5;",
+                )
+                row_y += 24
 
         # SHARED PDF RENDERER (Agnostic to Layout Mode)
         for i, item in enumerate(packable_items):
@@ -849,27 +1408,73 @@ class ExportPlugin(inkex.Effect):
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
 
-            for r in item["regions"]:
+            has_custom = (len(user_colors) > 0)
+            color_mode = block_data.prefs.get("color_mode", "piece")
+
+            for idx, r in enumerate(item["regions"]):
                 r_d = (
                     "M {:.4f},{:.4f} ".format(*r["polygon"][0])
                     + " ".join("L {:.4f},{:.4f}".format(*p) for p in r["polygon"][1:])
                     + " Z"
                 )
-                fill_col = "#ffffff" if not self.options.color_templates else "none"
+                
+                # Retrieve assigned fabric color
+                assigned_col = user_colors.get(str(r["id"])) or user_colors.get(r["id"])
+                if not assigned_col:
+                    if has_custom:
+                        assigned_col = core.get_color_for_label(r["label"], color_mode, idx)
+                    else:
+                        assigned_col = "#d6eaf8"  # default blue warning
+                
+                # Check if piece is too small for tag
+                poly = r["polygon"]
+                pw_r = max(p[0] for p in poly) - min(p[0] for p in poly)
+                ph_r = max(p[1] for p in poly) - min(p[1] for p in poly)
+                area_r = core.polygon_area(poly)
+                is_too_small = (pw_r < 40.0 or ph_r < 40.0 or area_r < 3686.0)
+                
+                # Determine fill color
+                mode = self.options.template_color_mode
+                if mode == "full" or (mode == "tag" and is_too_small):
+                    fill_col = assigned_col
+                else:
+                    fill_col = "#ffffff"
+                    
                 etree.SubElement(
                     shift_g,
                     "{%s}path" % core.SVG_NS,
                     d=r_d,
                     style=f"fill:{fill_col};stroke:#000000;stroke-width:2.0;stroke-linejoin:round;",
                 )
+                
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
-                etree.SubElement(
-                    shift_g,
-                    "{%s}text" % core.SVG_NS,
-                    x=f"{r_cx:.2f}",
-                    y=f"{r_cy:.2f}",
-                    style="font-size:14px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
-                ).text = r["label"]
+                
+                # Draw text and optional tag
+                if mode == "tag" and not is_too_small:
+                    etree.SubElement(
+                        shift_g,
+                        "{%s}text" % core.SVG_NS,
+                        x=f"{r_cx:.2f}",
+                        y=f"{r_cy - 8:.2f}",
+                        style="font-size:14px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
+                    ).text = r["label"]
+                    etree.SubElement(
+                        shift_g,
+                        "{%s}rect" % core.SVG_NS,
+                        x=f"{r_cx - 12:.2f}",
+                        y=f"{r_cy + 4:.2f}",
+                        width="24",
+                        height="16",
+                        style=f"fill:{assigned_col};stroke:#000000;stroke-width:0.5;",
+                    )
+                else:
+                    etree.SubElement(
+                        shift_g,
+                        "{%s}text" % core.SVG_NS,
+                        x=f"{r_cx:.2f}",
+                        y=f"{r_cy:.2f}",
+                        style="font-size:14px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
+                    ).text = r["label"]
 
             # FIX: DYNAMIC TAB SIZING MATH
             local_sa = [

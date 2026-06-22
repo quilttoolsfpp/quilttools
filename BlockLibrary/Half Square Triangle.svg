@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="576.0" height="576.0" viewBox="0 0 576.0 576.0" data-quilttools-block="1" data-quilttools-name="Half Square Triangle">
+  <title>Half Square Triangle</title>
+  <g id="fpp-quilttools-layer" inkscape:label="Quilt Tools FPP Regions" inkscape:groupmode="layer">
+    <path d="M 0.0000,0.0000 L 576.0000,0.0000 L 576.0000,576.0000 Z" id="region-A1" style="fill:#d6eaf8;fill-opacity:0.80;stroke:#222222;stroke-width:1.0;stroke-linejoin:round" data-fpp-region-id="27"/>
+    <text x="384.00" y="192.00" style="font-size:11px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#333333;pointer-events:none">A1</text>
+    <path d="M 0.0000,0.0000 L 576.0000,576.0000 L 0.0000,576.0000 Z" id="region-A2" style="fill:#d5f5e3;fill-opacity:0.80;stroke:#222222;stroke-width:1.0;stroke-linejoin:round" data-fpp-region-id="26"/>
+    <text x="192.00" y="384.00" style="font-size:11px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#333333;pointer-events:none">A2</text>
+    <desc id="fpp-tree-data-quilttools">{"tree": {"root_id": 25, "regions": {"25": {"id": 25, "label": "A1", "polygon": [[0, 0], [576.0, 0], [576.0, 576.0], [0, 576.0]], "parent_id": null, "children": [26, 27], "split_boundary": false}, "26": {"id": 26, "label": "A2", "polygon": [[0, 0], [576.0, 576.0], [0, 576.0]], "parent_id": 25, "children": [], "split_boundary": false}, "27": {"id": 27, "label": "A1", "polygon": [[0.0, 0.0], [576.0, 0], [576.0, 576.0]], "parent_id": 25, "children": [], "split_boundary": false}}}, "prefs": {"show_sa": false, "sa_in": 0.25, "color_mode": "piece", "custom_colors": {}}}</desc>
+  </g>
+</svg>

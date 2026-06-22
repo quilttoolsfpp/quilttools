@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>7. Block Library</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_block_library</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_block_library.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="load">Load block (replace current block)</option>
+    <option value="save">Save current block to library</option>
+    <option value="list">List library blocks</option>
+    <option value="import_trace">Import external SVG as tracing background</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Choose a block</label>
+  <param name="block_name" type="string" gui-text="Library block name">Four Patch</param>
+  <label>For Load: type a block name from the library (run 'List library blocks' to see them). For Save: the name to store it under. You can use "Category/Name" to file it in a subfolder.</label>
+  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="...or browse to an SVG file"></param>
+  <label>Browsing to an SVG overrides the name above (used for Load and Import).</label>
+
+  <separator/>
+  <label appearance="header">Options</label>
+  <param name="resize_page" type="bool" gui-text="Load: resize the page to the loaded block">true</param>
+  <param name="overwrite" type="bool" gui-text="Save: overwrite if it already exists">false</param>
+  <param name="import_w_in" type="float" min="0.5" max="100.0" precision="2" gui-text="Import: target width (inches)">6.0</param>
+
+  <separator/>
+  <label>Blocks live in a "BlockLibrary" folder next to the Quilt Tools extension files. Blocks shipped with Quilt Tools and blocks you save both live there. Saving a foreign FPP SVG is not supported; use Import to trace it instead.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_block_library.py</command></script>
+</inkscape-extension>
