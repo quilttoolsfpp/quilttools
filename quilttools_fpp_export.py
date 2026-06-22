@@ -38,6 +38,13 @@ def get_longest_edge_angle(poly):
         if length > max_len:
             max_len = length
             best_angle = -core.angle_of_line(p1, p2)
+            
+    # Normalize to [-90, 90] range to prevent 180-degree upside down flips
+    while best_angle > 90.0:
+        best_angle -= 180.0
+    while best_angle <= -90.0:
+        best_angle += 180.0
+        
     return best_angle
 
 
@@ -109,6 +116,7 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--designer_name", type=str, default="")
         pars.add_argument("--finished_size_in", type=float, default=12.0)
         pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
+        pars.add_argument("--notebook", type=str, default="")
 
     def effect(self):
         # MASTER ROUTER

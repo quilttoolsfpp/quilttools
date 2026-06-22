@@ -5,13 +5,12 @@ A shared, on-disk library of Quilt Tools FPP blocks. Blocks are stored as
 self-contained SVG files (each carrying its embedded RegionTree JSON) inside a
 ``BlockLibrary`` folder that sits directly beside this extension's scripts.
 
-Selection options, in order of friendliness:
-  * "Browse visual library" - an in-Inkscape thumbnail picker (GTK). Click a
-    block to load it. Its file browser is pinned to the BlockLibrary folder.
-    Falls back to the browser catalogue if GTK is unavailable.
-  * "Open visual library"    - a thumbnail catalogue in your web browser.
-  * "Choose a block" dropdown - populated from the library; run "Refresh
-    library dropdown" after adding/removing blocks to update it.
+Two visual ways to browse and load, both searchable by name/category:
+  * "Load a block" - an in-Inkscape thumbnail picker (GTK) with a search box.
+    Click a block to load it. Falls back to the browser catalogue if GTK is
+    unavailable. Its file browser is pinned to the BlockLibrary folder.
+  * "Open visual library" - a searchable thumbnail catalogue in your web
+    browser; a standalone visual index of everything in the library.
 """
 import os
 import copy
@@ -26,23 +25,20 @@ import quilttools_fpp_core as core
 
 EXT_DIR = os.path.dirname(os.path.abspath(__file__))
 LIB_DIR = os.path.join(EXT_DIR, "BlockLibrary")
-INX_PATH = os.path.join(EXT_DIR, "quilttools_fpp_block_library.inx")
-EXT_NS = "http://www.inkscape.org/namespace/inkscape/extension"
 CATALOGUE_FILE = "_catalogue.html"
 
 
 def _safe_filename(name):
     name = (name or "").strip()
-    keep = []
-    for ch in name:
-        keep.append(ch if (ch.isalnum() or ch in (" ", "-", "_")) else "_")
+    keep = [ch if (ch.isalnum() or ch in (" ", "-", "_")) else "_" for ch in name]
     cleaned = "".join(keep).strip().strip(".")
     return cleaned or "Untitled Block"
 
 
 def _scan_library():
     """Return a sorted list of (relative_label, full_path) for every .svg in
-    the library (recursively)."""
+    the library (recursively). The label includes any subfolder, so a block in
+    BlockLibrary/Stars/Sawtooth.svg has the label 'Stars/Sawtooth'."""
     found = []
     if not os.path.isdir(LIB_DIR):
         return found
@@ -54,18 +50,6 @@ def _scan_library():
                 found.append((rel[:-4].replace(os.sep, "/"), full))
     found.sort(key=lambda x: x[0].lower())
     return found
-
-
-def _find_in_library(name):
-    name = (name or "").strip()
-    if not name:
-        return None
-    target = name[:-4] if name.lower().endswith(".svg") else name
-    target_norm = target.replace("\\", "/").lower()
-    for label, full in _scan_library():
-        if label.lower() == target_norm or os.path.basename(label).lower() == target_norm:
-            return full
-    return None
 
 
 def _block_info(full_path):
@@ -87,12 +71,13 @@ def _block_info(full_path):
 class BlockLibraryPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--action", type=str, default="load")
-        pars.add_argument("--lib_block", type=str, default="")
         pars.add_argument("--svg_file", type=str, default="")
         pars.add_argument("--save_name", type=str, default="")
         pars.add_argument("--resize_page", type=inkex.Boolean, default=True)
         pars.add_argument("--overwrite", type=inkex.Boolean, default=False)
         pars.add_argument("--import_w_in", type=float, default=6.0)
+        pars.add_argument("--load_size", type=str, default="original")
+        pars.add_argument("--load_w_in", type=float, default=12.0)
 
     def effect(self):
         a = self.options.action
@@ -100,13 +85,9 @@ class BlockLibraryPlugin(inkex.Effect):
             return self._save()
         if a == "catalogue":
             return self._catalogue()
-        if a == "refresh":
-            return self._refresh()
         if a == "import_trace":
             return self._import_trace()
-        if a == "browse_visual":
-            return self._browse_visual()
-        return self._load()
+        return self._load()  # visual thumbnail picker
 
     # ------------------------------------------------------------------
     def _set_page(self, w_px, h_px):
@@ -122,33 +103,8 @@ class BlockLibraryPlugin(inkex.Effect):
                 pages[0].set("width", str(w_px))
                 pages[0].set("height", str(h_px))
 
-    # ------------------------------------------------------------------
-    # LOAD / REPLACE
-    # ------------------------------------------------------------------
-    def _load(self):
-        f = (self.options.svg_file or "").strip()
-        if f and os.path.isfile(f):
-            return self._load_path(f)
-
-        choice = (self.options.lib_block or "").strip()
-        if not choice:
-            return inkex.errormsg(
-                "No block chosen.\n\n"
-                "Pick one from the 'Choose a block' dropdown, or browse to an "
-                "SVG with 'SVG file'.\n\n"
-                "Tip: try Action = 'Browse visual library' for a thumbnail "
-                "picker, or 'Refresh library dropdown' if the dropdown looks "
-                "out of date."
-            )
-        path = _find_in_library(choice)
-        if path is None:
-            return inkex.errormsg(
-                f"Could not find '{choice}' in the library.\n\n"
-                "Run Action = 'Refresh library dropdown' and reopen this dialog."
-            )
-        return self._load_path(path)
-
     def _load_path(self, path):
+        """Replace the current managed block with the block in `path`."""
         try:
             doc = etree.parse(path)
         except Exception as e:
@@ -162,14 +118,40 @@ class BlockLibraryPlugin(inkex.Effect):
                 "Action = 'Import external SVG as tracing background'."
             )
 
-        g_old, _ = core.find_fpp_group(self.svg)
+        # Capture the current block's footprint BEFORE we remove it, so the
+        # "match current block" sizing mode has something to match.
+        g_old, old_bd = core.find_fpp_group(self.svg)
+        cur_box = core.block_bounds(old_bd) if old_bd is not None else None
+
         if g_old is not None and g_old.getparent() is not None:
             parent = g_old.getparent()
             parent.remove(g_old)
         else:
             parent = self.svg.get_current_layer()
 
+        # Place the new block at the origin, then size it per the chosen mode.
         w_px, h_px = core.normalize_block_to_origin(new_bd)
+        mode = (self.options.load_size or "original").strip().lower()
+        note = ""
+
+        if mode == "match":
+            if cur_box is not None and w_px > 0 and h_px > 0:
+                cw = cur_box[2] - cur_box[0]
+                ch = cur_box[3] - cur_box[1]
+                core.scale_block_geometry(new_bd, cw / w_px, ch / h_px)
+                w_px, h_px = cw, ch
+                note = "matched the previous block's dimensions"
+            else:
+                note = "no previous block to match — used original dimensions"
+        elif mode == "custom":
+            if w_px > 0 and self.options.load_w_in > 0:
+                s = (self.options.load_w_in * core.PX_PER_INCH) / w_px
+                core.scale_block_geometry(new_bd, s, s)
+                w_px, h_px = w_px * s, h_px * s
+                note = f"scaled to {self.options.load_w_in:.2f}\" wide"
+        else:
+            note = "original (saved) dimensions"
+
         parent.append(core.build_fpp_layer(new_bd))
         if self.options.resize_page:
             self._set_page(w_px, h_px)
@@ -178,8 +160,157 @@ class BlockLibraryPlugin(inkex.Effect):
         inkex.utils.debug(
             f'Loaded "{os.path.basename(path)}" '
             f'({w_px / core.PX_PER_INCH:.2f}" x {h_px / core.PX_PER_INCH:.2f}", '
-            f"{n} pieces). Your previous block was replaced."
+            f"{n} pieces; {note}). Your previous block was replaced."
         )
+
+    # ------------------------------------------------------------------
+    # LOAD - in-Inkscape visual thumbnail picker (GTK) with search
+    # ------------------------------------------------------------------
+    def _load(self):
+        blocks = _scan_library()
+        if not blocks:
+            return inkex.errormsg(
+                f"The library is empty.\nLibrary folder:\n  {LIB_DIR}"
+            )
+
+        try:
+            import gi
+
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk, GdkPixbuf
+        except Exception:
+            # No GTK: fall back to a specified file, else the browser catalogue.
+            f = (self.options.svg_file or "").strip()
+            if f and os.path.isfile(f):
+                return self._load_path(f)
+            return self._catalogue(
+                note="(The in-Inkscape thumbnail picker needs GTK, which isn't "
+                "available in this build. Opened the browser catalogue instead "
+                "- or set the 'SVG file to import' field to load a specific "
+                "block.)"
+            )
+
+        chosen = {"path": None}
+        try:
+            dialog = Gtk.Dialog(title="Quilt Tools - Block Library")
+            dialog.set_default_size(760, 600)
+            content = dialog.get_content_area()
+            content.set_spacing(6)
+
+            # --- search box ---
+            search = Gtk.SearchEntry()
+            search.set_placeholder_text("Search blocks by name or category...")
+            search.set_margin_top(8)
+            search.set_margin_start(10)
+            search.set_margin_end(10)
+            content.pack_start(search, False, False, 0)
+
+            scroller = Gtk.ScrolledWindow()
+            scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroller.set_vexpand(True)
+            content.pack_start(scroller, True, True, 0)
+
+            flow = Gtk.FlowBox()
+            flow.set_valign(Gtk.Align.START)
+            flow.set_max_children_per_line(4)
+            flow.set_selection_mode(Gtk.SelectionMode.NONE)
+            flow.set_row_spacing(8)
+            flow.set_column_spacing(8)
+            for side in ("top", "bottom", "start", "end"):
+                getattr(flow, f"set_margin_{side}")(10)
+            scroller.add(flow)
+
+            # An empty-state label shown when a search matches nothing.
+            empty = Gtk.Label(label="No blocks match your search.")
+            empty.set_no_show_all(True)
+            content.pack_start(empty, False, False, 4)
+
+            labels_by_child = {}
+
+            def make_click(p):
+                def _cb(_btn):
+                    chosen["path"] = p
+                    dialog.response(Gtk.ResponseType.OK)
+                return _cb
+
+            for label, full in blocks:
+                btn = Gtk.Button()
+                btn.set_relief(Gtk.ReliefStyle.NONE)
+                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+                try:
+                    pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(full, 150, 150, True)
+                    box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
+                except Exception:
+                    pass
+                lbl = Gtk.Label(label=label)
+                lbl.set_line_wrap(True)
+                lbl.set_max_width_chars(18)
+                lbl.set_justify(Gtk.Justification.CENTER)
+                box.pack_start(lbl, False, False, 0)
+                btn.add(box)
+                btn.set_tooltip_text(label)
+                btn.connect("clicked", make_click(full))
+                flow.add(btn)
+                labels_by_child[btn.get_parent()] = label.lower()
+
+            def do_filter(child):
+                q = search.get_text().strip().lower()
+                if not q:
+                    return True
+                return q in labels_by_child.get(child, "")
+
+            flow.set_filter_func(do_filter)
+
+            def on_search(_w):
+                flow.invalidate_filter()
+                any_visible = any(
+                    do_filter(c) for c in labels_by_child
+                )
+                empty.set_visible(not any_visible)
+
+            search.connect("search-changed", on_search)
+
+            dialog.add_button("Browse files\u2026", 100)
+            dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            dialog.show_all()
+            search.grab_focus()
+
+            while True:
+                resp = dialog.run()
+                if resp == 100:
+                    fc = Gtk.FileChooserDialog(
+                        title="Choose a block SVG",
+                        parent=dialog,
+                        action=Gtk.FileChooserAction.OPEN,
+                    )
+                    fc.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                    fc.add_button("Open", Gtk.ResponseType.OK)
+                    try:
+                        fc.set_current_folder(LIB_DIR)
+                    except Exception:
+                        pass
+                    flt = Gtk.FileFilter()
+                    flt.set_name("SVG blocks")
+                    flt.add_pattern("*.svg")
+                    fc.add_filter(flt)
+                    fresp = fc.run()
+                    if fresp == Gtk.ResponseType.OK:
+                        chosen["path"] = fc.get_filename()
+                    fc.destroy()
+                    if chosen["path"]:
+                        break
+                    continue
+                break
+            dialog.destroy()
+        except Exception as e:
+            return self._catalogue(
+                note=f"(Thumbnail window error: {e}. Opened the browser "
+                "catalogue instead.)"
+            )
+
+        if not chosen["path"]:
+            return inkex.utils.debug("No block selected.")
+        return self._load_path(chosen["path"])
 
     # ------------------------------------------------------------------
     # SAVE
@@ -228,59 +359,12 @@ class BlockLibraryPlugin(inkex.Effect):
         inkex.utils.debug(
             f'Saved "{parts[-1]}" ({w_in:.2f}" x {h_in:.2f}", {n} pieces) to:\n'
             f"  {out_path}\n\n"
-            "Run Action = 'Refresh library dropdown' and reopen this dialog to "
-            "see it in the dropdown."
+            "It will appear in the thumbnail picker and the visual library "
+            "straight away."
         )
 
     # ------------------------------------------------------------------
-    # REFRESH DROPDOWN (rewrite this extension's own .inx)
-    # ------------------------------------------------------------------
-    def _refresh(self):
-        blocks = _scan_library()
-        try:
-            doc = etree.parse(INX_PATH)
-        except Exception as e:
-            return inkex.errormsg(
-                f"Could not read the extension's .inx to refresh the dropdown:\n"
-                f"  {INX_PATH}\n{e}"
-            )
-        root = doc.getroot()
-        param = None
-        for p in root.iter("{%s}param" % EXT_NS):
-            if p.get("name") == "lib_block":
-                param = p
-                break
-        if param is None:
-            return inkex.errormsg("Could not find the dropdown parameter in the .inx.")
-
-        for opt in list(param):
-            param.remove(opt)
-        ph = etree.SubElement(param, "{%s}option" % EXT_NS)
-        ph.set("value", "")
-        ph.text = "\u2014 choose a block \u2014"
-        for label, _ in blocks:
-            o = etree.SubElement(param, "{%s}option" % EXT_NS)
-            o.set("value", label)
-            o.text = label
-
-        try:
-            doc.write(INX_PATH, xml_declaration=True, encoding="UTF-8")
-        except Exception as e:
-            return inkex.errormsg(
-                f"Could not write the updated .inx (is the extensions folder "
-                f"writable?):\n  {INX_PATH}\n{e}"
-            )
-
-        listing = "\n".join(f"  - {lbl}" for lbl, _ in blocks) or "  (none yet)"
-        inkex.utils.debug(
-            f"Dropdown refreshed with {len(blocks)} block(s):\n{listing}\n\n"
-            "IMPORTANT: close and reopen this extension dialog to see the "
-            "updated dropdown. If it still looks stale, restart Inkscape "
-            "(Inkscape only reloads extension menus on start-up)."
-        )
-
-    # ------------------------------------------------------------------
-    # VISUAL CATALOGUE (browser)
+    # VISUAL CATALOGUE (browser) - searchable
     # ------------------------------------------------------------------
     def _build_catalogue_html(self):
         blocks = _scan_library()
@@ -294,10 +378,15 @@ class BlockLibraryPlugin(inkex.Effect):
                 meta.append(f'{w_in:.2f}" x {h_in:.2f}"')
             if n is not None:
                 meta.append(f"{n} pieces")
-            meta_txt = _html.escape(" &middot; ".join(meta)) if meta else ""
+            meta_txt = (
+                " \u00b7 ".join(_html.escape(m, quote=False) for m in meta)
+                if meta
+                else ""
+            )
             name_js = label.replace("\\", "\\\\").replace("'", "\\'")
             cards.append(
-                f'<figure class="card" onclick="pick(\'{name_js}\')" title="Click to copy the name">'
+                f'<figure class="card" data-name="{_html.escape(label)}" '
+                f'onclick="pick(\'{name_js}\')" title="Click to copy the name">'
                 f'<div class="thumb"><img src="{src}" alt="{_html.escape(label)}" loading="lazy"></div>'
                 f'<figcaption><span class="nm">{_html.escape(label)}</span>'
                 f'<span class="mt">{meta_txt}</span></figcaption></figure>'
@@ -312,9 +401,12 @@ class BlockLibraryPlugin(inkex.Effect):
   * {{ box-sizing:border-box; }}
   body {{ margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
          background:var(--paper); color:var(--ink); }}
-  header {{ padding:20px 24px; border-bottom:2px solid var(--ink); }}
+  header {{ padding:18px 24px 14px; border-bottom:2px solid var(--ink);
+            position:sticky; top:0; background:var(--paper); z-index:5; }}
   header h1 {{ margin:0 0 4px; font-size:20px; }}
-  header p {{ margin:0; color:var(--muted); font-size:13px; }}
+  header p {{ margin:0 0 10px; color:var(--muted); font-size:13px; }}
+  #q {{ width:100%; max-width:420px; padding:9px 12px; font-size:14px;
+        border:1px solid var(--accent); border-radius:8px; }}
   .grid {{ display:grid; gap:16px; padding:24px;
            grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }}
   .card {{ margin:0; background:#fff; border:1px solid #e3ddd0; border-radius:10px;
@@ -327,6 +419,7 @@ class BlockLibraryPlugin(inkex.Effect):
   figcaption {{ padding:10px 12px; border-top:1px solid #efeae0; }}
   .nm {{ display:block; font-weight:600; font-size:14px; }}
   .mt {{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }}
+  #none {{ padding:0 24px 24px; color:var(--muted); display:none; }}
   #toast {{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
             background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
             font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }}
@@ -335,19 +428,29 @@ class BlockLibraryPlugin(inkex.Effect):
 <body>
 <header>
   <h1>Quilt Tools - Block Library</h1>
-  <p>Click a block to copy its name, then load it from the
-     <strong>Choose a block</strong> dropdown in Inkscape ({len(blocks)} block(s)).</p>
+  <p>{len(blocks)} block(s). Search below, or load any block with the in-Inkscape
+     thumbnail picker (Extensions &rarr; Quilt Tools &rarr; 7. Block Library).</p>
+  <input id="q" type="search" placeholder="Search blocks by name or category..." oninput="flt()" autofocus>
 </header>
-<div class="grid">
+<div class="grid" id="grid">
 {grid}
 </div>
+<p id="none">No blocks match your search.</p>
 <div id="toast"></div>
 <script>
+function flt(){{
+  var q=document.getElementById('q').value.trim().toLowerCase(), shown=0;
+  document.querySelectorAll('.card').forEach(function(c){{
+    var n=c.getAttribute('data-name').toLowerCase();
+    var ok=(!q || n.indexOf(q)>=0);
+    c.style.display=ok?'':'none'; if(ok) shown++;
+  }});
+  document.getElementById('none').style.display=shown?'none':'block';
+}}
 function pick(n){{
-  if (navigator.clipboard) navigator.clipboard.writeText(n).catch(()=>{{}});
+  if (navigator.clipboard) navigator.clipboard.writeText(n).catch(function(){{}});
   var t=document.getElementById('toast');
-  t.textContent='Copied: '+n;
-  t.classList.add('show');
+  t.textContent='Copied: '+n; t.classList.add('show');
   setTimeout(function(){{ t.classList.remove('show'); }}, 1400);
 }}
 </script>
@@ -380,128 +483,20 @@ function pick(n){{
         inkex.utils.debug(msg)
 
     # ------------------------------------------------------------------
-    # IN-INKSCAPE VISUAL PICKER (GTK, experimental, with fallback)
-    # ------------------------------------------------------------------
-    def _browse_visual(self):
-        blocks = _scan_library()
-        if not blocks:
-            return inkex.errormsg(
-                f"The library is empty.\nLibrary folder:\n  {LIB_DIR}"
-            )
-        try:
-            import gi
-
-            gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk, GdkPixbuf
-        except Exception:
-            return self._catalogue(
-                note="(In-Inkscape thumbnail window isn't available in this "
-                "build, so the browser catalogue was opened instead.)"
-            )
-
-        chosen = {"path": None}
-        try:
-            dialog = Gtk.Dialog(title="Quilt Tools - Block Library")
-            dialog.set_default_size(720, 560)
-            content = dialog.get_content_area()
-
-            scroller = Gtk.ScrolledWindow()
-            scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            scroller.set_vexpand(True)
-            content.pack_start(scroller, True, True, 0)
-
-            flow = Gtk.FlowBox()
-            flow.set_valign(Gtk.Align.START)
-            flow.set_max_children_per_line(4)
-            flow.set_selection_mode(Gtk.SelectionMode.NONE)
-            flow.set_row_spacing(8)
-            flow.set_column_spacing(8)
-            flow.set_margin_top(10)
-            flow.set_margin_bottom(10)
-            flow.set_margin_start(10)
-            flow.set_margin_end(10)
-            scroller.add(flow)
-
-            def make_click(p):
-                def _cb(_btn):
-                    chosen["path"] = p
-                    dialog.response(Gtk.ResponseType.OK)
-                return _cb
-
-            for label, full in blocks:
-                btn = Gtk.Button()
-                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-                try:
-                    pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(full, 150, 150, True)
-                    box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
-                except Exception:
-                    pass
-                lbl = Gtk.Label(label=label)
-                lbl.set_line_wrap(True)
-                lbl.set_max_width_chars(18)
-                box.pack_start(lbl, False, False, 0)
-                btn.add(box)
-                btn.connect("clicked", make_click(full))
-                flow.add(btn)
-
-            browse_btn = dialog.add_button("Browse files\u2026", 100)
-            dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            dialog.show_all()
-
-            while True:
-                resp = dialog.run()
-                if resp == 100:
-                    # Native file chooser, pinned to the library folder.
-                    fc = Gtk.FileChooserDialog(
-                        title="Choose a block SVG",
-                        parent=dialog,
-                        action=Gtk.FileChooserAction.OPEN,
-                    )
-                    fc.add_button("Cancel", Gtk.ResponseType.CANCEL)
-                    fc.add_button("Open", Gtk.ResponseType.OK)
-                    try:
-                        fc.set_current_folder(LIB_DIR)
-                    except Exception:
-                        pass
-                    flt = Gtk.FileFilter()
-                    flt.set_name("SVG blocks")
-                    flt.add_pattern("*.svg")
-                    fc.add_filter(flt)
-                    fresp = fc.run()
-                    if fresp == Gtk.ResponseType.OK:
-                        chosen["path"] = fc.get_filename()
-                    fc.destroy()
-                    if chosen["path"]:
-                        break
-                    continue
-                break
-            dialog.destroy()
-        except Exception as e:
-            return self._catalogue(
-                note=f"(Thumbnail window error: {e}. Opened the browser "
-                "catalogue instead.)"
-            )
-
-        if not chosen["path"]:
-            return inkex.utils.debug("No block selected.")
-        return self._load_path(chosen["path"])
-
-    # ------------------------------------------------------------------
     # IMPORT FOREIGN SVG (tracing background)
     # ------------------------------------------------------------------
     def _import_trace(self):
         f = (self.options.svg_file or "").strip()
-        path = f if (f and os.path.isfile(f)) else _find_in_library(self.options.lib_block)
-        if path is None:
+        if not (f and os.path.isfile(f)):
             return inkex.errormsg("Browse to an SVG file with 'SVG file' first.")
         try:
-            doc = etree.parse(path)
+            doc = etree.parse(f)
         except Exception as e:
-            return inkex.errormsg(f"Could not read SVG file:\n  {path}\n{e}")
+            return inkex.errormsg(f"Could not read SVG file:\n  {f}\n{e}")
         root = doc.getroot()
 
         if core.extract_block_data_from_svg_root(root) is not None:
-            return self._load_path(path)
+            return self._load_path(f)
 
         vb = root.get("viewBox")
         if vb:
@@ -546,7 +541,7 @@ function pick(n){{
             return inkex.errormsg("Nothing importable was found in that SVG.")
 
         inkex.utils.debug(
-            f'Imported "{os.path.basename(path)}" as a locked tracing background '
+            f'Imported "{os.path.basename(f)}" as a locked tracing background '
             f'(~{self.options.import_w_in:.2f}" wide). Use New Block + Guillotine '
             "Cut to trace it. (This brings the artwork in for tracing; it does "
             "not auto-detect pieces.)"

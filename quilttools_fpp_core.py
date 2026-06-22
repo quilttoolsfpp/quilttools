@@ -1854,6 +1854,14 @@ def translate_block_geometry(block_data, dx, dy):
         r.polygon = [(p[0] + dx, p[1] + dy) for p in r.polygon]
 
 
+def scale_block_geometry(block_data, sx, sy):
+    """Scale every region (leaf AND internal) about the origin (0, 0). Call
+    normalize_block_to_origin first if you want to scale about the block's own
+    top-left corner."""
+    for r in block_data.tree.regions.values():
+        r.polygon = [(p[0] * sx, p[1] * sy) for p in r.polygon]
+
+
 def block_bounds(block_data):
     """Return (min_x, min_y, max_x, max_y) of the block's leaf geometry, or
     None if the block is empty."""

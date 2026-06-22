@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quilt Tools - Block Library</title>
+<style>
+  :root { --ink:#1F3A5F; --accent:#7A9AB8; --muted:#7A7268; --paper:#FAF6EE; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--paper); color:var(--ink); }
+  header { padding:18px 24px 14px; border-bottom:2px solid var(--ink);
+            position:sticky; top:0; background:var(--paper); z-index:5; }
+  header h1 { margin:0 0 4px; font-size:20px; }
+  header p { margin:0 0 10px; color:var(--muted); font-size:13px; }
+  #q { width:100%; max-width:420px; padding:9px 12px; font-size:14px;
+        border:1px solid var(--accent); border-radius:8px; }
+  .grid { display:grid; gap:16px; padding:24px;
+           grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }
+  .card { margin:0; background:#fff; border:1px solid #e3ddd0; border-radius:10px;
+           overflow:hidden; cursor:pointer; transition:transform .08s, box-shadow .08s; }
+  .card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(31,58,95,.14);
+                 border-color:var(--accent); }
+  .thumb { display:flex; align-items:center; justify-content:center;
+            height:170px; padding:14px; background:#fcfaf5; }
+  .thumb img { max-width:100%; max-height:100%; }
+  figcaption { padding:10px 12px; border-top:1px solid #efeae0; }
+  .nm { display:block; font-weight:600; font-size:14px; }
+  .mt { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  #none { padding:0 24px 24px; color:var(--muted); display:none; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+            background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
+            font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style></head>
+<body>
+<header>
+  <h1>Quilt Tools - Block Library</h1>
+  <p>10 block(s). Search below, or load any block with the in-Inkscape
+     thumbnail picker (Extensions &rarr; Quilt Tools &rarr; 7. Block Library).</p>
+  <input id="q" type="search" placeholder="Search blocks by name or category..." oninput="flt()" autofocus>
+</header>
+<div class="grid" id="grid">
+<figure class="card" data-name="Basics/Churndash" onclick="pick('Basics/Churndash')" title="Click to copy the name"><div class="thumb"><img src="Basics/Churndash.svg" alt="Basics/Churndash" loading="lazy"></div><figcaption><span class="nm">Basics/Churndash</span><span class="mt">6.00" x 6.00" · 17 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/Half Square Triangle" onclick="pick('Basics/Half Square Triangle')" title="Click to copy the name"><div class="thumb"><img src="Basics/Half%20Square%20Triangle.svg" alt="Basics/Half Square Triangle" loading="lazy"></div><figcaption><span class="nm">Basics/Half Square Triangle</span><span class="mt">6.00" x 6.00" · 2 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/Hourglass" onclick="pick('Basics/Hourglass')" title="Click to copy the name"><div class="thumb"><img src="Basics/Hourglass.svg" alt="Basics/Hourglass" loading="lazy"></div><figcaption><span class="nm">Basics/Hourglass</span><span class="mt">6.00" x 6.00" · 4 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/Square in a Square" onclick="pick('Basics/Square in a Square')" title="Click to copy the name"><div class="thumb"><img src="Basics/Square%20in%20a%20Square.svg" alt="Basics/Square in a Square" loading="lazy"></div><figcaption><span class="nm">Basics/Square in a Square</span><span class="mt">6.00" x 6.00" · 5 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/SquarePatches/Four Patch" onclick="pick('Basics/SquarePatches/Four Patch')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Four%20Patch.svg" alt="Basics/SquarePatches/Four Patch" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Four Patch</span><span class="mt">6.00" x 6.00" · 4 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/SquarePatches/Nine Patch" onclick="pick('Basics/SquarePatches/Nine Patch')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Nine%20Patch.svg" alt="Basics/SquarePatches/Nine Patch" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Nine Patch</span><span class="mt">6.00" x 6.00" · 9 pieces</span></figcaption></figure>
+<figure class="card" data-name="Basics/SquarePatches/Nine Patch FPP" onclick="pick('Basics/SquarePatches/Nine Patch FPP')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Nine%20Patch%20FPP.svg" alt="Basics/SquarePatches/Nine Patch FPP" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Nine Patch FPP</span><span class="mt">6.00" x 6.00" · 9 pieces</span></figcaption></figure>
+<figure class="card" data-name="Flying Geese/Flying Geese" onclick="pick('Flying Geese/Flying Geese')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese.svg" alt="Flying Geese/Flying Geese" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese</span><span class="mt">6.00" x 3.00" · 3 pieces</span></figcaption></figure>
+<figure class="card" data-name="Flying Geese/Flying Geese Double" onclick="pick('Flying Geese/Flying Geese Double')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese%20Double.svg" alt="Flying Geese/Flying Geese Double" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese Double</span><span class="mt">6.00" x 6.00" · 6 pieces</span></figcaption></figure>
+<figure class="card" data-name="Simple FPP/LittleHouse" onclick="pick('Simple FPP/LittleHouse')" title="Click to copy the name"><div class="thumb"><img src="Simple%20FPP/LittleHouse.svg" alt="Simple FPP/LittleHouse" loading="lazy"></div><figcaption><span class="nm">Simple FPP/LittleHouse</span><span class="mt">6.00" x 6.00" · 10 pieces</span></figcaption></figure>
+</div>
+<p id="none">No blocks match your search.</p>
+<div id="toast"></div>
+<script>
+function flt(){
+  var q=document.getElementById('q').value.trim().toLowerCase(), shown=0;
+  document.querySelectorAll('.card').forEach(function(c){
+    var n=c.getAttribute('data-name').toLowerCase();
+    var ok=(!q || n.indexOf(q)>=0);
+    c.style.display=ok?'':'none'; if(ok) shown++;
+  });
+  document.getElementById('none').style.display=shown?'none':'block';
+}
+function pick(n){
+  if (navigator.clipboard) navigator.clipboard.writeText(n).catch(function(){});
+  var t=document.getElementById('toast');
+  t.textContent='Copied: '+n; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 1400);
+}
+</script>
+</body></html>

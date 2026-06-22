@@ -1,35 +1,39 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
   <name>7. Block Library</name>
   <id>org.quilttoolsplugin.quilttools_fpp_block_library</id>
   <dependency type="executable" location="extensions">quilttools_fpp_block_library.py</dependency>
 
   <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
-    <option value="load">Load block (replace current block)</option>
-    <option value="browse_visual">Browse visual library (thumbnail picker)</option>
+    <option value="load">Load a block (visual picker)</option>
     <option value="catalogue">Open visual library (in web browser)</option>
     <option value="save">Save current block to library</option>
-    <option value="refresh">Refresh library dropdown</option>
     <option value="import_trace">Import external SVG as tracing background</option>
   </param>
+  <label>"Load a block" opens a searchable thumbnail picker inside Inkscape — click a block to load it. "Open visual library" shows the same blocks as a searchable page in your web browser.</label>
 
   <separator/>
-  <label appearance="header">Load a block</label>
-  <param name="lib_block" type="optiongroup" appearance="combo" gui-text="Choose a block">
-    <option value="">— choose a block —</option><option value="Flying Geese">Flying Geese</option><option value="Four Patch">Four Patch</option><option value="Half Square Triangle">Half Square Triangle</option><option value="Nine Patch">Nine Patch</option><option value="Square in a Square">Square in a Square</option></param>
-  <label>The dropdown is filled from the library. After you add or remove blocks, run Action = "Refresh library dropdown", then close and reopen this dialog. For a picture-based picker, use "Browse visual library".</label>
-  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="...or browse to an SVG file"/>
+  <label appearance="header">Load size</label>
+  <param name="load_size" type="optiongroup" appearance="radio" gui-text="When loading, size the block to:">
+    <option value="original">Use original (saved) dimensions</option>
+    <option value="match">Match current block dimensions</option>
+    <option value="custom">Custom width (set below)</option>
+  </param>
+  <param name="load_w_in" type="float" min="0.5" max="200.0" precision="3" gui-text="Custom width (inches)">12.0</param>
+  <param name="resize_page" type="bool" gui-text="Resize the page to the loaded block">true</param>
+  <label>"Match current block" stretches the loaded block to the exact width and height of the block already in your document (handy for swapping a block in place). "Custom width" scales it to the width above, keeping its aspect ratio.</label>
 
   <separator/>
   <label appearance="header">Save a block</label>
   <param name="save_name" type="string" gui-text="Save as (block name)">My Block</param>
-  <label>Use "Category/Name" to file it into a subfolder.</label>
+  <label>Use "Category/Name" to file it into a subfolder (categories are searchable in the picker).</label>
   <param name="overwrite" type="bool" gui-text="Overwrite if it already exists">false</param>
 
   <separator/>
-  <label appearance="header">Options</label>
-  <param name="resize_page" type="bool" gui-text="Load: resize the page to the loaded block">true</param>
-  <param name="import_w_in" type="float" min="0.5" max="100.0" precision="2" gui-text="Import: target width (inches)">6.0</param>
+  <label appearance="header">Import external SVG (tracing background)</label>
+  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="SVG file to import"></param>
+  <param name="import_w_in" type="float" min="0.5" max="100.0" precision="2" gui-text="Tracing-image width (inches)">6.0</param>
+  <label>Only used by the "Import external SVG as tracing background" action above — for tracing foreign FPP artwork that isn't a Quilt Tools block.</label>
 
   <separator/>
   <label>Blocks live in a "BlockLibrary" folder next to the Quilt Tools extension files. Blocks shipped with Quilt Tools and blocks you save both live there.</label>
