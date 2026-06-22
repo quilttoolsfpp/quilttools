@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
   <name>7. Block Library</name>
   <id>org.quilttoolsplugin.quilttools_fpp_block_library</id>
@@ -6,26 +6,33 @@
 
   <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
     <option value="load">Load block (replace current block)</option>
+    <option value="browse_visual">Browse visual library (thumbnail picker)</option>
+    <option value="catalogue">Open visual library (in web browser)</option>
     <option value="save">Save current block to library</option>
-    <option value="list">List library blocks</option>
+    <option value="refresh">Refresh library dropdown</option>
     <option value="import_trace">Import external SVG as tracing background</option>
   </param>
 
   <separator/>
-  <label appearance="header">Choose a block</label>
-  <param name="block_name" type="string" gui-text="Library block name">Four Patch</param>
-  <label>For Load: type a block name from the library (run 'List library blocks' to see them). For Save: the name to store it under. You can use "Category/Name" to file it in a subfolder.</label>
-  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="...or browse to an SVG file"></param>
-  <label>Browsing to an SVG overrides the name above (used for Load and Import).</label>
+  <label appearance="header">Load a block</label>
+  <param name="lib_block" type="optiongroup" appearance="combo" gui-text="Choose a block">
+    <option value="">— choose a block —</option><option value="Flying Geese">Flying Geese</option><option value="Four Patch">Four Patch</option><option value="Half Square Triangle">Half Square Triangle</option><option value="Nine Patch">Nine Patch</option><option value="Square in a Square">Square in a Square</option></param>
+  <label>The dropdown is filled from the library. After you add or remove blocks, run Action = "Refresh library dropdown", then close and reopen this dialog. For a picture-based picker, use "Browse visual library".</label>
+  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="...or browse to an SVG file"/>
+
+  <separator/>
+  <label appearance="header">Save a block</label>
+  <param name="save_name" type="string" gui-text="Save as (block name)">My Block</param>
+  <label>Use "Category/Name" to file it into a subfolder.</label>
+  <param name="overwrite" type="bool" gui-text="Overwrite if it already exists">false</param>
 
   <separator/>
   <label appearance="header">Options</label>
   <param name="resize_page" type="bool" gui-text="Load: resize the page to the loaded block">true</param>
-  <param name="overwrite" type="bool" gui-text="Save: overwrite if it already exists">false</param>
   <param name="import_w_in" type="float" min="0.5" max="100.0" precision="2" gui-text="Import: target width (inches)">6.0</param>
 
   <separator/>
-  <label>Blocks live in a "BlockLibrary" folder next to the Quilt Tools extension files. Blocks shipped with Quilt Tools and blocks you save both live there. Saving a foreign FPP SVG is not supported; use Import to trace it instead.</label>
+  <label>Blocks live in a "BlockLibrary" folder next to the Quilt Tools extension files. Blocks shipped with Quilt Tools and blocks you save both live there.</label>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>
