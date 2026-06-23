@@ -4,22 +4,40 @@
   <id>org.quilttoolsplugin.quilttools_fpp_export</id>
   <dependency type="executable" location="extensions">quilttools_fpp_export.py</dependency>
 
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Workflow Step">
+    <option value="step1">Step 1: Generate Canvas for Manual Layout (Open Canvas)</option>
+    <option value="step2">Step 2: Render PDF Patterns (Smart Pack or Finalize Manual Layout)</option>
+  </param>
+
+  <label>Please configure the options in all tabs below before running your selected step.</label>
+
   <param name="notebook" type="notebook">
-    <page name="workflow_tab" gui-text="Workflow &amp; Layout">
-      <param name="action" type="optiongroup" appearance="combo" gui-text="1. Workflow Action">
-        <option value="layout">Step 1: Generate Layout (Smart Pack or Open Canvas)</option>
-        <option value="finalize">Step 2: Finalize Open Canvas (Slice &amp; Add Glue Tabs)</option>
-      </param>
+    <page name="options_tab" gui-text="1. Options &amp; Page Features">
+      <param name="include_preview" type="bool" gui-text="Include Cover Page (Page 1 Title/Summary &amp; Hero)">true</param>
+      <param name="separate_section_alignment_image" type="bool" gui-text="Include Section Map Page (Page 2)">false</param>
+      <param name="include_fabric_estimation" type="bool" gui-text="Include Fabric Requirements Page">true</param>
+      <param name="wof_in" type="float" min="20.0" max="60.0" precision="1" gui-text="Width of Fabric (WOF) (inches)">40.0</param>
+      <param name="visualize_fabric_layout" type="bool" gui-text="Draw Fabric Cutting Layout Map on Canvas">false</param>
+      <param name="include_colouring_page" type="bool" gui-text="Include Blank Colouring Outline Page at end">true</param>
+      <param name="show_section_labels" type="bool" gui-text="Show section header labels (e.g., 'Section A')">false</param>
       <separator/>
-      <param name="layout_mode" type="optiongroup" appearance="combo" gui-text="Layout Strategy">
-        <option value="compact_rotate">Smart Pack (Auto-Rotate &amp; Fit to Pages)</option>
-        <option value="explode">Open Canvas (Contiguous Grid for Manual Placement)</option>
-      </param>
-      <separator/>
-      <label>Note: To use the manual layout, run Step 1 using 'Open Canvas'. Drag your pieces across the blue dashed page boundaries to position them, then run Step 2 to mathematically slice them and generate glue tabs.</label>
+      <label>IMPORTANT: Ensure you click through and review all tabs before running Step 2.</label>
     </page>
 
-    <page name="document_tab" gui-text="Document Settings">
+    <page name="metadata_tab" gui-text="2. Block Metadata &amp; Credits">
+      <param name="block_name" type="string" gui-text="Block/Pattern Name">My Quilt Block</param>
+      <param name="designer_name" type="string" gui-text="Designer Name/Credit"></param>
+      <param name="copyright_notice" type="string" gui-text="Copyright/Terms Notice">For personal use only.</param>
+    </page>
+
+    <page name="templates_tab" gui-text="3. Templates &amp; Block Sizing">
+      <label appearance="header">Sizing Settings (Required for Steps 1 &amp; 2)</label>
+      <param name="finished_size_in" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized on Canvas]">0.0</param>
+      <param name="finished_sizes" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, comma-separated e.g. 6,10)"></param>
+      <label>Note: Set 'Finished Block Size' to 0.0 to export the block exactly at its current Inkscape canvas size.</label>
+      <separator/>
+
+      <label appearance="header">Page &amp; Margin Settings</label>
       <param name="page_size" type="optiongroup" appearance="combo" gui-text="Paper Size">
         <option value="letter">US Letter (8.5 x 11 in)</option>
         <option value="a4">A4 (8.27 x 11.69 in)</option>
@@ -31,32 +49,13 @@
       </param>
       <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
       <param name="spacing_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Minimum Spacing Between Pieces (inches)">0.2</param>
-      <separator/>
-      <param name="include_preview" type="bool" gui-text="Include Page 1 (Title/Summary sheet &amp; calibration square)">true</param>
-      <param name="include_fabric_estimation" type="bool" gui-text="Include Fabric Requirements page (Page 2)">true</param>
-      <param name="show_section_labels" type="bool" gui-text="Show section header labels (e.g., 'Section A')">false</param>
-    </page>
-
-    <page name="styling_tab" gui-text="Template Styling &amp; Preview">
       <param name="template_color_mode" type="optiongroup" appearance="combo" gui-text="Template Fabric Color Fill">
         <option value="none">White (Line-Art only)</option>
         <option value="tag">Color Swatch (Minimal ink, auto fallback for small pieces)</option>
         <option value="full">Full Color Fill (Clearest, ink-heavy)</option>
       </param>
-      <param name="export_preview_mode" type="optiongroup" appearance="combo" gui-text="Preview Page Style">
-        <option value="color">Real Coloured Preview (Default-blue warning if uncoloured)</option>
-        <option value="outline">Blank Outline (Coloring page for end users)</option>
-      </param>
-      <separator/>
       <param name="mirror_templates" type="bool" gui-text="Mirror templates on Pages 2+ (Recommended for FPP)">true</param>
       <param name="mirror_preview" type="bool" gui-text="Mirror Page 1 Block Preview (Usually false)">false</param>
-    </page>
-
-    <page name="metadata_tab" gui-text="Metadata &amp; Cover Info">
-      <param name="block_name" type="string" gui-text="Block/Pattern Name">My Quilt Block</param>
-      <param name="designer_name" type="string" gui-text="Designer Name/Credit"></param>
-      <param name="finished_size_in" type="float" min="1.0" max="200.0" precision="1" gui-text="Finished Block Size (inches)">12.0</param>
-      <param name="copyright_notice" type="string" gui-text="Copyright/Terms Notice">For personal use only.</param>
     </page>
   </param>
 

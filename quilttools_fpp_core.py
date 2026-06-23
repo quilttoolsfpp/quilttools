@@ -1758,6 +1758,85 @@ def rgb_to_hex(rgb):
     return "#{:02x}{:02x}{:02x}".format(*rgb)
 
 
+def classify_color_family(hex_str):
+    import colorsys
+    try:
+        r, g, b = hex_to_rgb(hex_str)
+    except Exception:
+        return "GY"
+    h, l, s = colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
+    hue = h * 360.0
+    
+    if l >= 0.95:
+        return "WT"
+    if l <= 0.08:
+        return "BK"
+    if s <= 0.10:
+        return "GY"
+        
+    if hue < 15 or hue >= 345:
+        return "RD"
+    elif 15 <= hue < 45:
+        if l < 0.35 or s < 0.35:
+            return "BR"
+        return "OR"
+    elif 45 <= hue < 70:
+        return "YL"
+    elif 70 <= hue < 165:
+        return "GR"
+    elif 165 <= hue < 195:
+        return "TL"
+    elif 195 <= hue < 255:
+        return "BL"
+    elif 255 <= hue < 290:
+        return "PU"
+    else:
+        return "PK"
+
+
+def assign_color_codes(colors, overrides_str=""):
+    import colorsys
+    
+    overrides = {}
+    if overrides_str:
+        for item in overrides_str.split(","):
+            if ":" in item:
+                parts = item.split(":", 1)
+                h_val = parts[0].strip().lower()
+                code_val = parts[1].strip().upper()
+                if h_val and code_val:
+                    overrides[h_val] = code_val
+
+    family_groups = {}
+    assigned = {}
+    
+    for c in colors:
+        c_clean = c.strip().lower()
+        if c_clean in overrides:
+            assigned[c] = overrides[c_clean]
+            
+    remaining_colors = [c for c in colors if c not in assigned]
+    
+    for c in remaining_colors:
+        family = classify_color_family(c)
+        try:
+            r, g, b = hex_to_rgb(c)
+        except Exception:
+            r, g, b = 128, 128, 128
+        h_val, l_val, s_val = colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
+        
+        if family not in family_groups:
+            family_groups[family] = []
+        family_groups[family].append((c, l_val, h_val))
+        
+    for family, items in family_groups.items():
+        items.sort(key=lambda x: (x[1], x[2]))
+        for idx, (c, _, _) in enumerate(items, 1):
+            assigned[c] = f"{family}{idx}"
+            
+    return assigned
+
+
 def quantize_block_colors(block_data, N, locked_hex_list):
     custom_colors = block_data.prefs.setdefault("custom_colors", {})
     regions = block_data.tree.leaf_regions()

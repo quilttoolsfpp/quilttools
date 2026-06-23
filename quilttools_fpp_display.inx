@@ -22,9 +22,10 @@
   <param name="group_by_color" type="bool" gui-text="Group Canvas Objects by Fabric Color">false</param>
 
   <separator/>
-  <label appearance="header">Color Settings (For Quantize Action)</label>
+  <label appearance="header">Color Settings (For Quantize / Palette Actions)</label>
   <param name="quantize_n" type="int" min="1" max="24" gui-text="Target Number of Fabrics (N)">6</param>
   <param name="locked_colors" type="string" gui-text="Locked Fabric Colors (Comma-separated hex)"></param>
+  <param name="color_code_overrides" type="string" gui-text="Custom Color Codes (e.g. #678967:FAB1, #ffffff:BG)"></param>
 
   <separator/>
   <param name="show_sa" type="bool" gui-text="Show Seam Allowances on Canvas">false</param>
