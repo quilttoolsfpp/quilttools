@@ -118,6 +118,9 @@ class BlockLibraryPlugin(inkex.Effect):
                 "Action = 'Import external SVG as tracing background'."
             )
 
+        new_bd.prefs["is_library_block"] = True
+        new_bd.prefs["original_signature"] = sorted([r.id for r in new_bd.tree.leaf_regions()])
+
         # Capture the current block's footprint BEFORE we remove it, so the
         # "match current block" sizing mode has something to match.
         g_old, old_bd = core.find_fpp_group(self.svg)

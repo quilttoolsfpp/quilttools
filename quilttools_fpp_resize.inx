@@ -14,6 +14,11 @@
   <label appearance="header">Resize Settings</label>
   <param name="new_w_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Width (inches)">12.0</param>
   <param name="new_h_in" type="float" min="1.0" max="100.0" precision="3" gui-text="Target Height (inches)">12.0</param>
+  <param name="maintain_ratio" type="bool" gui-text="Maintain aspect ratio">false</param>
+  <param name="ratio_priority" type="optiongroup" appearance="combo" gui-text="Scale based on">
+    <option value="width">Target Width</option>
+    <option value="height">Target Height</option>
+  </param>
 
   <separator/>
   <label appearance="header">Crop to Shape Settings</label>

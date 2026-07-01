@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>2.5. Shape Cut (Non-FPP)</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_shape_cut</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_shape_cut.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="shape_cut">Shape Cut</option>
+  </param>
+
+  <separator/>
+  <param name="subdivisions" type="int" min="4" max="128" gui-text="Circle subdivisions (smoothness)">32</param>
+  <param name="min_piece_area" type="float" min="0.0" max="10.0" precision="2" gui-text="Warn if piece is smaller than (sq inches)">0.25</param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+
+  <script><command location="extensions" interpreter="python">quilttools_fpp_shape_cut.py</command></script>
+</inkscape-extension>
+

@@ -8,6 +8,7 @@
     <option value="smart_heal">Smart Heal (Auto-Collapse Sections)</option>
     <option value="to_guides">Convert Whole Block to Guides</option>
     <option value="clear_guides">Clear All Guides</option>
+    <option value="strip_metadata">Strip Block Metadata (Convert to Plain Paths)</option>
   </param>
 
   <separator/>

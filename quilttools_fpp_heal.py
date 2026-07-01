@@ -20,6 +20,8 @@ class HealGuidesPlugin(inkex.Effect):
             self._to_guides()
         elif self.options.action == "clear_guides":
             self._clear_guides()
+        elif self.options.action == "strip_metadata":
+            self._strip_metadata()
 
     def _clear_guides(self):
         guides_removed = 0
@@ -163,6 +165,35 @@ class HealGuidesPlugin(inkex.Effect):
             g.getparent().remove(g)
 
         inkex.utils.debug(msg)
+
+    def _strip_metadata(self):
+        fpp_groups = []
+        for g in self.svg.findall(f".//{{{core.SVG_NS}}}g"):
+            desc = g.find(f"{{{core.SVG_NS}}}desc[@id='{core.FPP_DATA_TAG_ID}']")
+            if desc is not None:
+                fpp_groups.append((g, desc))
+
+        if not fpp_groups:
+            return inkex.errormsg("No Quilt Tools FPP blocks found in this document.")
+
+        for g, desc in fpp_groups:
+            # 1. Remove the desc metadata tag
+            g.remove(desc)
+
+            # 2. Clean up group attributes (ID and Inkscape layer label)
+            g.set("id", f"plain-paths-{g.get('id', 'block')}")
+            label = g.get(f"{{{core.INKSCAPE_NS}}}label")
+            if label:
+                g.set(f"{{{core.INKSCAPE_NS}}}label", f"{label} (Plain Paths)")
+
+            # 3. Iterate through all child elements and remove data-fpp-region-id attributes
+            for el in g.iter():
+                if el.get(core.FPP_REGION_ATTR) is not None:
+                    del el.attrib[core.FPP_REGION_ATTR]
+
+        inkex.utils.debug(
+            f"Successfully stripped Quilt Tools metadata from {len(fpp_groups)} block(s). They are now plain paths."
+        )
 
 
 if __name__ == "__main__":

@@ -106,7 +106,11 @@ class LabelsPlugin(inkex.Effect):
             )
         prefix = match.group(1).upper()
 
-        section_leaves = [r for r in tree.leaf_regions() if r.label.startswith(prefix)]
+        section_leaves = []
+        for r in tree.leaf_regions():
+            m = re.match(r"^([A-Za-z]+)", r.label)
+            if m and m.group(1).upper() == prefix:
+                section_leaves.append(r)
         section_ids = {r.id for r in section_leaves}
 
         is_valid, sequence_ids = tree.virtual_sewing_validator(

@@ -8,6 +8,8 @@ class ResizePlugin(inkex.Effect):
         pars.add_argument("--action", type=str, default="resize")
         pars.add_argument("--new_w_in", type=float, default=12.0)
         pars.add_argument("--new_h_in", type=float, default=12.0)
+        pars.add_argument("--maintain_ratio", type=inkex.Boolean, default=False)
+        pars.add_argument("--ratio_priority", type=str, default="width")
         pars.add_argument("--mirror_bg", type=inkex.Boolean, default=True)
         # Crop-to-shape options
         pars.add_argument("--crop_min_area", type=float, default=0.05)
@@ -94,8 +96,18 @@ class ResizePlugin(inkex.Effect):
         if old_w <= 0.001 or old_h <= 0.001:
             return inkex.errormsg("Invalid block dimensions.")
 
-        new_w_px = self.options.new_w_in * core.PX_PER_INCH
-        new_h_px = self.options.new_h_in * core.PX_PER_INCH
+        new_w_in = self.options.new_w_in
+        new_h_in = self.options.new_h_in
+
+        if self.options.maintain_ratio:
+            aspect_ratio = old_h / old_w
+            if self.options.ratio_priority == "width":
+                new_h_in = new_w_in * aspect_ratio
+            else:
+                new_w_in = new_h_in / aspect_ratio
+
+        new_w_px = new_w_in * core.PX_PER_INCH
+        new_h_px = new_h_in * core.PX_PER_INCH
         scale_x = new_w_px / old_w
         scale_y = new_h_px / old_h
 
@@ -111,7 +123,7 @@ class ResizePlugin(inkex.Effect):
         self._set_page(min_x, min_y, new_w_px, new_h_px)
 
         inkex.utils.debug(
-            f'Block and Page successfully resized to {self.options.new_w_in}" x {self.options.new_h_in}"!'
+            f'Block and Page successfully resized to {new_w_in:.3f}" x {new_h_in:.3f}"!'
         )
 
     # ------------------------------------------------------------------

@@ -102,7 +102,7 @@ def are_collinear(p1, p2, p3, tol=0.5):
     return distance < tol
 
 
-def deduplicate_polygon(polygon, eps=0.5):
+def deduplicate_polygon(polygon, eps=1e-4):
     result = []
     for p in polygon:
         if not result or pt_dist(p, result[-1]) > eps:
@@ -113,7 +113,7 @@ def deduplicate_polygon(polygon, eps=0.5):
 
 
 def simplify_polygon(poly):
-    poly = deduplicate_polygon(poly)
+    poly = deduplicate_polygon(poly, eps=1e-4)
     if len(poly) <= 3:
         return poly
     changed = True
@@ -124,7 +124,7 @@ def simplify_polygon(poly):
             p_prev = poly[(i - 1) % n]
             p_curr = poly[i]
             p_next = poly[(i + 1) % n]
-            if are_collinear(p_prev, p_curr, p_next, tol=1.5):
+            if are_collinear(p_prev, p_curr, p_next, tol=1e-4):
                 poly.pop(i)
                 changed = True
                 break
@@ -223,35 +223,160 @@ def polygon_area(polygon):
 
 
 def polygon_centroid(polygon):
-    if not polygon:
-        return (0, 0)
-    return (
-        sum(p[0] for p in polygon) / len(polygon),
-        sum(p[1] for p in polygon) / len(polygon),
-    )
-
-
-def split_polygon_by_line(polygon, p1, p2):
-    d = vec_sub(p2, p1)
-    left_verts, right_verts = [], []
+    if not polygon or len(polygon) < 3:
+        if not polygon:
+            return (0, 0)
+        return (
+            sum(p[0] for p in polygon) / len(polygon),
+            sum(p[1] for p in polygon) / len(polygon),
+        )
+    # True polygon centroid (center of mass)
+    ans_twice = 0.0
+    for i in range(len(polygon)):
+        p1 = polygon[i]
+        p2 = polygon[(i + 1) % len(polygon)]
+        ans_twice += p1[0] * p2[1] - p2[0] * p1[1]
+    
+    A = ans_twice / 2.0
+    if abs(A) < 1e-7:
+        return (
+            sum(p[0] for p in polygon) / len(polygon),
+            sum(p[1] for p in polygon) / len(polygon),
+        )
+    
+    cx = 0.0
+    cy = 0.0
     n = len(polygon)
     for i in range(n):
-        a, b = polygon[i], polygon[(i + 1) % n]
-        side_a = vec_cross(d, vec_sub(a, p1))
-        r = segment_intersect(a, b, p1, p2)
-        if r:
-            _, cp = r
-            if side_a >= 0:
-                left_verts.extend([a, cp])
+        p1 = polygon[i]
+        p2 = polygon[(i + 1) % n]
+        factor = p1[0] * p2[1] - p2[0] * p1[1]
+        cx += (p1[0] + p2[0]) * factor
+        cy += (p1[1] + p2[1]) * factor
+    cx /= (6.0 * A)
+    cy /= (6.0 * A)
+    return (cx, cy)
+
+
+def find_circle_intersections(polygon, center, radius):
+    intersections = []
+    n = len(polygon)
+    xc, yc = center
+    R = radius
+    for i in range(n):
+        p1 = polygon[i]
+        p2 = polygon[(i + 1) % n]
+        vx, vy = p2[0] - p1[0], p2[1] - p1[1]
+        ux, uy = p1[0] - xc, p1[1] - yc
+        a = vx*vx + vy*vy
+        if a < 1e-9:
+            continue
+        b = 2 * (ux*vx + uy*vy)
+        c = ux*ux + uy*uy - R*R
+        D = b*b - 4*a*c
+        if D >= 0:
+            roots = []
+            if D < 1e-9:
+                roots.append(-b / (2*a))
+            else:
+                sqrt_D = math.sqrt(D)
+                roots.append((-b - sqrt_D) / (2*a))
+                roots.append((-b + sqrt_D) / (2*a))
+            for t in roots:
+                if -1e-6 <= t <= 1 + 1e-6:
+                    t = max(0.0, min(1.0, t))
+                    ix = p1[0] + t * vx
+                    iy = p1[1] + t * vy
+                    intersections.append((i, t, (ix, iy)))
+    return intersections
+
+
+def deduplicate_intersections(intersections):
+    deduped = []
+    for item in intersections:
+        duplicate = False
+        for existing in deduped:
+            if pt_dist(item[2], existing[2]) < 1e-4:
+                duplicate = True
+                break
+        if not duplicate:
+            deduped.append(item)
+    return deduped
+
+
+def generate_circle_arc(center, radius, theta1, theta2, ccw, subdivisions=32):
+    xc, yc = center
+    if ccw:
+        t2 = theta2
+        if t2 < theta1:
+            t2 += 2 * math.pi
+        diff = t2 - theta1
+    else:
+        t2 = theta2
+        if t2 > theta1:
+            t2 -= 2 * math.pi
+        diff = t2 - theta1
+        
+    pts = []
+    for i in range(subdivisions + 1):
+        f = i / float(subdivisions)
+        theta = theta1 + f * diff
+        x = xc + radius * math.cos(theta)
+        y = yc + radius * math.sin(theta)
+        pts.append((round(x, 4), round(y, 4)))
+    return pts
+
+
+
+
+def split_polygon_by_line(polygon, p1, p2, snap_tol=1.5):
+    d = vec_sub(p2, p1)
+    len_d = math.hypot(d[0], d[1])
+    if len_d < 1e-7:
+        return simplify_polygon(polygon), []
+    
+    nd = (d[0] / len_d, d[1] / len_d)
+    
+    # 1. Snap vertices of the parent polygon to the line
+    snapped_poly = []
+    for v in polygon:
+        dist = nd[0] * (v[1] - p1[1]) - nd[1] * (v[0] - p1[0])
+        if abs(dist) < snap_tol:
+            v_snapped = (v[0] + dist * nd[1], v[1] - dist * nd[0])
+            snapped_poly.append(v_snapped)
+        else:
+            snapped_poly.append(v)
+            
+    # 2. Define infinite line points for robust intersection
+    BIG = 1e7
+    inf_p1 = (p1[0] - nd[0] * BIG, p1[1] - nd[1] * BIG)
+    inf_p2 = (p1[0] + nd[0] * BIG, p1[1] + nd[1] * BIG)
+    
+    # 3. Perform split on snapped_poly
+    left_verts, right_verts = [], []
+    n = len(snapped_poly)
+    for i in range(n):
+        a, b = snapped_poly[i], snapped_poly[(i + 1) % n]
+        
+        dist_a = nd[0] * (a[1] - p1[1]) - nd[1] * (a[0] - p1[0])
+        side_a = 0 if abs(dist_a) < 1e-7 else (1 if dist_a > 0 else -1)
+        
+        dist_b = nd[0] * (b[1] - p1[1]) - nd[1] * (b[0] - p1[0])
+        side_b = 0 if abs(dist_b) < 1e-7 else (1 if dist_b > 0 else -1)
+        
+        if side_a >= 0:
+            left_verts.append(a)
+        if side_a <= 0:
+            right_verts.append(a)
+            
+        if (side_a > 0 and side_b < 0) or (side_a < 0 and side_b > 0):
+            r = segment_intersect(a, b, inf_p1, inf_p2)
+            if r:
+                _, cp = r
+                left_verts.append(cp)
                 right_verts.append(cp)
             else:
-                right_verts.extend([a, cp])
-                left_verts.append(cp)
-        else:
-            if side_a >= 0:
-                left_verts.append(a)
-            else:
-                right_verts.append(a)
+                pass
 
     return simplify_polygon(left_verts), simplify_polygon(right_verts)
 
@@ -277,38 +402,45 @@ def offset_polygon(polygon, amount, miter_limit=2.0):
         n1, n2 = normals[(i - 1) % n], normals[i]
         p_prev, p_curr, p_next = polygon[(i - 1) % n], polygon[i], polygon[(i + 1) % n]
 
-        L1_p1 = (p_prev[0] + n1[0] * amount, p_prev[1] + n1[1] * amount)
-        L1_p2 = (p_curr[0] + n1[0] * amount, p_curr[1] + n1[1] * amount)
-        L2_p1 = (p_curr[0] + n2[0] * amount, p_curr[1] + n2[1] * amount)
-        L2_p2 = (p_next[0] + n2[0] * amount, p_next[1] + n2[1] * amount)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]
+        blen2 = bx*bx + by*by
 
-        d1x, d1y = L1_p2[0] - L1_p1[0], L1_p2[1] - L1_p1[1]
-        d2x, d2y = L2_p2[0] - L2_p1[0], L2_p2[1] - L2_p1[1]
+        if blen2 < 1e-4:
+            pA = (p_curr[0] + n1[0] * amount, p_curr[1] + n1[1] * amount)
+            pB = (p_curr[0] + n2[0] * amount, p_curr[1] + n2[1] * amount)
+            new_poly.append(pA)
+            new_poly.append(pB)
+            continue
 
-        cross = d1x * d2y - d1y * d2x
+        factor = 2.0 / blen2
+        mx, my = bx * factor * amount, by * factor * amount
+        miter_len = math.hypot(mx, my)
 
-        if abs(cross) < EPSILON:
-            new_poly.append(L1_p2)
-        else:
-            t = ((L2_p1[0] - L1_p1[0]) * d2y - (L2_p1[1] - L1_p1[1]) * d2x) / cross
-            new_px, new_py = L1_p1[0] + t * d1x, L1_p1[1] + t * d1y
-
-            miter_length = math.hypot(new_px - p_curr[0], new_py - p_curr[1])
-
-            if miter_length > abs(amount) * miter_limit:
-                bx, by = n1[0] + n2[0], n1[1] + n2[1]
-                blen = math.hypot(bx, by)
-                if blen > EPSILON:
-                    bx, by = bx / blen, by / blen
-                trunc_dist = abs(amount)
-                pA_x = new_px - d1x * (miter_length - trunc_dist) / math.hypot(d1x, d1y)
-                pA_y = new_py - d1y * (miter_length - trunc_dist) / math.hypot(d1x, d1y)
-                pB_x = new_px + d2x * (miter_length - trunc_dist) / math.hypot(d2x, d2y)
-                pB_y = new_py + d2y * (miter_length - trunc_dist) / math.hypot(d2x, d2y)
+        if miter_len > abs(amount) * miter_limit:
+            new_px = p_curr[0] + mx
+            new_py = p_curr[1] + my
+            
+            d1x, d1y = p_curr[0] - p_prev[0], p_curr[1] - p_prev[1]
+            d2x, d2y = p_next[0] - p_curr[0], p_next[1] - p_curr[1]
+            
+            trunc_dist = abs(amount)
+            h1 = math.hypot(d1x, d1y)
+            h2 = math.hypot(d2x, d2y)
+            
+            if h1 > 1e-9 and h2 > 1e-9:
+                pA_x = new_px - d1x * (miter_len - trunc_dist) / h1
+                pA_y = new_py - d1y * (miter_len - trunc_dist) / h1
+                pB_x = new_px + d2x * (miter_len - trunc_dist) / h2
+                pB_y = new_py + d2y * (miter_len - trunc_dist) / h2
                 new_poly.append((pA_x, pA_y))
                 new_poly.append((pB_x, pB_y))
             else:
-                new_poly.append((new_px, new_py))
+                pA = (p_curr[0] + n1[0] * amount, p_curr[1] + n1[1] * amount)
+                pB = (p_curr[0] + n2[0] * amount, p_curr[1] + n2[1] * amount)
+                new_poly.append(pA)
+                new_poly.append(pB)
+        else:
+            new_poly.append((p_curr[0] + mx, p_curr[1] + my))
 
     return simplify_polygon(new_poly)
 
@@ -469,6 +601,7 @@ class RegionTree:
     def __init__(self, root_polygon=None):
         self.regions = {}
         self.root_id = None
+        self.curves = []
         if root_polygon:
             root = Region(root_polygon, label="A1")
             self.regions[root.id] = root
@@ -566,6 +699,35 @@ class RegionTree:
         limit_to_region_id=None,
         is_boundary=False,
     ):
+        # 1. Pre-snap check: find which leaf regions are touched by the original unsnapped line segment
+        raw_angle_unsnapped = angle_of_line(draw_p1, draw_p2)
+        rad_unsnapped = math.radians(raw_angle_unsnapped)
+        ray_unsnapped = line_from_point_angle(draw_p1, raw_angle_unsnapped)
+
+        def dist_along_ray_unsnapped(p):
+            return (p[0] - ray_unsnapped[0][0]) * math.cos(rad_unsnapped) + (p[1] - ray_unsnapped[0][1]) * math.sin(
+                rad_unsnapped
+            )
+
+        t_unsnapped_draw1 = dist_along_ray_unsnapped(draw_p1)
+        t_unsnapped_draw2 = dist_along_ray_unsnapped(draw_p2)
+        t_unsnapped_draw_min = min(t_unsnapped_draw1, t_unsnapped_draw2)
+        t_unsnapped_draw_max = max(t_unsnapped_draw1, t_unsnapped_draw2)
+
+        touched_before_snap = set()
+        for region in self.leaf_regions():
+            if limit_to_region_id and region.id != limit_to_region_id:
+                continue
+            clipped = clip_line_to_polygon(ray_unsnapped[0], ray_unsnapped[1], region.polygon)
+            if not clipped:
+                continue
+            t_cut1, t_cut2 = dist_along_ray_unsnapped(clipped[0]), dist_along_ray_unsnapped(clipped[1])
+            overlap_min = max(t_unsnapped_draw_min, min(t_cut1, t_cut2))
+            overlap_max = min(t_unsnapped_draw_max, max(t_cut1, t_cut2))
+            if overlap_max - overlap_min > 0.5:
+                touched_before_snap.add(region.id)
+
+        # 2. Snapped angle computation
         raw_angle = angle_of_line(draw_p1, draw_p2)
         length = vec_len(vec_sub(draw_p2, draw_p1))
         if angle_snap_deg and angle_snap_deg > 0:
@@ -586,7 +748,8 @@ class RegionTree:
 
         touched_ids = []
         for region in self.leaf_regions():
-            if limit_to_region_id and region.id != limit_to_region_id:
+            # Apply original touch restriction
+            if region.id not in touched_before_snap:
                 continue
             clipped = clip_line_to_polygon(ray[0], ray[1], region.polygon)
             if not clipped:
@@ -598,6 +761,7 @@ class RegionTree:
                 touched_ids.append(region.id)
 
         cut_count = 0
+        committed_nodes = []
         for rid in touched_ids:
             region = self.regions[rid]
             clipped = clip_line_to_polygon(ray[0], ray[1], region.polygon)
@@ -619,10 +783,305 @@ class RegionTree:
             self.regions[child_a.id], self.regions[child_b.id] = child_a, child_b
             region.children = [child_a.id, child_b.id]
             region.split_boundary = is_boundary
+            committed_nodes.append((region, child_a.id, child_b.id))
             cut_count += 1
 
         self.sanitize_tree()
-        return cut_count
+        actual_cuts = 0
+        for parent, ca_id, cb_id in committed_nodes:
+            if not parent.is_leaf():
+                actual_cuts += 1
+        
+        if actual_cuts > 0:
+            self.rebuild_alphabet()
+            
+        return actual_cuts
+
+    def multi_circle_cut(self, center, radius, limit_to_region_id=None, subdivisions=32):
+        # 1. Identify which leaf regions are intersected by the circle
+        regions_to_cut = []
+        for region in self.leaf_regions():
+            if limit_to_region_id and region.id != limit_to_region_id:
+                continue
+            intersections = find_circle_intersections(region.polygon, center, radius)
+            intersections = deduplicate_intersections(intersections)
+            if len(intersections) == 2:
+                regions_to_cut.append((region, intersections))
+                
+        if not regions_to_cut:
+            return 0
+            
+        committed_nodes = []
+        cut_count = 0
+        
+        for region, intersections in regions_to_cut:
+            # Sort intersections by edge index, then t parameter
+            intersections.sort(key=lambda x: (x[0], x[1]))
+            
+            a_idx, t1, I1 = intersections[0]
+            b_idx, t2, I2 = intersections[1]
+            
+            # If on the same edge, make sure t1 < t2
+            if a_idx == b_idx and t1 > t2:
+                I1, I2 = I2, I1
+                t1, t2 = t2, t1
+                
+            # Get angles for arc interpolation
+            theta1 = math.atan2(I1[1] - center[1], I1[0] - center[0])
+            theta2 = math.atan2(I2[1] - center[1], I2[0] - center[0])
+            
+            # Generate CCW and CW arcs
+            arc_ccw = generate_circle_arc(center, radius, theta1, theta2, ccw=True, subdivisions=subdivisions)
+            arc_cw = generate_circle_arc(center, radius, theta1, theta2, ccw=False, subdivisions=subdivisions)
+            
+            # Determine which arc is inside the polygon
+            xc, yc = center
+            t2_ccw = theta2 if theta2 >= theta1 else theta2 + 2 * math.pi
+            theta_mid_ccw = theta1 + 0.5 * (t2_ccw - theta1)
+            midpoint_ccw = (xc + radius * math.cos(theta_mid_ccw), yc + radius * math.sin(theta_mid_ccw))
+            
+            if point_in_polygon(midpoint_ccw, region.polygon):
+                arc = arc_ccw
+            else:
+                arc = arc_cw
+                
+            # Split parent polygon into Chain 1 and Chain 2
+            poly = region.polygon
+            n_p = len(poly)
+            
+            # Chain 1: from I1 to I2 along the polygon boundary
+            if a_idx == b_idx:
+                chain1 = [I1, I2]
+            else:
+                chain1 = [I1]
+                idx = (a_idx + 1) % n_p
+                while True:
+                    chain1.append(poly[idx])
+                    if idx == b_idx:
+                        break
+                    idx = (idx + 1) % n_p
+                chain1.append(I2)
+                
+            # Chain 2: from I2 to I1 along the polygon boundary
+            if a_idx == b_idx:
+                chain2 = [I2]
+                idx = (b_idx + 1) % n_p
+                while True:
+                    chain2.append(poly[idx])
+                    if idx == a_idx:
+                        break
+                    idx = (idx + 1) % n_p
+                chain2.append(I1)
+            else:
+                chain2 = [I2]
+                idx = (b_idx + 1) % n_p
+                while True:
+                    chain2.append(poly[idx])
+                    if idx == a_idx:
+                        break
+                    idx = (idx + 1) % n_p
+                chain2.append(I1)
+                
+            # Build child polygons
+            poly_a = chain1 + arc[::-1][1:-1]
+            poly_b = chain2 + arc[1:-1]
+            
+            poly_a = simplify_polygon(poly_a)
+            poly_b = simplify_polygon(poly_b)
+            
+            if (
+                len(poly_a) < 3
+                or len(poly_b) < 3
+                or polygon_area(poly_a) < 0.1
+                or polygon_area(poly_b) < 0.1
+            ):
+                continue
+            
+            # Create child regions
+            child_a = Region(poly_a, label=region.label + "a", parent_id=region.id)
+            child_b = Region(poly_b, label=region.label + "b", parent_id=region.id)
+            
+            self.regions[child_a.id] = child_a
+            self.regions[child_b.id] = child_b
+            region.children = [child_a.id, child_b.id]
+            region.split_boundary = True
+            
+            # Register curve boundary
+            if not hasattr(self, "curves"):
+                self.curves = []
+            self.curves.append(arc)
+            
+            committed_nodes.append((region, child_a.id, child_b.id))
+            cut_count += 1
+            
+        self.sanitize_tree()
+        actual_cuts = 0
+        for parent, ca_id, cb_id in committed_nodes:
+            if not parent.is_leaf():
+                actual_cuts += 1
+                
+        if actual_cuts > 0:
+            self.rebuild_alphabet()
+            
+        return actual_cuts
+
+
+    def multi_path_cut(self, path_points, limit_to_region_id=None):
+        if len(path_points) < 2:
+            return 0
+
+        # Extend the start and end of the path slightly to ensure they cross the boundaries
+        # Extend start point
+        d_start = vec_sub(path_points[0], path_points[1])
+        l_start = math.hypot(*d_start)
+        if l_start > EPSILON:
+            extended_start = (path_points[0][0] + d_start[0] * 10.0 / l_start, path_points[0][1] + d_start[1] * 10.0 / l_start)
+        else:
+            extended_start = path_points[0]
+
+        # Extend end point
+        d_end = vec_sub(path_points[-1], path_points[-2])
+        l_end = math.hypot(*d_end)
+        if l_end > EPSILON:
+            extended_end = (path_points[-1][0] + d_end[0] * 10.0 / l_end, path_points[-1][1] + d_end[1] * 10.0 / l_end)
+        else:
+            extended_end = path_points[-1]
+
+        # Build extended path
+        ext_path = [extended_start] + list(path_points[1:-1]) + [extended_end]
+
+        regions_to_cut = []
+        for region in self.leaf_regions():
+            if limit_to_region_id and region.id != limit_to_region_id:
+                continue
+
+            intersections = []
+            n_poly = len(region.polygon)
+            n_path = len(ext_path)
+
+            for i in range(n_poly):
+                poly_p1 = region.polygon[i]
+                poly_p2 = region.polygon[(i + 1) % n_poly]
+
+                for j in range(n_path - 1):
+                    path_p1 = ext_path[j]
+                    path_p2 = ext_path[j + 1]
+
+                    res = segment_intersect(poly_p1, poly_p2, path_p1, path_p2)
+                    if res:
+                        t, I = res
+                        d_path = vec_sub(path_p2, path_p1)
+                        l_path_sq = d_path[0]**2 + d_path[1]**2
+                        v_diff = vec_sub(I, path_p1)
+                        u = (v_diff[0] * d_path[0] + v_diff[1] * d_path[1]) / l_path_sq if l_path_sq > EPSILON else 0.0
+                        intersections.append((i, t, I, j + u))
+
+            intersections = deduplicate_intersections(intersections)
+
+            if len(intersections) == 2:
+                regions_to_cut.append((region, intersections))
+
+        if not regions_to_cut:
+            return 0
+
+        committed_nodes = []
+        cut_count = 0
+
+        for region, intersections in regions_to_cut:
+            intersections.sort(key=lambda x: x[3])
+
+            a_idx, t1, I1, p1 = intersections[0]
+            b_idx, t2, I2, p2 = intersections[1]
+
+            j1 = int(math.floor(p1))
+            j2 = int(math.floor(p2))
+
+            arc = [I1]
+            for idx in range(j1 + 1, j2 + 1):
+                if idx < len(ext_path):
+                    arc.append(ext_path[idx])
+            arc.append(I2)
+
+            poly = region.polygon
+            n_p = len(poly)
+
+            poly_intersections = sorted(intersections, key=lambda x: (x[0], x[1]))
+            pa_idx = poly_intersections[0][0]
+            pb_idx = poly_intersections[1][0]
+            pt1 = poly_intersections[0][1]
+            pt2 = poly_intersections[1][1]
+            pI1 = poly_intersections[0][2]
+            pI2 = poly_intersections[1][2]
+
+            if pa_idx == pb_idx and pt1 > pt2:
+                pI1, pI2 = pI2, pI1
+                pt1, pt2 = pt2, pt1
+
+            if pa_idx == pb_idx:
+                chain1 = [pI1, pI2]
+            else:
+                chain1 = [pI1]
+                idx = (pa_idx + 1) % n_p
+                while True:
+                    chain1.append(poly[idx])
+                    if idx == pb_idx:
+                        break
+                    idx = (idx + 1) % n_p
+                chain1.append(pI2)
+
+            chain2 = [pI2]
+            idx = (pb_idx + 1) % n_p
+            while True:
+                chain2.append(poly[idx])
+                if idx == pa_idx:
+                    break
+                idx = (idx + 1) % n_p
+            chain2.append(pI1)
+
+            if pt_dist(I1, pI1) < 1e-4:
+                poly_a = chain1 + arc[::-1][1:-1]
+                poly_b = chain2 + arc[1:-1]
+            else:
+                poly_a = chain1 + arc[1:-1]
+                poly_b = chain2 + arc[::-1][1:-1]
+
+            poly_a = simplify_polygon(poly_a)
+            poly_b = simplify_polygon(poly_b)
+
+            if (
+                len(poly_a) < 3
+                or len(poly_b) < 3
+                or polygon_area(poly_a) < 0.1
+                or polygon_area(poly_b) < 0.1
+            ):
+                continue
+
+            child_a = Region(poly_a, label=region.label + "a", parent_id=region.id)
+            child_b = Region(poly_b, label=region.label + "b", parent_id=region.id)
+
+            self.regions[child_a.id] = child_a
+            self.regions[child_b.id] = child_b
+            region.children = [child_a.id, child_b.id]
+            region.split_boundary = True
+
+            if not hasattr(self, "curves"):
+                self.curves = []
+            self.curves.append(arc)
+
+            committed_nodes.append((region, child_a.id, child_b.id))
+            cut_count += 1
+
+        self.sanitize_tree()
+        actual_cuts = 0
+        for parent, ca_id, cb_id in committed_nodes:
+            if not parent.is_leaf():
+                actual_cuts += 1
+
+        if actual_cuts > 0:
+            self.rebuild_alphabet()
+
+        return actual_cuts
+
 
     def heal_regions(self, id1, id2):
         if id1 not in self.regions or id2 not in self.regions:
@@ -637,6 +1096,17 @@ class RegionTree:
                 False,
                 "Selected pieces do not share an exact straight edge boundary.",
             )
+
+        if hasattr(self, "curves") and self.curves:
+            i, j, _ = match
+            sa, sb = p1[i], p1[(i + 1) % len(p1)]
+            for curve in self.curves:
+                n_c = len(curve)
+                for idx_c in range(n_c - 1):
+                    c1, c2 = curve[idx_c], curve[idx_c + 1]
+                    if (pt_dist(sa, c1) < 1.5 and pt_dist(sb, c2) < 1.5) or \
+                       (pt_dist(sa, c2) < 1.5 and pt_dist(sb, c1) < 1.5):
+                        return False, "Selected pieces share a curved boundary and cannot be healed."
 
         merged_poly = merge_polygons(p1, p2, match[0], match[1], match[2])
         new_region = Region(merged_poly, label=r1.label)
@@ -702,11 +1172,24 @@ class RegionTree:
             idx = path.index(lca_id)
             for node_id in path[idx:]:
                 if self.regions[node_id].split_boundary:
-                    return (
-                        False,
-                        "Cannot heal across an initial structural grid boundary.",
-                        [],
-                    )
+                    # Gather all leaf descendants of node_id to check if they are all selected
+                    descendant_leaves = []
+                    def gather_leaves(nid):
+                        node = self.regions[nid]
+                        if node.is_leaf():
+                            descendant_leaves.append(nid)
+                        else:
+                            for cid in node.children:
+                                gather_leaves(cid)
+                    gather_leaves(node_id)
+                    
+                    if not all(dl in selected_leaf_ids for dl in descendant_leaves):
+                        return (
+                            False,
+                            "Cannot heal across an initial structural grid boundary unless all pieces on both sides of the boundary are selected to be healed.",
+                            [],
+                        )
+
 
         lca_node = self.regions[lca_id]
         if lca_node.is_leaf():
@@ -744,12 +1227,71 @@ class RegionTree:
             guide_polys,
         )
 
+    def _selection_contains_curve(self, selected_leaf_ids):
+        if not hasattr(self, "curves") or not self.curves:
+            return False
+        for nid in selected_leaf_ids:
+            if nid not in self.regions:
+                continue
+            poly = self.regions[nid].polygon
+            n = len(poly)
+            for i in range(n):
+                p1, p2 = poly[i], poly[(i + 1) % n]
+                for curve in self.curves:
+                    n_c = len(curve)
+                    for idx_c in range(n_c - 1):
+                        c1, c2 = curve[idx_c], curve[idx_c + 1]
+                        if (pt_dist(p1, c1) < 1.5 and pt_dist(p2, c2) < 1.5) or \
+                           (pt_dist(p1, c2) < 1.5 and pt_dist(p2, c1) < 1.5):
+                            return True
+        return False
+
     def virtual_sewing_validator(self, selected_leaf_ids, force_start_id=None):
         """Guillotine Convex Separability Check - Normalized absolute pixel tolerance"""
         if not selected_leaf_ids:
             return False, []
         if len(selected_leaf_ids) == 1:
             return True, list(selected_leaf_ids)
+
+        if self._selection_contains_curve(selected_leaf_ids):
+            if force_start_id:
+                # We are setting a piece as first; preserve the existing label sequence and rotate/reverse it to find the most sewable contiguous order
+                def get_label_num(nid):
+                    label = self.regions[nid].label
+                    if not label or not isinstance(label, str):
+                        return 999999
+                    m = re.search(r"\d+", label)
+                    return int(m.group()) if m else 999999
+
+                seq = sorted(list(selected_leaf_ids), key=get_label_num)
+                if force_start_id in seq:
+                    # Candidate 1: Rotated forward
+                    idx = seq.index(force_start_id)
+                    seq_rot = seq[idx:] + seq[:idx]
+
+                    # Candidate 2: Reversed and rotated
+                    seq_rev = seq[::-1]
+                    idx_rev = seq_rev.index(force_start_id)
+                    seq_rev_rot = seq_rev[idx_rev:] + seq_rev[:idx_rev]
+
+                    # Calculate physical path cost (sum of adjacent centroid distances) to avoid unsewable jumps
+                    centroids = {}
+                    for nid in selected_leaf_ids:
+                        centroids[nid] = polygon_centroid(self.regions[nid].polygon)
+
+                    def get_cost(s):
+                        return sum(pt_dist(centroids[s[i]], centroids[s[i+1]]) for i in range(len(s)-1))
+
+                    cost_rot = get_cost(seq_rot)
+                    cost_rev = get_cost(seq_rev_rot)
+
+                    seq = seq_rot if cost_rot < cost_rev else seq_rev_rot
+
+                return True, seq
+            else:
+                # Fully Auto-Labeling; return in ID-sorted creation order (original behavior)
+                return True, sorted(list(selected_leaf_ids))
+
 
         polygons = {nid: self.regions[nid].polygon for nid in selected_leaf_ids}
         sequence = []
@@ -1009,23 +1551,7 @@ class RegionTree:
                 groups[prefix] = []
             groups[prefix].append(r)
 
-        def group_centroid(grp):
-            cx = sum(polygon_centroid(n.polygon)[0] for n in grp) / len(grp)
-            cy = sum(polygon_centroid(n.polygon)[1] for n in grp) / len(grp)
-            return (cx, cy)
-
-        sorted_groups = sorted(
-            groups.values(),
-            key=lambda grp: (group_centroid(grp)[1], group_centroid(grp)[0]),
-        )
-
-        def get_letter(idx):
-            if idx < 26:
-                return chr(65 + idx)
-            return chr(65 + (idx // 26) - 1) + chr(65 + (idx % 26))
-
-        for sec_idx, grp in enumerate(sorted_groups):
-            letter = get_letter(sec_idx)
+        for prefix, grp in groups.items():
             grp_ids = [n.id for n in grp]
             current_first = min(
                 grp,
@@ -1044,10 +1570,11 @@ class RegionTree:
 
             if is_valid:
                 for i, nid in enumerate(sequence):
-                    self.regions[nid].label = f"{letter}{i + 1}"
+                    self.regions[nid].label = f"{prefix}{i + 1}"
             else:
-                for i, n in enumerate(grp):
-                    n.label = f"{letter}{i + 1}"
+                grp_sorted = sorted(grp, key=lambda n: (polygon_centroid(n.polygon)[1], polygon_centroid(n.polygon)[0]))
+                for i, n in enumerate(grp_sorted):
+                    n.label = f"{prefix}{i + 1}"
 
     def undo_last_cut(self):
         leaf_ids = {r.id for r in self.leaf_regions()}
@@ -1248,12 +1775,14 @@ class RegionTree:
         return {
             "root_id": self.root_id,
             "regions": {str(k): v.to_dict() for k, v in self.regions.items()},
+            "curves": self.curves,
         }
 
     @staticmethod
     def from_dict(d):
         tree = RegionTree()
         tree.root_id = d["root_id"]
+        tree.curves = d.get("curves", [])
         for v in d["regions"].values():
             r = Region.from_dict(v)
             tree.regions[r.id] = r
@@ -1271,6 +1800,15 @@ class BlockData:
 
     def to_json(self):
         return json.dumps({"tree": self.tree.to_dict(), "prefs": self.prefs})
+
+    def is_exact_library_block(self):
+        if not self.prefs.get("is_library_block"):
+            return False
+        orig_sig = self.prefs.get("original_signature")
+        if not orig_sig:
+            return False
+        current_sig = sorted([r.id for r in self.tree.leaf_regions()])
+        return current_sig == orig_sig
 
     @staticmethod
     def from_json(text):

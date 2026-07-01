@@ -177,6 +177,10 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--notebook", type=str, default="")
 
     def effect(self):
+        g, block_data = core.find_fpp_group(self.svg)
+        if block_data and block_data.is_exact_library_block():
+            self.options.copyright_notice = "For personal use only."
+
         if self.options.action == "step1":
             self._generate_open_canvas()
         elif self.options.action == "step2":
@@ -215,6 +219,39 @@ class ExportPlugin(inkex.Effect):
             return None, None, None
 
         tree = block_data.tree
+        self.alignment_marks = []
+        tick_dist_px = 1.5 * core.PX_PER_INCH
+        if hasattr(tree, "curves") and tree.curves:
+            for curve in tree.curves:
+                if len(curve) < 2:
+                    continue
+                s = [0.0]
+                for k in range(1, len(curve)):
+                    s.append(s[-1] + core.pt_dist(curve[k-1], curve[k]))
+                total_len = s[-1]
+                num_ticks = int(total_len / tick_dist_px)
+                for k in range(1, num_ticks + 1):
+                    target_d = k * tick_dist_px
+                    idx = 0
+                    while idx < len(s) - 1 and not (s[idx] <= target_d <= s[idx+1]):
+                        idx += 1
+                    if idx >= len(s) - 1:
+                        idx = len(s) - 2
+                    seg_len = s[idx+1] - s[idx]
+                    t = 0.0 if seg_len < 1e-9 else (target_d - s[idx]) / seg_len
+                    p1, p2 = curve[idx], curve[idx+1]
+                    px = p1[0] + t * (p2[0] - p1[0])
+                    py = p1[1] + t * (p2[1] - p1[1])
+                    tx = p2[0] - p1[0]
+                    ty = p2[1] - p1[1]
+                    tlen = math.hypot(tx, ty)
+                    if tlen > 1e-9:
+                        tx, ty = tx / tlen, ty / tlen
+                    else:
+                        tx, ty = 1.0, 0.0
+                    nx, ny = -ty, tx
+                    self.alignment_marks.append(((px, py), (nx, ny)))
+
         user_colors = {}
         for path in g.findall(f".//{{{core.SVG_NS}}}path"):
             rid = path.get(core.FPP_REGION_ATTR)
@@ -362,6 +399,11 @@ class ExportPlugin(inkex.Effect):
                     "min_y": min_y,
                     "width": max_x - min_x,
                     "height": max_y - min_y,
+                    "scale": scale,
+                    "cx_hull": cx_hull,
+                    "cx": cx,
+                    "cy": cy,
+                    "best_angle": best_angle,
                 }
             )
 
@@ -630,6 +672,19 @@ class ExportPlugin(inkex.Effect):
                     "{%s}path" % core.SVG_NS,
                     d=r_d,
                     style="fill:none;stroke:#000000;stroke-width:2.0;stroke-linejoin:round;",
+                )
+                
+                self._draw_alignment_ticks(
+                    sec_g,
+                    r,
+                    sec.get("scale", 1.0),
+                    sec.get("cx_hull", 0.0),
+                    sec.get("cx", 0.0),
+                    sec.get("cy", 0.0),
+                    sec.get("best_angle", 0.0),
+                    self.alignment_marks,
+                    block_data,
+                    self.options.mirror_templates
                 )
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
                 etree.SubElement(
@@ -1057,6 +1112,11 @@ class ExportPlugin(inkex.Effect):
                         "top_align": None,
                         "sa_poly": sec["sa_poly"],
                         "regions": sec["regions"],
+                        "scale": sec.get("scale", 1.0),
+                        "cx_hull": sec.get("cx_hull", 0.0),
+                        "cx": sec.get("cx", 0.0),
+                        "cy": sec.get("cy", 0.0),
+                        "best_angle": sec.get("best_angle", 0.0),
                     })
                 else:
                     t_cols, t_rows = (
@@ -1116,6 +1176,11 @@ class ExportPlugin(inkex.Effect):
                                 "top_align": h_tabs.get((c, r - 1)) if r > 0 else None,
                                 "sa_poly": sec["sa_poly"],
                                 "regions": sec["regions"],
+                                "scale": sec.get("scale", 1.0),
+                                "cx_hull": sec.get("cx_hull", 0.0),
+                                "cx": sec.get("cx", 0.0),
+                                "cy": sec.get("cy", 0.0),
+                                "best_angle": sec.get("best_angle", 0.0),
                             })
 
             current_x, current_y, row_max_h = 0.0, 0.0, 0.0
@@ -1542,6 +1607,65 @@ class ExportPlugin(inkex.Effect):
                 style="stroke:#eeeeee;stroke-width:0.5;",
             )
             row_y += 24
+
+    def _draw_alignment_ticks(self, container, r, scale, cx_hull, cx, cy, best_angle, alignment_marks, block_data, mirror_templates):
+        orig_r = block_data.tree.regions.get(str(r["id"])) or block_data.tree.regions.get(r["id"])
+        if orig_r and alignment_marks:
+            poly = orig_r.polygon
+            for (m_pt, m_norm) in alignment_marks:
+                min_dist = float("inf")
+                for v_idx in range(len(poly)):
+                    q1, q2 = poly[v_idx], poly[(v_idx + 1) % len(poly)]
+                    dx, dy = q2[0] - q1[0], q2[1] - q1[1]
+                    l2 = dx*dx + dy*dy
+                    if l2 < 1e-9:
+                        d = math.hypot(m_pt[0] - q1[0], m_pt[1] - q1[1])
+                    else:
+                        t_val = ((m_pt[0] - q1[0]) * dx + (m_pt[1] - q1[1]) * dy) / l2
+                        t_val = max(0.0, min(1.0, t_val))
+                        proj_x = q1[0] + t_val * dx
+                        proj_y = q1[1] + t_val * dy
+                        d = math.hypot(m_pt[0] - proj_x, m_pt[1] - proj_y)
+                    if d < min_dist:
+                        min_dist = d
+                
+                if min_dist < 0.05:
+                    px_s, py_s = m_pt[0] * scale, m_pt[1] * scale
+                    if mirror_templates:
+                        px_m = 2.0 * cx_hull - px_s
+                        py_m = py_s
+                        nx_m, ny_m = -m_norm[0], m_norm[1]
+                    else:
+                        px_m, py_m = px_s, py_s
+                        nx_m, ny_m = m_norm[0], m_norm[1]
+                    
+                    if best_angle != 0:
+                        rad = math.radians(best_angle)
+                        cos_a, sin_a = math.cos(rad), math.sin(rad)
+                        tx_pt, ty_pt = px_m - cx, py_m - cy
+                        px_r = tx_pt * cos_a - ty_pt * sin_a + cx
+                        py_r = tx_pt * sin_a + ty_pt * cos_a + cy
+                        nx_r = nx_m * cos_a - ny_m * sin_a
+                        ny_r = nx_m * sin_a + ny_m * cos_a
+                    else:
+                        px_r, py_r = px_m, py_m
+                        nx_r, ny_r = nx_m, ny_m
+                    
+                    TICK_LEN = 20.0
+                    x1 = px_r - nx_r * TICK_LEN / 2.0
+                    y1 = py_r - ny_r * TICK_LEN / 2.0
+                    x2 = px_r + nx_r * TICK_LEN / 2.0
+                    y2 = py_r + ny_r * TICK_LEN / 2.0
+                    
+                    etree.SubElement(
+                        container,
+                        "{%s}line" % core.SVG_NS,
+                        x1=f"{x1:.4f}",
+                        y1=f"{y1:.4f}",
+                        x2=f"{x2:.4f}",
+                        y2=f"{y2:.4f}",
+                        style="stroke:#000000;stroke-width:1.0;",
+                    )
 
     def _render_pdf_pages(self, packable_items, pages_list, parent, block_data):
         layout_layer, defs, namedview = self._setup_layout_layer()
@@ -2003,6 +2127,19 @@ class ExportPlugin(inkex.Effect):
                     "{%s}path" % core.SVG_NS,
                     d=r_d,
                     style=f"fill:{fill_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:{STYLE_CONFIG['template_border_stroke_width']};stroke-linejoin:round;",
+                )
+                
+                self._draw_alignment_ticks(
+                    shift_g,
+                    r,
+                    item.get("scale", 1.0),
+                    item.get("cx_hull", 0.0),
+                    item.get("cx", 0.0),
+                    item.get("cy", 0.0),
+                    item.get("best_angle", 0.0),
+                    self.alignment_marks,
+                    block_data,
+                    self.options.mirror_templates
                 )
                 
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
