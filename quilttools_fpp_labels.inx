@@ -9,6 +9,7 @@
     <option value="set_first">Set Selected Piece as #1 in its Section</option>
     <option value="relabel">Manual Relabel Selected Piece</option>
     <option value="auto_label">Fully Auto-Label Block</option>
+    <option value="fix_letters">Compact Section Letters only (no shape changes)</option>
   </param>
 
   <separator/>

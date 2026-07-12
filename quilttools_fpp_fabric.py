@@ -169,6 +169,7 @@ def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0):
         
     return fabric_estimates
 
+<<<<<<< Updated upstream
 def draw_fabric_layout_map(svg, block_data, finished_size_in, wof_in=40.0):
     for layer in svg.findall(f".//{{{core.SVG_NS}}}g"):
         if layer.get(f"{{{core.INKSCAPE_NS}}}label") == "FPP Fabric Layout Map":
@@ -184,6 +185,107 @@ def draw_fabric_layout_map(svg, block_data, finished_size_in, wof_in=40.0):
         },
     )
     svg.append(fabric_layer)
+=======
+    def get_padded_poly(poly):
+        padded = core.offset_polygon(poly, 0.75, miter_limit=2.0)
+        if not padded:
+            sc_xs = [pt[0] for pt in poly]
+            sc_ys = [pt[1] for pt in poly]
+            padded = [
+                (min(sc_xs) - 0.75, min(sc_ys) - 0.75),
+                (max(sc_xs) + 0.75, min(sc_ys) - 0.75),
+                (max(sc_xs) + 0.75, max(sc_ys) + 0.75),
+                (min(sc_xs) - 0.75, max(sc_ys) + 0.75)
+            ]
+        return padded
+
+    def get_fixed_box(poly):
+        padded = get_padded_poly(poly)
+        w = max(pt[0] for pt in padded) - min(pt[0] for pt in padded)
+        h = max(pt[1] for pt in padded) - min(pt[1] for pt in padded)
+        return w, h
+
+    def get_free_box(poly):
+        padded = get_padded_poly(poly)
+        min_area = float('inf')
+        best_w, best_h = 0, 0
+        n = len(padded)
+        if n < 3:
+            return get_fixed_box(poly)
+        for i in range(n):
+            p1, p2 = padded[i], padded[(i + 1) % n]
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            d_len = math.hypot(dx, dy)
+            if d_len < 1e-4:
+                continue
+            rad = -math.atan2(dy, dx)
+            cos_a, sin_a = math.cos(rad), math.sin(rad)
+            rotated = []
+            for pt in padded:
+                rotated.append((pt[0]*cos_a - pt[1]*sin_a, pt[0]*sin_a + pt[1]*cos_a))
+            min_x = min(pt[0] for pt in rotated)
+            max_x = max(pt[0] for pt in rotated)
+            min_y = min(pt[1] for pt in rotated)
+            max_y = max(pt[1] for pt in rotated)
+            w = max_x - min_x
+            h = max_y - min_y
+            area = w * h
+            if area < min_area:
+                min_area = area
+                best_w, best_h = w, h
+        if best_w > best_h:
+            best_w, best_h = best_h, best_w
+        return best_w, best_h
+
+def fabric_estimate(pieces, usable_wof=41.0, mode="fixed"):
+    """
+    pieces: list of (polygon, colour_role) -> structured requirements
+    per role. Pure data; no SVG. Reusable by export, lint, and future
+    quilt-level aggregation.
+    """
+    if not pieces:
+        return {}
+        
+    roles = {}
+    for poly, role in pieces:
+        if role not in roles:
+            roles[role] = []
+        roles[role].append(poly)
+        
+    results = {}
+    for role, polys in roles.items():
+        fixed_boxes = []
+        free_boxes = []
+        exceeds_wof = False
+        
+        for poly in polys:
+            fw, fh = get_fixed_box(poly)
+            if min(fw, fh) > usable_wof:
+                exceeds_wof = True
+            fixed_boxes.append((fw, fh))
+            
+            freew, freeh = get_free_box(poly)
+            if min(freew, freeh) > usable_wof:
+                exceeds_wof = True
+            free_boxes.append((freew, freeh))
+            
+        fixed_req = pack_fabric_strip(fixed_boxes, usable_wof)
+        free_req = pack_fabric_strip(free_boxes, usable_wof)
+        
+        results[role] = {
+            "pieces_count": len(polys),
+            "fixed_in": fixed_req,
+            "free_in": free_req,
+            "exceeds_wof": exceeds_wof
+        }
+        
+    return results
+
+def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None):
+    wof_px = wof_in * core.PX_PER_INCH
+    map_scale = target_width / wof_px
+>>>>>>> Stashed changes
     
     wof_px = wof_in * core.PX_PER_INCH
     fabric_estimates = calculate_fabric_requirements(block_data, finished_size_in, wof_in)

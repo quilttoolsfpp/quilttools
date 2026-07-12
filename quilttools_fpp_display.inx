@@ -19,6 +19,7 @@
     <option value="piece">Rainbow Pieces</option>
     <option value="section">Section Colors</option>
   </param>
+  <param name="bypass_custom_colors" type="bool" gui-text="Temporarily Bypass Custom Colors (Show Default Palette)">false</param>
   <param name="group_by_color" type="bool" gui-text="Group Canvas Objects by Fabric Color">false</param>
 
   <separator/>

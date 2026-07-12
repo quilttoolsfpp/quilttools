@@ -346,6 +346,25 @@ class BlockLibraryPlugin(inkex.Effect):
             return inkex.errormsg(f"Could not create library folder:\n  {out_dir}\n{e}")
 
         save_bd = core.BlockData.from_json(block_data.to_json())
+<<<<<<< Updated upstream
+=======
+        desc_val = (self.options.save_description or "").strip()
+        if not desc_val and block_data.prefs.get("description"):
+            desc_val = block_data.prefs["description"]
+        save_bd.prefs["description"] = desc_val
+
+        tags_raw = (self.options.save_tags or "").strip()
+        if not tags_raw and block_data.prefs.get("tags"):
+            save_bd.prefs["tags"] = block_data.prefs["tags"]
+        else:
+            save_bd.prefs["tags"] = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
+
+        # Update the active canvas group's metadata so description & tags are preserved in memory
+        canvas_desc = g.find(f"{{{core.SVG_NS}}}desc[@id='{core.FPP_DATA_TAG_ID}']")
+        if canvas_desc is not None:
+            canvas_desc.text = save_bd.to_json()
+        
+>>>>>>> Stashed changes
         core.normalize_block_to_origin(save_bd)
         svg_root = core.block_data_to_standalone_svg(save_bd, name=parts[-1])
         try:
@@ -354,6 +373,12 @@ class BlockLibraryPlugin(inkex.Effect):
             )
         except Exception as e:
             return inkex.errormsg(f"Could not write block file:\n  {out_path}\n{e}")
+
+        # Automatically rebuild blocks.html so the visual catalogue is kept up to date
+        try:
+            self._build_catalogue_html()
+        except Exception:
+            pass
 
         n = len(save_bd.tree.leaf_regions())
         b = core.block_bounds(save_bd)

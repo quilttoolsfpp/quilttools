@@ -32,8 +32,13 @@
 
     <page name="templates_tab" gui-text="3. Templates &amp; Block Sizing">
       <label appearance="header">Sizing Settings (Required for Steps 1 &amp; 2)</label>
+      <param name="export_type" type="optiongroup" appearance="combo" gui-text="Export Pattern Type">
+        <option value="fpp">FPP Foundation (by section)</option>
+        <option value="template">Template (individual pieces with edge lengths)</option>
+      </param>
       <param name="finished_size_in" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized on Canvas]">0.0</param>
       <param name="finished_sizes" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, comma-separated e.g. 6,10)"></param>
+      <param name="template_copies" type="int" min="1" max="50" gui-text="Template Copies (Step 2 Smart Pack only, sets of templates per size)">1</param>
       <label>Note: Set 'Finished Block Size' to 0.0 to export the block exactly at its current Inkscape canvas size.</label>
       <separator/>
 
@@ -47,6 +52,7 @@
         <option value="portrait">Portrait</option>
         <option value="landscape">Landscape</option>
       </param>
+      <param name="margin_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Page Margin (inches)">0.5</param>
       <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
       <param name="spacing_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Minimum Spacing Between Pieces (inches)">0.2</param>
       <param name="template_color_mode" type="optiongroup" appearance="combo" gui-text="Template Fabric Color Fill">

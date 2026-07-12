@@ -7,7 +7,6 @@ from lxml import etree
 
 import quilttools_fpp_core as core
 import quilttools_fpp_fabric
-import quilttools_nesting as nesting
 
 # EXPORT STYLE CONFIGURATION
 # Third-party developers can customize fonts, sizes, strokes, and fills here.
@@ -155,7 +154,6 @@ def get_line_extents(poly, axis, val):
 class ExportPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--action", type=str, default="step2")
-        pars.add_argument("--export_type", type=str, default="fpp")
         pars.add_argument("--layout_mode", type=str, default="compact_rotate")
         pars.add_argument("--include_preview", type=inkex.Boolean, default=True)
         pars.add_argument("--separate_section_alignment_image", type=inkex.Boolean, default=False)
@@ -176,11 +174,30 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--designer_name", type=str, default="")
         pars.add_argument("--finished_size_in", type=float, default=12.0)
         pars.add_argument("--finished_sizes", type=str, default="")
-        pars.add_argument("--template_copies", type=int, default=1)
         pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
         pars.add_argument("--notebook", type=str, default="")
+        pars.add_argument("--theme_override", type=str, default="")
 
     def effect(self):
+        import quilttools_theme as qtheme
+        theme = qtheme.resolve_active_theme(self.options)
+        
+        # Override STYLE_CONFIG with theme fonts and colors dynamically
+        STYLE_CONFIG["font_family"] = theme.font("body")["family"]
+        STYLE_CONFIG["font_size_title"] = f"{theme.type_pt('title')}px"
+        STYLE_CONFIG["font_size_subtitle"] = f"{theme.type_pt('subtitle')}px"
+        STYLE_CONFIG["font_size_header"] = f"{theme.type_pt('heading')}px"
+        STYLE_CONFIG["font_size_body"] = f"{theme.type_pt('body')}px"
+        STYLE_CONFIG["font_size_caption"] = f"{theme.type_pt('caption')}px"
+        STYLE_CONFIG["font_size_tiny"] = f"{max(6, theme.type_pt('caption') - 1)}px"
+        
+        STYLE_CONFIG["color_dark"] = theme.colour("ink")
+        STYLE_CONFIG["color_mid"] = theme.colour("muted")
+        STYLE_CONFIG["color_light"] = theme.colour("muted")
+        STYLE_CONFIG["color_warn"] = theme.colour("warning")
+        STYLE_CONFIG["color_accent"] = theme.colour("accent")
+        STYLE_CONFIG["color_white"] = theme.colour("background")
+
         g, block_data = core.find_fpp_group(self.svg)
         if block_data and block_data.is_exact_library_block():
             self.options.copyright_notice = "For personal use only."
@@ -284,19 +301,15 @@ class ExportPlugin(inkex.Effect):
         valid_sections = {}
         bad_labels = []
         for r in tree.leaf_regions():
-            if self.options.export_type == "template":
-                # In template mode, each piece is its own section
-                valid_sections[r.label] = [(1, r)]
-            else:
-                match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
-                if not match:
-                    bad_labels.append(r.label)
-                    continue
-                prefix, num = match.groups()
-                prefix = prefix.upper()
-                if prefix not in valid_sections:
-                    valid_sections[prefix] = []
-                valid_sections[prefix].append((int(num), r))
+            match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
+            if not match:
+                bad_labels.append(r.label)
+                continue
+            prefix, num = match.groups()
+            prefix = prefix.upper()
+            if prefix not in valid_sections:
+                valid_sections[prefix] = []
+            valid_sections[prefix].append((int(num), r))
 
         if not valid_sections:
             inkex.errormsg("ERROR: Block has not been labeled. You must run '3. Labels & Guides > Fully Auto-Label' (or define sections manually) before exporting.")
@@ -343,11 +356,8 @@ class ExportPlugin(inkex.Effect):
                 })
 
             polys = [r["polygon"] for r in regions_scaled]
-            # section_outline falls back to a conservative convex hull when
-            # the pieces don't union cleanly, so a section can never be
-            # silently dropped or printed with a partial outline.
-            hull_poly, _sound = core.section_outline(polys)
-            if not hull_poly or len(hull_poly) < 3:
+            hull_poly = core.get_polygon_union(polys)
+            if not hull_poly:
                 continue
 
             cx_hull, cy_hull = core.polygon_centroid(hull_poly)
@@ -398,41 +408,8 @@ class ExportPlugin(inkex.Effect):
             if not sa_poly:
                 continue
 
-            if self.options.export_type == "template":
-                # Compute label points and include them in bounding box calculation
-                lbl_points = []
-                cx_sa, cy_sa = core.polygon_centroid(sa_poly)
-                for k in range(len(sa_poly)):
-                    p1 = sa_poly[k]
-                    p2 = sa_poly[(k + 1) % len(sa_poly)]
-                    dx = p2[0] - p1[0]
-                    dy = p2[1] - p1[1]
-                    mid_x = (p1[0] + p2[0]) / 2.0
-                    mid_y = (p1[1] + p2[1]) / 2.0
-                    
-                    vx = mid_x - cx_sa
-                    vy = mid_y - cy_sa
-                    perp_x = -dy
-                    perp_y = dx
-                    if perp_x * vx + perp_y * vy < 0:
-                        perp_x, perp_y = -perp_x, -perp_y
-                    plen = math.hypot(perp_x, perp_y)
-                    if plen > 1e-9:
-                        nx = perp_x / plen
-                        ny = perp_y / plen
-                    else:
-                        nx, ny = 0.0, 0.0
-                    
-                    # Offset + text padding (20px total)
-                    offset_total = 20.0
-                    lbl_points.append((mid_x + nx * offset_total, mid_y + ny * offset_total))
-                
-                all_bbox_pts = list(sa_poly) + lbl_points
-                min_x, max_x = min(p[0] for p in all_bbox_pts), max(p[0] for p in all_bbox_pts)
-                min_y, max_y = min(p[1] for p in all_bbox_pts), max(p[1] for p in all_bbox_pts)
-            else:
-                min_x, max_x = min(p[0] for p in sa_poly), max(p[0] for p in sa_poly)
-                min_y, max_y = min(p[1] for p in sa_poly), max(p[1] for p in sa_poly)
+            min_x, max_x = min(p[0] for p in sa_poly), max(p[0] for p in sa_poly)
+            min_y, max_y = min(p[1] for p in sa_poly), max(p[1] for p in sa_poly)
 
             processed_sections.append(
                 {
@@ -552,19 +529,10 @@ class ExportPlugin(inkex.Effect):
             
         # Check sewing order
         steps, has_sewing_warning = core.calculate_section_sewing_order(block_data)
-        approx_secs = core.unsound_union_sections(block_data)
         if has_sewing_warning:
             report.append("[!] Sewing Order: WARNING: No Y-seam-free assembly sequence exists!")
         else:
             report.append("[✓] Sewing Order: Valid Y-seam-free assembly sequence found.")
-        if approx_secs:
-            report.append(
-                "[!] Sewing Order: geometry of section(s) "
-                + ", ".join(approx_secs)
-                + " could not be fully verified (pieces do not form a clean "
-                "outline); the check used a conservative outline. Review "
-                "these sections' piecing manually."
-            )
             
         # Check colors
         user_colors = block_data.prefs.get("custom_colors", {})
@@ -713,8 +681,6 @@ class ExportPlugin(inkex.Effect):
                 d=sa_d,
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
-            if self.options.export_type == "template":
-                self._draw_template_edge_labels(sec_g, sec["sa_poly"])
 
             for r in sec["regions"]:
                 r_d = (
@@ -765,7 +731,20 @@ class ExportPlugin(inkex.Effect):
                     resolved_base_size = max(canvas_w, canvas_h) / core.PX_PER_INCH
                 else:
                     resolved_base_size = 12.0
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, resolved_base_size, self.options.wof_in)
+            
+            for layer in self.svg.findall(f".//{{{core.SVG_NS}}}g"):
+                if layer.get(f"{{{core.INKSCAPE_NS}}}label") == "FPP Fabric Layout Map":
+                    layer.getparent().remove(layer)
+                    
+            fabric_layer = etree.SubElement(self.svg, "{%s}g" % core.SVG_NS, id="fpp-fabric-layout-map", **{
+                f"{{{core.INKSCAPE_NS}}}label": "FPP Fabric Layout Map",
+                f"{{{core.INKSCAPE_NS}}}groupmode": "layer",
+                "style": "display:inline;"
+            })
+            quilttools_fpp_fabric.draw_fabric_layout_map(
+                fabric_layer, 900.0, 100.0, 700.0,
+                block_data, resolved_base_size, self.options.wof_in
+            )
             
         inkex.utils.debug(
             "Open Canvas Generated. Freely rotate and drag items across the grids, then select 'Finalize'!"
@@ -1041,9 +1020,7 @@ class ExportPlugin(inkex.Effect):
             packable_items, pages_list, g.getparent(), block_data
         )
         
-        if self.options.visualize_fabric_layout:
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, base_size, self.options.wof_in)
-            
+
         inkex.utils.debug(
             "Finalize Complete! Custom rotations preserved and snapped seamlessly to PDF grids."
         )
@@ -1109,6 +1086,7 @@ class ExportPlugin(inkex.Effect):
         avail_h = ph - (margin * 2) - (2 * header_gap)
         spacing_px = self.options.spacing_in * core.PX_PER_INCH
         overlap_px = 0.5 * core.PX_PER_INCH
+        eff_w, eff_h = avail_w - overlap_px, avail_h - overlap_px
 
         all_packed_items = []
 
@@ -1144,18 +1122,7 @@ class ExportPlugin(inkex.Effect):
                     "regions": [],
                 })
 
-            # Multiple template sets: repeat every section n_copies times.
-            # The nesting engine packs all copies together, so identical
-            # pieces interlock across sets. Glue-tab numbering continues
-            # across copies so every tab id stays unique.
-            n_copies = max(1, int(self.options.template_copies))
-            copy_iter = [
-                (f" (Copy {ci + 1})" if n_copies > 1 else "", s)
-                for ci in range(n_copies)
-                for s in sections
-            ]
-
-            for copy_str, sec in copy_iter:
+            for sec in sections:
                 if sec["width"] <= avail_w and sec["height"] <= avail_h:
                     size_items.append({
                         "prefix": sec["prefix"],
@@ -1182,19 +1149,8 @@ class ExportPlugin(inkex.Effect):
                         "cx": sec.get("cx", 0.0),
                         "cy": sec.get("cy", 0.0),
                         "best_angle": sec.get("best_angle", 0.0),
-                        "copy_str": copy_str,
                     })
                 else:
-                    # Effective tile size: with 3+ tiles in a dimension the
-                    # middle tiles carry overlap padding on both sides, so
-                    # shrink the core to keep every tile within the printable
-                    # area (otherwise middle tiles can never share a page).
-                    eff_w = avail_w - overlap_px
-                    if math.ceil(sec["width"] / eff_w) >= 3:
-                        eff_w = avail_w - 2 * overlap_px
-                    eff_h = avail_h - overlap_px
-                    if math.ceil(sec["height"] / eff_h) >= 3:
-                        eff_h = avail_h - 2 * overlap_px
                     t_cols, t_rows = (
                         math.ceil(sec["width"] / eff_w),
                         math.ceil(sec["height"] / eff_h),
@@ -1228,63 +1184,6 @@ class ExportPlugin(inkex.Effect):
                             shift_x = -(c * eff_w) - sec["min_x"]
                             shift_y = -(r * eff_h) - sec["min_y"]
 
-                            sa_local = [
-                                (p[0] + shift_x, p[1] + shift_y) for p in sec["sa_poly"]
-                            ]
-                            clipped = core.clip_polygon_to_rect(
-                                sa_local, 0.0, 0.0, core_w, core_h
-                            )
-                            if len(clipped) < 3 or core.polygon_area(clipped) < 1.0:
-                                continue  # grid cell holds no pattern content
-
-                            # Content hull for nesting: the visible sa content
-                            # plus any glue/align tab strips, which are drawn
-                            # margin px beyond the core edges (see
-                            # overlap_px_tab in _render_pdf_pages). Coordinates
-                            # are in the tile's padded frame.
-                            hull_pts = [
-                                (p[0] + pad_l, p[1] + pad_t) for p in clipped
-                            ]
-
-                            def _edge_span(axis, val, bound):
-                                lo, hi = get_line_extents(sa_local, axis, val)
-                                if lo is None:
-                                    return None
-                                lo = max(0.0, min(lo, bound))
-                                hi = max(0.0, min(hi, bound))
-                                if hi - lo < 1e-2:
-                                    return None
-                                return lo, hi
-
-                            if c < t_cols - 1:
-                                span = _edge_span(0, core_w, core_h)
-                                if span:
-                                    hull_pts += [
-                                        (pad_l + core_w + margin, pad_t + span[0]),
-                                        (pad_l + core_w + margin, pad_t + span[1]),
-                                    ]
-                            if c > 0:
-                                span = _edge_span(0, 0.0, core_h)
-                                if span:
-                                    hull_pts += [
-                                        (pad_l - margin, pad_t + span[0]),
-                                        (pad_l - margin, pad_t + span[1]),
-                                    ]
-                            if r < t_rows - 1:
-                                span = _edge_span(1, core_h, core_w)
-                                if span:
-                                    hull_pts += [
-                                        (pad_l + span[0], pad_t + core_h + margin),
-                                        (pad_l + span[1], pad_t + core_h + margin),
-                                    ]
-                            if r > 0:
-                                span = _edge_span(1, 0.0, core_w)
-                                if span:
-                                    hull_pts += [
-                                        (pad_l + span[0], pad_t - margin),
-                                        (pad_l + span[1], pad_t - margin),
-                                    ]
-
                             size_items.append({
                                 "prefix": sec["prefix"],
                                 "part_str": f" (Part {r + 1}-{c + 1})",
@@ -1314,83 +1213,26 @@ class ExportPlugin(inkex.Effect):
                                 "cx": sec.get("cx", 0.0),
                                 "cy": sec.get("cy", 0.0),
                                 "best_angle": sec.get("best_angle", 0.0),
-                                "nest_hull": hull_pts,
-                                "copy_str": copy_str,
                             })
 
-            # True-shape nesting: pack seam-allowance hulls (not bounding
-            # boxes) with NFP placement. Whole sections may rotate in 90
-            # degree steps (baked into geometry below); split parts rotate
-            # 0/90 via a render transform; the calibration square stays
-            # upright and is pinned to the first page of its size.
-            nest_inputs = []
-            for item in size_items:
-                if item["prefix"] == "CAL":
-                    hull = [(0.0, 0.0), (item["T_w"], 0.0), (item["T_w"], item["T_h"]), (0.0, item["T_h"])]
-                    rots = [0.0]
-                elif item["part_str"]:
-                    hull = item["nest_hull"]
-                    rots = [0.0, 90.0, 180.0, 270.0]
-                else:
-                    sa_min_x = min(p[0] for p in item["sa_poly"])
-                    sa_min_y = min(p[1] for p in item["sa_poly"])
-                    hull = [(p[0] - sa_min_x, p[1] - sa_min_y) for p in item["sa_poly"]]
-                    rots = [0.0, 90.0, 180.0, 270.0]
-                nest_inputs.append({"hull": hull, "rotations": rots, "item": item})
-
-            nest_inputs.sort(
-                key=lambda ni: (
-                    0 if ni["item"]["prefix"] == "CAL" else 1,
-                    -core.polygon_area(nesting.convex_hull(ni["hull"])),
-                    ni["item"]["prefix"],
-                    ni["item"]["part_str"],
-                    ni["item"].get("copy_str", ""),
-                )
-            )
-            placements = nesting.nest_pack(
-                [{"hull": ni["hull"], "rotations": ni["rotations"]} for ni in nest_inputs],
-                avail_w,
-                avail_h,
-                spacing_px,
-            )
-
+            current_x, current_y, row_max_h = 0.0, 0.0, 0.0
             local_pages_used = 0
-            for ni, pl in zip(nest_inputs, placements):
-                item = ni["item"]
-                rot = pl["rot"]
-                if item.get("nest_hull"):
-                    xs = [p[0] for p in item["nest_hull"]]
-                    ys = [p[1] for p in item["nest_hull"]]
-                    item["hull_bbox"] = (min(xs), min(ys), max(xs), max(ys))
-                if rot and item["part_str"]:
-                    item["placed_rot"] = rot
-                elif rot:
-                    # Bake the placement rotation into the geometry about the
-                    # same centre used for best_angle so alignment-tick math
-                    # (_draw_alignment_ticks) stays consistent.
-                    cx, cy = item["cx"], item["cy"]
-                    new_sa = rotate_poly(item["sa_poly"], cx, cy, rot)
-                    item["sa_poly"] = new_sa
-                    item["regions"] = [
-                        {
-                            "label": r["label"],
-                            "id": r["id"],
-                            "polygon": rotate_poly(r["polygon"], cx, cy, rot),
-                        }
-                        for r in item["regions"]
-                    ]
-                    n_min_x = min(p[0] for p in new_sa)
-                    n_min_y = min(p[1] for p in new_sa)
-                    item["inner_transform"] = str(
-                        inkex.Transform(f"translate({-n_min_x}, {-n_min_y})")
-                    )
-                    item["T_w"] = item["core_w"] = pl["w"]
-                    item["T_h"] = item["core_h"] = pl["h"]
-                    item["best_angle"] = item.get("best_angle", 0.0) + rot
-                item["local_page_idx"] = pl["page"]
-                item["page_x"] = pl["x"]
-                item["page_y"] = pl["y"]
-                local_pages_used = max(local_pages_used, pl["page"])
+
+            for item in size_items:
+                if current_x + item["T_w"] > avail_w:
+                    current_x, current_y, row_max_h = 0.0, current_y + row_max_h + spacing_px, 0.0
+                if current_y + item["T_h"] > avail_h:
+                    local_pages_used += 1
+                    current_x, current_y, row_max_h = 0.0, 0.0, 0.0
+                if item["T_w"] > avail_w or item["T_h"] > avail_h:
+                    local_pages_used += 1
+                    current_x, current_y, row_max_h = 0.0, 0.0, item["T_h"]
+
+                row_max_h = max(row_max_h, item["T_h"])
+                item["local_page_idx"] = local_pages_used
+                item["page_x"] = current_x
+                item["page_y"] = current_y
+                current_x += item["T_w"] + spacing_px
 
             num_temp_pages = local_pages_used + 1
             template_start_page_idx = len(pages_list)
@@ -1409,9 +1251,7 @@ class ExportPlugin(inkex.Effect):
             all_packed_items, pages_list, g.getparent(), block_data
         )
         
-        if self.options.visualize_fabric_layout:
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, base_size, self.options.wof_in)
-            
+
         inkex.utils.debug("Smart Pack Layout complete! Geometry preserved.")
 
     def _draw_assembly_and_legend(self, layout_layer, panel_x, panel_y, block_data, side_by_side=False, right_col_x=None):
@@ -1721,7 +1561,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + offset),
                 y=str(header_y),
-                style="font-size:11px;font-family:sans-serif;font-weight:bold;fill:#555555;",
+                style=f"font-size:11px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
             ).text = text
             
         row_y = header_y + 30
@@ -1740,14 +1580,14 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 60),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = est['color']
             etree.SubElement(
                 layout_layer,
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 150),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = str(est['pieces_count'])
             
             fixed_yd = est['fixed_in'] / 36.0
@@ -1757,7 +1597,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 220),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = fixed_str
             
             free_yd = est['free_in'] / 36.0
@@ -1767,7 +1607,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 350),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = free_str
             
             free_in_fq = est["fq_free_in"]
@@ -1784,7 +1624,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 480),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#333333;font-weight:bold;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};font-weight:bold;",
             ).text = suggested
             
             etree.SubElement(
@@ -1797,6 +1637,7 @@ class ExportPlugin(inkex.Effect):
                 style="stroke:#eeeeee;stroke-width:0.5;",
             )
             row_y += 24
+        return row_y
 
     def _draw_alignment_ticks(self, container, r, scale, cx_hull, cx, cy, best_angle, alignment_marks, block_data, mirror_templates):
         orig_r = block_data.tree.regions.get(str(r["id"])) or block_data.tree.regions.get(r["id"])
@@ -1947,7 +1788,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(header_y),
-                    style="font-size:10px;font-family:sans-serif;font-weight:bold;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"{self.options.block_name}{sz_lbl}"
                 
                 etree.SubElement(
@@ -1957,7 +1798,7 @@ class ExportPlugin(inkex.Effect):
                     y1=str(py + margin + header_gap - 5),
                     x2=str(px + pw - margin),
                     y2=str(py + margin + header_gap - 5),
-                    style="stroke:#dddddd;stroke-width:0.5;",
+                    style=f"stroke:{STYLE_CONFIG['header_footer_line_stroke']};stroke-width:{STYLE_CONFIG['header_footer_line_stroke_width']};",
                 )
                 
                 footer_y = py + ph - margin - header_gap / 2
@@ -1967,7 +1808,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(footer_y + 4),
-                    style="font-size:9px;font-family:sans-serif;fill:#888888;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_light']};",
                 ).text = f"{credit_str}  |  {self.options.copyright_notice}"
                 
                 etree.SubElement(
@@ -1975,7 +1816,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + pw - margin),
                     y=str(footer_y + 4),
-                    style="font-size:10px;font-family:sans-serif;font-weight:bold;text-anchor:end;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:end;fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"Page {pi + 1} of {total_pages}"
                 
                 etree.SubElement(
@@ -2151,27 +1992,24 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 30),
-                    style="font-size:22px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
                 ).text = f"Fabric Requirements ({sz:.1f}\" Block)"
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 55),
-                    style="font-size:12px;font-family:sans-serif;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"Estimates based on {self.options.wof_in:.1f}\" usable Width of Fabric (WOF) and include 3/4\" padding around each piece."
-
-                if int(self.options.template_copies) > 1:
-                    etree.SubElement(
-                        layout_layer,
-                        "{%s}text" % core.SVG_NS,
-                        x=str(px + margin),
-                        y=str(py + margin + 75),
-                        style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
-                    ).text = f"Note: quantities below are for ONE block. This document contains {int(self.options.template_copies)} template sets."
                 
                 fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(block_data, sz, self.options.wof_in)
-                self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
+                end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
+                
+                if self.options.visualize_fabric_layout:
+                    quilttools_fpp_fabric.draw_fabric_layout_map(
+                        layout_layer, px + margin, end_table_y + 30, avail_w,
+                        block_data, sz, self.options.wof_in, color_codes
+                    )
                 
             elif p_type == "colouring":
                 etree.SubElement(
@@ -2179,14 +2017,14 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 30),
-                    style="font-size:22px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
                 ).text = "Color Planning Page"
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 55),
-                    style="font-size:12px;font-family:sans-serif;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = "Use this sheet to plan your fabrics and color layout before sewing."
                 
                 preview_w = int(avail_w * 0.75)
@@ -2243,42 +2081,22 @@ class ExportPlugin(inkex.Effect):
                 ).text = "Measure to verify scale"
                 continue
 
-            abs_x = page_offset_x + margin + item["page_x"]
-            abs_y = page_offset_y + margin + header_gap + item["page_y"]
             sec_g = etree.SubElement(
                 layout_layer, "{%s}g" % core.SVG_NS, id=f"template-{item['prefix']}-{i}"
             )
-            # (abs_x, abs_y) is where the placed content hull's bbox min must
-            # land; hull_bbox is that hull's bbox in the item's local frame
-            # (identical to the frame origin for whole sections and CAL).
-            hx0, hy0, hx1, hy1 = item.get("hull_bbox", (0.0, 0.0, 0.0, 0.0))
-            placed_rot = int(round(item.get("placed_rot", 0)))
-            if placed_rot == 90:
-                sec_g.set(
-                    "transform",
-                    f"translate({abs_x + hy1}, {abs_y - hx0}) rotate(90)",
-                )
-            elif placed_rot == 180:
-                sec_g.set(
-                    "transform",
-                    f"translate({abs_x + hx1}, {abs_y + hy1}) rotate(180)",
-                )
-            elif placed_rot == 270:
-                sec_g.set(
-                    "transform",
-                    f"translate({abs_x - hy0}, {abs_y + hx1}) rotate(270)",
-                )
-            else:
-                sec_g.set("transform", f"translate({abs_x - hx0}, {abs_y - hy0})")
+            sec_g.set(
+                "transform",
+                f"translate({page_offset_x + margin + item['page_x']}, {page_offset_y + margin + header_gap + item['page_y']})",
+            )
 
             if self.options.show_section_labels:
                 etree.SubElement(
-                    layout_layer,
+                    sec_g,
                     "{%s}text" % core.SVG_NS,
-                    x=str(abs_x),
-                    y=str(abs_y - 5),
+                    x="0",
+                    y="-5",
                     style="font-size:12px;font-family:sans-serif;fill:#0000aa;font-weight:bold;",
-                ).text = f"Section {item['prefix']}{item['part_str']}{item.get('copy_str', '')}"
+                ).text = f"Section {item['prefix']}{item['part_str']}"
 
             clip_id = f"clip-{item['prefix']}-{i}"
             clipPath = etree.SubElement(defs, "{%s}clipPath" % core.SVG_NS, id=clip_id)
@@ -2317,8 +2135,6 @@ class ExportPlugin(inkex.Effect):
                 d=sa_d,
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
-            if self.options.export_type == "template":
-                self._draw_template_edge_labels(shift_g, item["sa_poly"])
 
             for idx, r in enumerate(item["regions"]):
                 r_d = (
@@ -2585,50 +2401,6 @@ class ExportPlugin(inkex.Effect):
                     ).text = f"Align {tab_id}"
 
         self.svg.append(layout_layer)
-
-    def _draw_template_edge_labels(self, container, sa_poly):
-        if not sa_poly or len(sa_poly) < 3:
-            return
-        cx_sa, cy_sa = core.polygon_centroid(sa_poly)
-        for i in range(len(sa_poly)):
-            p1 = sa_poly[i]
-            p2 = sa_poly[(i + 1) % len(sa_poly)]
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            len_px = math.hypot(dx, dy)
-            if len_px < 2.0:
-                continue
-            len_in = len_px / core.PX_PER_INCH
-            label_text = f"{len_in:.2f}\""
-            
-            mid_x = (p1[0] + p2[0]) / 2.0
-            mid_y = (p1[1] + p2[1]) / 2.0
-            
-            vx = mid_x - cx_sa
-            vy = mid_y - cy_sa
-            perp_x = -dy
-            perp_y = dx
-            if perp_x * vx + perp_y * vy < 0:
-                perp_x, perp_y = -perp_x, -perp_y
-                
-            plen = math.hypot(perp_x, perp_y)
-            if plen > 1e-9:
-                nx = perp_x / plen
-                ny = perp_y / plen
-            else:
-                nx, ny = 0.0, 0.0
-                
-            offset = 12.0
-            lbl_x = mid_x + nx * offset
-            lbl_y = mid_y + ny * offset
-            
-            etree.SubElement(
-                container,
-                "{%s}text" % core.SVG_NS,
-                x=f"{lbl_x:.2f}",
-                y=f"{lbl_y:.2f}",
-                style=f"font-size:9px;font-family:{STYLE_CONFIG['font_family']};fill:#555555;text-anchor:middle;dominant-baseline:middle;",
-            ).text = label_text
 
 
 if __name__ == "__main__":

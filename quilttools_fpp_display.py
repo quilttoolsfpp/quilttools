@@ -15,6 +15,7 @@ class DisplayPlugin(inkex.Effect):
         pars.add_argument("--quantize_n", type=int, default=6)
         pars.add_argument("--locked_colors", type=str, default="")
         pars.add_argument("--group_by_color", type=inkex.Boolean, default=False)
+        pars.add_argument("--bypass_custom_colors", type=inkex.Boolean, default=False)
         pars.add_argument("--color_code_overrides", type=str, default="")
 
     def effect(self):
@@ -146,6 +147,7 @@ class DisplayPlugin(inkex.Effect):
         block_data.prefs["show_sa"] = self.options.show_sa
         block_data.prefs["sa_in"] = self.options.sa_in
         block_data.prefs["group_by_color"] = self.options.group_by_color
+        block_data.prefs["bypass_custom_colors"] = self.options.bypass_custom_colors
         block_data.prefs["color_code_overrides"] = self.options.color_code_overrides
 
         # Trigger a full mathematical redraw to apply new settings

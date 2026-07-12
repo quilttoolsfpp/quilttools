@@ -21,6 +21,8 @@ class LabelsPlugin(inkex.Effect):
             self._relabel()
         elif a == "auto_label":
             self._auto_label()
+        elif a == "fix_letters":
+            self._fix_letters()
 
     def _auto_label(self):
         g, block_data = core.find_fpp_group(self.svg)
@@ -144,6 +146,55 @@ class LabelsPlugin(inkex.Effect):
         if r:
             r.label = self.options.new_label.strip()
             core.refresh_layer(g, block_data)
+
+    def _fix_letters(self):
+        g, block_data = core.find_fpp_group(self.svg)
+        if g is None:
+            return inkex.errormsg("No Quilt Tools FPP block found.")
+
+        tree = block_data.tree
+        prefixes = []
+        for r in tree.leaf_regions():
+            match = re.match(r"^([A-Za-z]+)", r.label)
+            if match:
+                pref = match.group(1).upper()
+                if pref not in prefixes:
+                    prefixes.append(pref)
+
+        if not prefixes:
+            return inkex.errormsg("No standard section letter labels found to compact.")
+
+        prefixes.sort(key=lambda s: (len(s), s))
+
+        def get_letter_for_index(idx):
+            res = []
+            temp = idx
+            while temp >= 0:
+                res.append(chr(65 + (temp % 26)))
+                temp = (temp // 26) - 1
+            return "".join(reversed(res))
+
+        mapping = {pref: get_letter_for_index(idx) for idx, pref in enumerate(prefixes)}
+
+        changed_count = 0
+        for r in tree.leaf_regions():
+            match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
+            if match:
+                pref, num = match.group(1).upper(), match.group(2)
+                if pref in mapping:
+                    new_pref = mapping[pref]
+                    new_label = f"{new_pref}{num}"
+                    if r.label != new_label:
+                        r.label = new_label
+                        changed_count += 1
+
+        if changed_count > 0:
+            core.refresh_layer(g, block_data)
+            inkex.utils.debug(
+                f"Successfully alphabetized section letters! Remapped {len(prefixes)} sections (changed {changed_count} labels) to be contiguous without gaps."
+            )
+        else:
+            inkex.utils.debug("All section letters are already contiguous and sorted alphabetically. No changes needed.")
 
 
 if __name__ == "__main__":

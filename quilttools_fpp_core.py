@@ -1294,6 +1294,20 @@ class RegionTree:
 
 
         polygons = {nid: self.regions[nid].polygon for nid in selected_leaf_ids}
+
+        # Physical adjacency: a piece can only be sewn onto the unit that is
+        # already assembled if it shares a seam of positive length with it.
+        # Straight-line separability alone accepts impossible orders, e.g.
+        # "sewing" the two disconnected legs of a U-shaped section together.
+        ids_list = list(selected_leaf_ids)
+        adjacency = {nid: set() for nid in ids_list}
+        for a_idx in range(len(ids_list)):
+            for b_idx in range(a_idx + 1, len(ids_list)):
+                a_id, b_id = ids_list[a_idx], ids_list[b_idx]
+                if polygons_share_edge(polygons[a_id], polygons[b_id]):
+                    adjacency[a_id].add(b_id)
+                    adjacency[b_id].add(a_id)
+
         sequence = []
         remaining_ids = set(selected_leaf_ids)
 
@@ -1313,6 +1327,10 @@ class RegionTree:
                 if not rest_ids:
                     removed_id = test_id
                     break
+
+                # The piece must touch the unit it will be sewn onto.
+                if not (adjacency[test_id] & rest_ids):
+                    continue
 
                 is_separable = False
                 n = len(p_test)
@@ -1412,6 +1430,33 @@ class RegionTree:
 
     def auto_partition_and_label(self, preserve_manual=False):
         self.sanitize_tree()
+
+        # Adopt orphan leaves. Heal operations can leave a region parentless
+        # and unreachable from the root; such leaves are invisible to the
+        # structural-group walk, so they would never be partitioned, merged
+        # or relabelled (and their stale labels can collide with fresh ones).
+        # Chain them onto the root with non-boundary internals so they join
+        # the top structural group and the tree is well-formed again.
+        if self.root_id is not None:
+            reachable = set()
+            stack = [self.root_id]
+            while stack:
+                nid = stack.pop()
+                if nid in reachable or nid not in self.regions:
+                    continue
+                reachable.add(nid)
+                stack.extend(self.regions[nid].children)
+            orphans = [r.id for r in self.leaf_regions() if r.id not in reachable]
+            for oid in orphans:
+                old_root_id = self.root_id
+                new_root = Region(list(self.regions[old_root_id].polygon))
+                new_root.children = [old_root_id, oid]
+                new_root.split_boundary = False
+                self.regions[new_root.id] = new_root
+                self.regions[old_root_id].parent_id = new_root.id
+                self.regions[oid].parent_id = new_root.id
+                self.root_id = new_root.id
+
         remaining_ids = set(r.id for r in self.leaf_regions())
 
         if preserve_manual:
@@ -1509,6 +1554,201 @@ class RegionTree:
             for sec in secs:
                 for nid in sec:
                     remaining_ids.discard(nid)
+
+        # Split each section into connected components to ensure physical sewability
+        def polygons_adjacent(poly_a, poly_b, tol=1.5):
+            for i in range(len(poly_a)):
+                p1 = poly_a[i]
+                p2 = poly_a[(i + 1) % len(poly_a)]
+                
+                v_a = (p2[0] - p1[0], p2[1] - p1[1])
+                len_a = math.hypot(*v_a)
+                if len_a < tol:
+                    continue
+                u_a = (v_a[0] / len_a, v_a[1] / len_a)
+                
+                for j in range(len(poly_b)):
+                    q1 = poly_b[j]
+                    q2 = poly_b[(j + 1) % len(poly_b)]
+                    
+                    v_q1 = (q1[0] - p1[0], q1[1] - p1[1])
+                    dist_q1 = u_a[0] * v_q1[1] - u_a[1] * v_q1[0]
+                    if abs(dist_q1) > tol:
+                        continue
+                        
+                    v_q2 = (q2[0] - p1[0], q2[1] - p1[1])
+                    dist_q2 = u_a[0] * v_q2[1] - u_a[1] * v_q2[0]
+                    if abs(dist_q2) > tol:
+                        continue
+                        
+                    t1 = v_q1[0] * u_a[0] + v_q1[1] * u_a[1]
+                    t2 = v_q2[0] * u_a[0] + v_q2[1] * u_a[1]
+                    
+                    min_t, max_t = min(t1, t2), max(t1, t2)
+                    overlap_min = max(0.0, min_t)
+                    overlap_max = min(len_a, max_t)
+                    if (overlap_max - overlap_min) >= tol:
+                        return True
+            return False
+
+        def split_into_connected_components(sec_ids):
+            visited = set()
+            components = []
+            for rid in sec_ids:
+                if rid in visited:
+                    continue
+                comp = []
+                queue = [rid]
+                visited.add(rid)
+                while queue:
+                    curr = queue.pop(0)
+                    comp.append(curr)
+                    curr_poly = self.regions[curr].polygon
+                    for other in sec_ids:
+                        if other not in visited:
+                            if polygons_adjacent(curr_poly, self.regions[other].polygon):
+                                visited.add(other)
+                                queue.append(other)
+                comp.sort(key=lambda x: sec_ids.index(x))
+                components.append(comp)
+            return components
+
+        final_sections = []
+        for sec_ids in sections:
+            final_sections.extend(split_into_connected_components(sec_ids))
+        sections = final_sections
+
+        # ------------------------------------------------------------------
+        # Merge pass: the guillotine slicer above is greedy — it recurses on
+        # the first clean separating line it finds and never reconsiders, so
+        # it can shear off 1-2 piece fragments that would sew perfectly well
+        # into a neighbouring section. Absorb such fragments, but ONLY when
+        # the result stays Y-seam free at both levels:
+        #   1. the merged piece list has a valid straight-seam piecing order
+        #      (virtual_sewing_validator), and
+        #   2. the block's section-to-section assembly still solves without
+        #      warnings (calculate_section_sewing_order).
+        # Merges never cross structural-group boundaries (deliberate
+        # split_boundary marks, e.g. from healing) and never involve curved
+        # selections, which the validator cannot genuinely verify.
+        MAX_FRAGMENT_PIECES = 2
+
+        group_of = {}
+        for gi, grp in enumerate(groups):
+            for nid in grp:
+                group_of[nid] = gi
+
+        auto_ids = {nid for sec in sections for nid in sec}
+        saved_labels = {
+            r.id: r.label for r in self.leaf_regions() if r.id in auto_ids
+        }
+
+        def _provisional_prefixes(count, taken):
+            out = []
+            k = 0
+            while len(out) < count:
+                letter = ""
+                n = k
+                while True:
+                    letter = chr(65 + n % 26) + letter
+                    n = n // 26 - 1
+                    if n < 0:
+                        break
+                k += 1
+                if letter.upper() not in taken:
+                    out.append(letter)
+            return out
+
+        _union_cache = {}
+
+        def _union_sound(sec_ids):
+            """The section-assembly solver works on get_polygon_union of each
+            section's pieces — a union that silently drops pieces (no exact
+            shared edge found) makes that check meaningless. A merge may only
+            be trusted when every section's union truly covers its pieces."""
+            key = frozenset(sec_ids)
+            if key not in _union_cache:
+                polys = [self.regions[nid].polygon for nid in sec_ids]
+                total = sum(polygon_area(p) for p in polys)
+                union = get_polygon_union(polys)
+                ua = polygon_area(union) if union else 0.0
+                _union_cache[key] = total <= 0 or abs(ua - total) < max(
+                    0.01 * total, 1.0
+                )
+            return _union_cache[key]
+
+        def _assembly_clean(trial_sections):
+            # No verification without sound geometry: if any section union
+            # is unreliable the solver is blind, so refuse the merge.
+            for sec in trial_sections:
+                if not _union_sound(sec):
+                    return False
+            taken = set()
+            for r in self.leaf_regions():
+                if r.id not in auto_ids:
+                    m = re.match(r"^([A-Za-z_]+)", r.label)
+                    if m:
+                        taken.add(m.group(1).upper())
+            prefixes = _provisional_prefixes(len(trial_sections), taken)
+            for prefix, sec in zip(prefixes, trial_sections):
+                for i, nid in enumerate(sec):
+                    self.regions[nid].label = f"{prefix}{i + 1}"
+            _, warn = calculate_section_sewing_order(BlockData(self))
+            return not warn
+
+        def _mergeable_sequence(s1, s2):
+            if group_of.get(s1[0]) != group_of.get(s2[0]):
+                return None
+            if not any(
+                polygons_adjacent(self.regions[a].polygon, self.regions[b].polygon)
+                for a in s1
+                for b in s2
+            ):
+                return None
+            union_ids = s1 + s2
+            if self._selection_contains_curve(union_ids):
+                return None
+            ok, seq = self.virtual_sewing_validator(union_ids)
+            return seq if ok else None
+
+        merged = True
+        while merged:
+            merged = False
+            order = sorted(
+                range(len(sections)),
+                key=lambda k: (
+                    len(sections[k]),
+                    sum(polygon_area(self.regions[n].polygon) for n in sections[k]),
+                ),
+            )
+            for oi in order:
+                if len(sections[oi]) > MAX_FRAGMENT_PIECES:
+                    continue
+                candidates = []
+                for oj in range(len(sections)):
+                    if oj == oi:
+                        continue
+                    seq = _mergeable_sequence(sections[oi], sections[oj])
+                    if seq is not None:
+                        candidates.append((len(sections[oj]), oj, seq))
+                # Prefer the smallest valid host so sections stay compact.
+                candidates.sort()
+                for _, oj, seq in candidates:
+                    trial = [
+                        s for k, s in enumerate(sections) if k not in (oi, oj)
+                    ]
+                    trial.append(seq)
+                    if _assembly_clean(trial):
+                        sections = trial
+                        merged = True
+                        break
+                if merged:
+                    break
+
+        # The assembly checks leave provisional labels behind; restore the
+        # originals so the preserve_manual letter scan below stays accurate.
+        for nid, lbl in saved_labels.items():
+            self.regions[nid].label = lbl
 
         def sec_centroid(sec_ids):
             cx = sum(

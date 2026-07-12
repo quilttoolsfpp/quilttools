@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Import EQ8 Block as Guide</name>
+  <id>org.eqimport.eqimport_to_guide</id>
+  <dependency type="executable" location="extensions">eqimport_to_guide.py</dependency>
+
+  <label appearance="header">Action</label>
+  <param name="action" type="optiongroup" appearance="radio" gui-text="">
+    <option value="scan">Scan and list blocks (no import)</option>
+    <option value="import">Import blocks as guide layers</option>
+    <option value="import_library">Import blocks into the Block Library (Quilt Tools)</option>
+  </param>
+
+  <separator/>
+
+  <label appearance="header">Source file</label>
+  <param name="source_file" type="path" mode="file" filetypes="pj8,PJ8,pj6,PJ6"
+         gui-text="EQ file (.pj8 or .pj6)"></param>
+
+  <separator/>
+
+  <label appearance="header">Import options (only used when Action is "Import blocks")</label>
+
+  <param name="import_all" type="bool" gui-text="Import all blocks">true</param>
+  <param name="block_indexes" type="string"
+         gui-text="Block indexes (if not all)">1</param>
+  <label>Comma-separated list of block numbers, e.g.  1,3,7
+First scan the file to see which numbers correspond to which blocks.</label>
+
+  <separator/>
+
+  <param name="draw_mode" type="optiongroup" appearance="radio" gui-text="What to draw">
+    <option value="lines_and_patches">Lines and patches (translucent fill)</option>
+    <option value="lines_only">Lines only (guide style)</option>
+  </param>
+
+  <param name="line_colour" type="optiongroup" appearance="combo" gui-text="Guide colour">
+    <option value="blue">Blue</option>
+    <option value="red">Red</option>
+    <option value="green">Green</option>
+  </param>
+
+  <param name="placement" type="optiongroup" appearance="combo" gui-text="Layer placement">
+    <option value="stack">All at origin, stacked (use Layers panel to toggle)</option>
+    <option value="grid">Lay out in a horizontal row to the right</option>
+  </param>
+
+  <separator/>
+
+  <label appearance="header">Block Library options (only used when importing into the Block Library)</label>
+  <param name="library_subfolder" type="string"
+         gui-text="Library subfolder (blank = library root)">EQ Imports</param>
+  <param name="library_overwrite" type="bool" gui-text="Overwrite blocks that already exist">false</param>
+  <label>Each block is saved as a fully compatible Quilt Tools block SVG
+(auto-labelled pieces + FPP metadata) inside the BlockLibrary folder,
+ready for the thumbnail picker, visual library and Fill Blocks.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Importer"/>
+    </effects-menu>
+  </effect>
+
+  <script>
+    <command location="extensions" interpreter="python">eqimport_to_guide.py</command>
+  </script>
+</inkscape-extension>

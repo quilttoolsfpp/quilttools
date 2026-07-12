@@ -17,6 +17,9 @@ class CutPlugin(inkex.Effect):
             self._undo()
         elif self.options.action == "heal":
             self._heal()
+        elif self.options.action == "quick_cut":
+            self.options.angle_snap = 0.0
+            self._cut()
         else:
             self._cut()
 

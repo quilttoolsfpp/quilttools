@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Save Canvas Colors</name>
+  <id>org.quilttools.fpp.save_colors</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_save_colors.py</dependency>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+
+  <script>
+    <command location="extensions" interpreter="python">quilttools_fpp_save_colors.py</command>
+  </script>
+</inkscape-extension>

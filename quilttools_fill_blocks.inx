@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>04. Fill Blocks from Library</name>
+  <id>org.quilttools.pattern.fill_blocks</id>
+  <dependency type="executable" location="extensions">quilttools_fill_blocks.py</dependency>
+
+  <param name="notebook" type="notebook">
+    <page name="selection_page" gui-text="1. Block Selection">
+      <param name="svg_file" type="string" gui-text="Override block path (or leave blank to browse):"></param>
+      <label>Choose a block in the popup dialog, or provide an absolute path to a custom block SVG file above.</label>
+    </page>
+    <page name="placement_page" gui-text="2. Sizing &amp; Alignment">
+      <param name="sizing_mode" type="optiongroup" appearance="combo" gui-text="Sizing Mode:">
+        <option value="stretch">Stretch to fit</option>
+        <option value="cover">Proportional Crop (Cover)</option>
+      </param>
+      <param name="auto_align" type="bool" gui-text="Auto-align to cell orientation (longest edge):">true</param>
+      <param name="rotation" type="optiongroup" appearance="combo" gui-text="Additional Rotation:">
+        <option value="0.0">0°</option>
+        <option value="45.0">45°</option>
+        <option value="90.0">90°</option>
+        <option value="135.0">135°</option>
+        <option value="180.0">180°</option>
+        <option value="270.0">270°</option>
+      </param>
+      <param name="flip" type="optiongroup" appearance="combo" gui-text="Flip:">
+        <option value="none">None</option>
+        <option value="horizontal">Horizontal</option>
+        <option value="vertical">Vertical</option>
+      </param>
+    </page>
+    <page name="options_page" gui-text="3. Options">
+      <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default):"></param>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Pattern"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="extensions" interpreter="python">quilttools_fill_blocks.py</command>
+  </script>
+</inkscape-extension>
