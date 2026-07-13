@@ -82,5 +82,48 @@ class TestQuiltSystem(unittest.TestCase):
             self.assertIsNotNone(poly, f"Could not find polygon for {cell_id}")
             self.assertTrue(poly.get("points"))
 
+    def test_build_quilt_layer_on_point(self):
+        spec = {
+            "name": "Test On-Point Quilt",
+            "setting": "on-point",
+            "grid": {"rows": 2, "cols": 2, "cell_w_in": 10.0, "cell_h_in": 10.0},
+            "sashing": {"width_in": 1.0, "cornerstones": True, "color_ref": "sashing"},
+            "borders": [{"width_in": 2.0, "color_ref": "b1"}],
+            "binding": {"width_in": 0.25, "color_ref": "binding"}
+        }
+        
+        qd = qcore.QuiltData(spec)
+        theme = MockTheme()
+        
+        g = qcore.build_quilt_layer(qd, theme)
+        self.assertIsNotNone(g)
+        
+        # Grid step d = (10" + 1") * sqrt(2) / 2 = 11 * 0.70710678 = 7.77817"
+        # Grid width/height = (2 + 2) * d = 4 * 7.77817" = 31.1127" (approx 2986.8px)
+        # Total border width (each side) = 2" + 0.25" = 2.25"
+        # Finished size = 31.1127" + 4.5" = 35.6127"
+        self.assertAlmostEqual(qd.finished_width_in, 35.612698, places=4)
+        self.assertAlmostEqual(qd.finished_height_in, 35.612698, places=4)
+        
+        # Verify cell counts:
+        # Blocks: 4
+        # Sashing vertical: 3 * 2 = 6
+        # Sashing horizontal: 2 * 3 = 6
+        # Cornerstones: 3 * 3 = 9
+        # Corner setting triangles: 4
+        # Side setting triangles: 4 (1 per boundary edge for limit = 2)
+        # Borders: 4
+        # Binding: 4
+        # Total: 4 + 6 + 6 + 9 + 4 + 4 + 4 + 4 = 41 cells
+        self.assertEqual(len(qd.cells), 41)
+        
+        for cell_id, info in qd.cells.items():
+            sub_g = g.find(f".//{{http://www.w3.org/2000/svg}}g[@id='{cell_id}']")
+            self.assertIsNotNone(sub_g, f"Could not find group for {cell_id}")
+            self.assertEqual(sub_g.get("data-quilt-role"), info["role"])
+            
+            poly = sub_g.find("{http://www.w3.org/2000/svg}polygon")
+            self.assertIsNotNone(poly, f"Could not find polygon for {cell_id}")
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "name": "Children's Moments",
+  "id": "childrens_moments",
+  "description": "Playful, soft. Caveat display over Nunito body. NOTE: palette hexes below are placeholders — replace 'primary', 'accent', and 'secondary' with the exact Children's Moments brand values.",
+
+  "required_fonts": ["Caveat", "Nunito"],
+
+  "fonts": {
+    "heading":  { "family": "Caveat", "weight": "700", "style": "normal" },
+    "subtitle": { "family": "Caveat", "weight": "500", "style": "normal" },
+    "body":     { "family": "Nunito", "weight": "400", "style": "normal" },
+    "mono":     { "family": "Nunito", "weight": "600", "style": "normal" }
+  },
+
+  "type_scale_pt": {
+    "title":     32,
+    "subtitle":  18,
+    "heading":   16,
+    "body":      10,
+    "caption":   8,
+    "dimension": 9
+  },
+
+  "palette": {
+    "primary":    "#E8A0B4",
+    "secondary":  "#9B4F5C",
+    "accent":     "#5E8C61",
+    "background": "#FFF9F5",
+    "ink":        "#3D3237",
+    "muted":      "#B8A5AC",
+    "diagram_stroke": "#3D3237",
+    "diagram_fill":   "#E8A0B4",
+    "diagram_fill_opacity": 0.2,
+    "table_header_fill": "#9B4F5C",
+    "table_header_text": "#FFF9F5",
+    "table_row_alt_fill": "#F7E8ED",
+    "warning": "#9B4F5C"
+  },
+
+  "page": {
+    "size": "A4",
+    "margins_mm": { "top": 18, "bottom": 18, "inner": 16, "outer": 14 },
+    "border": { "enabled": true, "stroke": "#E8A0B4", "width_mm": 0.6 },
+    "footer_rule": { "enabled": true, "stroke": "#E8A0B4", "width_mm": 0.35 }
+  },
+
+  "rules": {
+    "heading_underline": { "enabled": false },
+    "section_divider":   { "enabled": true, "stroke": "#E8A0B4", "width_mm": 0.3, "dasharray": "0.1,2", "linecap": "round" }
+  },
+
+  "dimensions_use_mono": false
+}

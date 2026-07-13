@@ -10,6 +10,7 @@ class NewQuiltPlugin(inkex.Effect):
         # Notebook tabs arguments
         pars.add_argument("--notebook", type=str, default="grid_page")
         pars.add_argument("--quilt_name", type=str, default="My New Quilt")
+        pars.add_argument("--setting", type=str, default="straight")
         pars.add_argument("--grid_rows", type=int, default=4)
         pars.add_argument("--grid_cols", type=int, default=4)
         pars.add_argument("--cell_w_in", type=float, default=12.0)
@@ -45,7 +46,7 @@ class NewQuiltPlugin(inkex.Effect):
         # Initialize quilt data
         spec = {
             "name": self.options.quilt_name,
-            "setting": "straight",
+            "setting": self.options.setting,
             "grid": {
                 "rows": self.options.grid_rows,
                 "cols": self.options.grid_cols,

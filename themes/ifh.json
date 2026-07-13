@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "name": "In Familiar Hands",
+  "id": "ifh",
+  "description": "IFH house style — warm, technical. Heritage blue on warm cream.",
+
+  "required_fonts": ["Fraunces", "IBM Plex Mono"],
+
+  "fonts": {
+    "heading":  { "family": "Fraunces",      "weight": "600", "style": "normal" },
+    "subtitle": { "family": "Fraunces",      "weight": "400", "style": "italic" },
+    "body":     { "family": "Fraunces",      "weight": "400", "style": "normal" },
+    "mono":     { "family": "IBM Plex Mono", "weight": "400", "style": "normal" }
+  },
+
+  "type_scale_pt": {
+    "title":     28,
+    "subtitle":  16,
+    "heading":   14,
+    "body":      10,
+    "caption":   8,
+    "dimension": 9
+  },
+
+  "palette": {
+    "primary":    "#243B53",
+    "background": "#EFE5D0",
+    "ink":        "#1F1A14",
+    "accent":     "#243B53",
+    "muted":      "#8A7F6E",
+    "diagram_stroke": "#1F1A14",
+    "diagram_fill":   "#243B53",
+    "diagram_fill_opacity": 0.15,
+    "table_header_fill": "#243B53",
+    "table_header_text": "#EFE5D0",
+    "table_row_alt_fill": "#E4D8BF",
+    "warning": "#8C3B2E"
+  },
+
+  "page": {
+    "size": "A4",
+    "margins_mm": { "top": 18, "bottom": 18, "inner": 16, "outer": 14 },
+    "border": { "enabled": true, "stroke": "#243B53", "width_mm": 0.5 },
+    "footer_rule": { "enabled": true, "stroke": "#243B53", "width_mm": 0.35 }
+  },
+
+  "rules": {
+    "heading_underline": { "enabled": true, "stroke": "#243B53", "width_mm": 0.35 },
+    "section_divider":   { "enabled": true, "stroke": "#8A7F6E", "width_mm": 0.25, "dasharray": "2,1.5" }
+  },
+
+  "dimensions_use_mono": true
+}

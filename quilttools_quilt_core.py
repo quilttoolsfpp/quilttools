@@ -80,8 +80,18 @@ def build_quilt_layer(quilt_data, theme):
     
     total_border_w = sum(border_widths) + binding_w
     
-    grid_w = cols * cell_w + (cols - 1) * sashing_w if cols > 0 else 0
-    grid_h = rows * cell_h + (rows - 1) * sashing_w if rows > 0 else 0
+    setting = quilt_data.setting
+    
+    if setting == "on-point":
+        import math
+        # Enforce cell_w as side length S
+        S = cell_w
+        d = (S + sashing_w) * math.sqrt(2) / 2
+        grid_w = (rows + cols) * d
+        grid_h = (rows + cols) * d
+    else:
+        grid_w = cols * cell_w + (cols - 1) * sashing_w if cols > 0 else 0
+        grid_h = rows * cell_h + (rows - 1) * sashing_w if rows > 0 else 0
     
     quilt_w = grid_w + 2 * total_border_w
     quilt_h = grid_h + 2 * total_border_w
@@ -123,60 +133,202 @@ def build_quilt_layer(quilt_data, theme):
                 style=f"font-size:12px;font-family:{theme.font('body')['family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{theme.colour('ink')};"
             ).text = label
 
-    # 1. Blocks
-    for r in range(rows):
-        for c in range(cols):
-            x_start = total_border_w + c * (cell_w + sashing_w)
-            y_start = total_border_w + r * (cell_h + sashing_w)
-            poly = [
-                (x_start, y_start),
-                (x_start + cell_w, y_start),
-                (x_start + cell_w, y_start + cell_h),
-                (x_start, y_start + cell_h)
-            ]
-            add_cell(f"quilt-cell-{r}-{c}", "block", "empty", poly, fill_bg, f"{r+1}-{c+1}")
+    # 1. Blocks & Grid elements
+    if setting == "on-point":
+        import math
+        S = cell_w
+        d = (S + sashing_w) * math.sqrt(2) / 2
+        d_S = S * math.sqrt(2) / 2
+        d_W = sashing_w * math.sqrt(2) / 2
+        
+        # 1.1 Blocks
+        for r in range(rows):
+            for c in range(cols):
+                cx = total_border_w + (rows + c - r) * d
+                cy = total_border_w + (1 + c + r) * d
+                poly = [
+                    (cx, cy - d_S), # Top
+                    (cx + d_S, cy), # Right
+                    (cx, cy + d_S), # Bottom
+                    (cx - d_S, cy)  # Left
+                ]
+                add_cell(f"quilt-cell-{r}-{c}", "block", "empty", poly, fill_bg, f"{r+1}-{c+1}")
+                
+        # 1.2 Sashing & Cornerstones
+        if sashing_w > 0:
+            cos45 = math.sqrt(2) / 2
+            sin45 = math.sqrt(2) / 2
+            u_x, u_y = cos45, sin45
+            v_x, v_y = -cos45, sin45
             
-    # 2. Sashing & Cornerstones
-    if sashing_w > 0:
-        # Horizontal Sashing
-        for r in range(rows - 1):
+            # Vertical Sashing (along columns, parallel to v, between (r, c) and (r, c+1))
+            for r in range(rows):
+                for c in range(-1, cols):
+                    cx = total_border_w + (rows + (c + 0.5) - r) * d
+                    cy = total_border_w + (1 + (c + 0.5) + r) * d
+                    poly = [
+                        (cx + 0.5 * S * v_x + 0.5 * sashing_w * u_x, cy + 0.5 * S * v_y + 0.5 * sashing_w * u_y),
+                        (cx - 0.5 * S * v_x + 0.5 * sashing_w * u_x, cy - 0.5 * S * v_y + 0.5 * sashing_w * u_y),
+                        (cx - 0.5 * S * v_x - 0.5 * sashing_w * u_x, cy - 0.5 * S * v_y - 0.5 * sashing_w * u_y),
+                        (cx + 0.5 * S * v_x - 0.5 * sashing_w * u_x, cy + 0.5 * S * v_y - 0.5 * sashing_w * u_y)
+                    ]
+                    add_cell(f"quilt-cell-sashing-v-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
+                    
+            # Horizontal Sashing (along rows, parallel to u, between (r, c) and (r+1, c))
+            for r in range(-1, rows):
+                for c in range(cols):
+                    cx = total_border_w + (rows + c - (r + 0.5)) * d
+                    cy = total_border_w + (1 + c + (r + 0.5)) * d
+                    poly = [
+                        (cx + 0.5 * S * u_x + 0.5 * sashing_w * v_x, cy + 0.5 * S * u_y + 0.5 * sashing_w * v_y),
+                        (cx - 0.5 * S * u_x + 0.5 * sashing_w * v_x, cy - 0.5 * S * u_y + 0.5 * sashing_w * v_y),
+                        (cx - 0.5 * S * u_x - 0.5 * sashing_w * v_x, cy - 0.5 * S * u_y - 0.5 * sashing_w * v_y),
+                        (cx + 0.5 * S * u_x - 0.5 * sashing_w * v_x, cy + 0.5 * S * u_y - 0.5 * sashing_w * v_y)
+                    ]
+                    add_cell(f"quilt-cell-sashing-h-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
+                    
+            # Cornerstones
+            if quilt_data.sashing["cornerstones"]:
+                for r in range(-1, rows):
+                    for c in range(-1, cols):
+                        cx = total_border_w + (rows + c - r) * d
+                        cy = total_border_w + (2 + c + r) * d
+                        poly = [
+                            (cx, cy - d_W),
+                            (cx + d_W, cy),
+                            (cx, cy + d_W),
+                            (cx - d_W, cy)
+                        ]
+                        add_cell(f"quilt-cell-cornerstone-{r}-{c}", "cornerstone", "plain_fabric", poly, fill_accent)
+
+        # 1.3 Setting Triangles
+        # Corner Setting Triangles (exactly 4)
+        poly_tl = [
+            (total_border_w, total_border_w),
+            (total_border_w + d - d_W, total_border_w),
+            (total_border_w, total_border_w + d - d_W)
+        ]
+        add_cell("quilt-cell-setting-corner-tl", "setting_triangle", "plain_fabric", poly_tl, fill_muted)
+        
+        poly_tr = [
+            (total_border_w + grid_w, total_border_w),
+            (total_border_w + grid_w - d + d_W, total_border_w),
+            (total_border_w + grid_w, total_border_w + d - d_W)
+        ]
+        add_cell("quilt-cell-setting-corner-tr", "setting_triangle", "plain_fabric", poly_tr, fill_muted)
+        
+        poly_bl = [
+            (total_border_w, total_border_w + grid_h),
+            (total_border_w + d - d_W, total_border_w + grid_h),
+            (total_border_w, total_border_w + grid_h - d + d_W)
+        ]
+        add_cell("quilt-cell-setting-corner-bl", "setting_triangle", "plain_fabric", poly_bl, fill_muted)
+        
+        poly_br = [
+            (total_border_w + grid_w, total_border_w + grid_h),
+            (total_border_w + grid_w - d + d_W, total_border_w + grid_h),
+            (total_border_w + grid_w, total_border_w + grid_h - d + d_W)
+        ]
+        add_cell("quilt-cell-setting-corner-br", "setting_triangle", "plain_fabric", poly_br, fill_muted)
+
+        # Side Setting Triangles
+        limit = rows + cols - 2
+        
+        # Left Edge (X = total_border_w)
+        for k in range(1, limit, 2):
+            cy = total_border_w + k * d
+            poly = [
+                (total_border_w + d - d_W, cy),
+                (total_border_w, cy + d - d_W),
+                (total_border_w, cy - d + d_W)
+            ]
+            add_cell(f"quilt-cell-setting-left-{k}", "setting_triangle", "plain_fabric", poly, fill_muted)
+            
+        # Right Edge (X = total_border_w + grid_w)
+        for k in range(1, limit, 2):
+            cy = total_border_w + k * d
+            poly = [
+                (total_border_w + grid_w - d + d_W, cy),
+                (total_border_w + grid_w, cy + d - d_W),
+                (total_border_w + grid_w, cy - d + d_W)
+            ]
+            add_cell(f"quilt-cell-setting-right-{k}", "setting_triangle", "plain_fabric", poly, fill_muted)
+            
+        # Top Edge (Y = total_border_w)
+        for k in range(1, limit, 2):
+            cx = total_border_w + k * d
+            poly = [
+                (cx, total_border_w + d - d_W),
+                (cx - d + d_W, total_border_w),
+                (cx + d - d_W, total_border_w)
+            ]
+            add_cell(f"quilt-cell-setting-top-{k}", "setting_triangle", "plain_fabric", poly, fill_muted)
+            
+        # Bottom Edge (Y = total_border_w + grid_h)
+        for k in range(1, limit, 2):
+            cx = total_border_w + k * d
+            poly = [
+                (cx, total_border_w + grid_h - d + d_W),
+                (cx - d + d_W, total_border_w + grid_h),
+                (cx + d - d_W, total_border_w + grid_h)
+            ]
+            add_cell(f"quilt-cell-setting-bottom-{k}", "setting_triangle", "plain_fabric", poly, fill_muted)
+
+    else:
+        # 1. Blocks (Straight Layout)
+        for r in range(rows):
             for c in range(cols):
                 x_start = total_border_w + c * (cell_w + sashing_w)
-                y_start = total_border_w + r * (cell_h + sashing_w) + cell_h
-                poly = [
-                    (x_start, y_start),
-                    (x_start + cell_w, y_start),
-                    (x_start + cell_w, y_start + sashing_w),
-                    (x_start, y_start + sashing_w)
-                ]
-                add_cell(f"quilt-cell-sashing-h-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
-                
-        # Vertical Sashing
-        for r in range(rows):
-            for c in range(cols - 1):
-                x_start = total_border_w + c * (cell_w + sashing_w) + cell_w
                 y_start = total_border_w + r * (cell_h + sashing_w)
                 poly = [
                     (x_start, y_start),
-                    (x_start + sashing_w, y_start),
-                    (x_start + sashing_w, y_start + cell_h),
+                    (x_start + cell_w, y_start),
+                    (x_start + cell_w, y_start + cell_h),
                     (x_start, y_start + cell_h)
                 ]
-                add_cell(f"quilt-cell-sashing-v-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
+                add_cell(f"quilt-cell-{r}-{c}", "block", "empty", poly, fill_bg, f"{r+1}-{c+1}")
                 
-        # Cornerstones
-        if quilt_data.sashing["cornerstones"]:
+        # 2. Sashing & Cornerstones (Straight Layout)
+        if sashing_w > 0:
+            # Horizontal Sashing
             for r in range(rows - 1):
-                for c in range(cols - 1):
-                    x_start = total_border_w + c * (cell_w + sashing_w) + cell_w
+                for c in range(cols):
+                    x_start = total_border_w + c * (cell_w + sashing_w)
                     y_start = total_border_w + r * (cell_h + sashing_w) + cell_h
                     poly = [
                         (x_start, y_start),
-                        (x_start + sashing_w, y_start),
-                        (x_start + sashing_w, y_start + sashing_w),
+                        (x_start + cell_w, y_start),
+                        (x_start + cell_w, y_start + sashing_w),
                         (x_start, y_start + sashing_w)
                     ]
-                    add_cell(f"quilt-cell-cornerstone-{r}-{c}", "cornerstone", "plain_fabric", poly, fill_accent)
+                    add_cell(f"quilt-cell-sashing-h-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
+                    
+            # Vertical Sashing
+            for r in range(rows):
+                for c in range(cols - 1):
+                    x_start = total_border_w + c * (cell_w + sashing_w) + cell_w
+                    y_start = total_border_w + r * (cell_h + sashing_w)
+                    poly = [
+                        (x_start, y_start),
+                        (x_start + sashing_w, y_start),
+                        (x_start + sashing_w, y_start + cell_h),
+                        (x_start, y_start + cell_h)
+                    ]
+                    add_cell(f"quilt-cell-sashing-v-{r}-{c}", "sashing", "plain_fabric", poly, fill_muted)
+                    
+            # Cornerstones
+            if quilt_data.sashing["cornerstones"]:
+                for r in range(rows - 1):
+                    for c in range(cols - 1):
+                        x_start = total_border_w + c * (cell_w + sashing_w) + cell_w
+                        y_start = total_border_w + r * (cell_h + sashing_w) + cell_h
+                        poly = [
+                            (x_start, y_start),
+                            (x_start + sashing_w, y_start),
+                            (x_start + sashing_w, y_start + sashing_w),
+                            (x_start, y_start + sashing_w)
+                        ]
+                        add_cell(f"quilt-cell-cornerstone-{r}-{c}", "cornerstone", "plain_fabric", poly, fill_accent)
 
     # 3. Borders
     inner_left = total_border_w

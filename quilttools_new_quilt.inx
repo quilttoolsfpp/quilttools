@@ -7,6 +7,10 @@
   <param name="notebook" type="notebook">
     <page name="grid_page" gui-text="1. Grid &amp; Blocks">
       <param name="quilt_name" type="string" gui-text="Quilt Title:">My New Quilt</param>
+      <param name="setting" type="optiongroup" appearance="combo" gui-text="Quilt Setting:">
+        <option value="straight">Straight Grid</option>
+        <option value="on-point">On-Point (Diamond)</option>
+      </param>
       <param name="grid_rows" type="int" min="1" max="100" gui-text="Grid Rows:">4</param>
       <param name="grid_cols" type="int" min="1" max="100" gui-text="Grid Columns:">4</param>
       <param name="cell_w_in" type="float" min="1.0" max="200.0" precision="3" gui-text="Block Width (inches):">12.0</param>
