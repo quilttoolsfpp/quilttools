@@ -1,7 +1,7 @@
 # Quilt Tools FPP for Inkscape
 **An advanced, open-source Foundation Paper Piecing (FPP) pattern design suite for Inkscape.**
 
-Created by quilt designer and enthusiast [@prittystitches](https://www.instagram.com/prittystitches/), this plugin suite bridges the gap between raw vector graphics and the physical constraints of quilt piecing.
+Created by quilting enthusiast, this plugin suite bridges the gap between raw vector graphics and the physical constraints of quilt piecing.
 
 Unlike standard drawing tools, Quilt Tools FPP understands how fabric is actually sewn together. It features a custom "Virtual Sewing Machine" geometric engine that mathematically prevents Y-seams, dynamically generates true-offset seam allowances, and automatically calculates structurally perfect sewing sequences for complex blocks (like Log Cabins and spiraling stars).
 
