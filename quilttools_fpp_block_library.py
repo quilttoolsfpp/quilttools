@@ -53,26 +53,31 @@ def _scan_library():
 
 
 def _block_info(full_path):
-    """Return (piece_count, width_in, height_in) for a block SVG, or Nones."""
+    """Return (piece_count, width_in, height_in, description, tags) for a block SVG, or Nones."""
     try:
         doc = etree.parse(full_path)
         bd = core.extract_block_data_from_svg_root(doc.getroot())
         if bd is None:
-            return (None, None, None)
+            return (None, None, None, "", [])
         n = len(bd.tree.leaf_regions())
+        desc_txt = bd.prefs.get("description", "").strip()
+        tags_list = bd.prefs.get("tags", [])
         b = core.block_bounds(bd)
         if b is None:
-            return (n, None, None)
-        return (n, (b[2] - b[0]) / core.PX_PER_INCH, (b[3] - b[1]) / core.PX_PER_INCH)
+            return (n, None, None, desc_txt, tags_list)
+        return (n, (b[2] - b[0]) / core.PX_PER_INCH, (b[3] - b[1]) / core.PX_PER_INCH, desc_txt, tags_list)
     except Exception:
-        return (None, None, None)
+        return (None, None, None, "", [])
 
 
 class BlockLibraryPlugin(inkex.Effect):
     def add_arguments(self, pars):
+        pars.add_argument("--notebook", type=str, default="load")
         pars.add_argument("--action", type=str, default="load")
         pars.add_argument("--svg_file", type=str, default="")
         pars.add_argument("--save_name", type=str, default="")
+        pars.add_argument("--save_description", type=str, default="")
+        pars.add_argument("--save_tags", type=str, default="")
         pars.add_argument("--resize_page", type=inkex.Boolean, default=True)
         pars.add_argument("--overwrite", type=inkex.Boolean, default=False)
         pars.add_argument("--import_w_in", type=float, default=6.0)
@@ -80,7 +85,11 @@ class BlockLibraryPlugin(inkex.Effect):
         pars.add_argument("--load_w_in", type=float, default=12.0)
 
     def effect(self):
-        a = self.options.action
+        # Resolve action from active notebook tab, falling back to CLI action if explicit
+        a = self.options.notebook
+        if self.options.action != "load":
+            a = self.options.action
+
         if a == "save":
             return self._save()
         if a == "catalogue":
@@ -118,6 +127,8 @@ class BlockLibraryPlugin(inkex.Effect):
                 "Action = 'Import external SVG as tracing background'."
             )
 
+        block_name = os.path.splitext(os.path.basename(path))[0]
+        new_bd.prefs["block_library_name"] = block_name
         new_bd.prefs["is_library_block"] = True
         new_bd.prefs["original_signature"] = sorted([r.id for r in new_bd.tree.leaf_regions()])
 
@@ -346,12 +357,11 @@ class BlockLibraryPlugin(inkex.Effect):
             return inkex.errormsg(f"Could not create library folder:\n  {out_dir}\n{e}")
 
         save_bd = core.BlockData.from_json(block_data.to_json())
-<<<<<<< Updated upstream
-=======
         desc_val = (self.options.save_description or "").strip()
         if not desc_val and block_data.prefs.get("description"):
             desc_val = block_data.prefs["description"]
         save_bd.prefs["description"] = desc_val
+        save_bd.prefs["block_library_name"] = parts[-1]
 
         tags_raw = (self.options.save_tags or "").strip()
         if not tags_raw and block_data.prefs.get("tags"):
@@ -364,7 +374,6 @@ class BlockLibraryPlugin(inkex.Effect):
         if canvas_desc is not None:
             canvas_desc.text = save_bd.to_json()
         
->>>>>>> Stashed changes
         core.normalize_block_to_origin(save_bd)
         svg_root = core.block_data_to_standalone_svg(save_bd, name=parts[-1])
         try:
@@ -400,7 +409,7 @@ class BlockLibraryPlugin(inkex.Effect):
         for label, full in blocks:
             rel = os.path.relpath(full, LIB_DIR).replace(os.sep, "/")
             src = urllib.parse.quote(rel)
-            n, w_in, h_in = _block_info(full)
+            n, w_in, h_in, desc_txt, tags_list = _block_info(full)
             meta = []
             if w_in and h_in:
                 meta.append(f'{w_in:.2f}" x {h_in:.2f}"')
@@ -411,13 +420,22 @@ class BlockLibraryPlugin(inkex.Effect):
                 if meta
                 else ""
             )
+            
+            desc_html = f'<span class="ds">{_html.escape(desc_txt)}</span>' if desc_txt else ''
+            tags_html = ""
+            if tags_list:
+                pills = "".join(f'<span class="tag">{_html.escape(t)}</span>' for t in tags_list)
+                tags_html = f'<div class="tags">{pills}</div>'
+                
             name_js = label.replace("\\", "\\\\").replace("'", "\\'")
             cards.append(
                 f'<figure class="card" data-name="{_html.escape(label)}" '
+                f'data-desc="{_html.escape(desc_txt)}" data-tags="{_html.escape(",".join(tags_list))}" '
                 f'onclick="pick(\'{name_js}\')" title="Click to copy the name">'
                 f'<div class="thumb"><img src="{src}" alt="{_html.escape(label)}" loading="lazy"></div>'
                 f'<figcaption><span class="nm">{_html.escape(label)}</span>'
-                f'<span class="mt">{meta_txt}</span></figcaption></figure>'
+                f'<span class="mt">{meta_txt}</span>'
+                f'{desc_html}{tags_html}</figcaption></figure>'
             )
         grid = "\n".join(cards) or "<p>No blocks in the library yet.</p>"
         page = f"""<!DOCTYPE html>
@@ -436,7 +454,7 @@ class BlockLibraryPlugin(inkex.Effect):
   #q {{ width:100%; max-width:420px; padding:9px 12px; font-size:14px;
         border:1px solid var(--accent); border-radius:8px; }}
   .grid {{ display:grid; gap:16px; padding:24px;
-           grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }}
+           grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }}
   .card {{ margin:0; background:#fff; border:1px solid #e3ddd0; border-radius:10px;
            overflow:hidden; cursor:pointer; transition:transform .08s, box-shadow .08s; }}
   .card:hover {{ transform:translateY(-2px); box-shadow:0 6px 18px rgba(31,58,95,.14);
@@ -447,6 +465,9 @@ class BlockLibraryPlugin(inkex.Effect):
   figcaption {{ padding:10px 12px; border-top:1px solid #efeae0; }}
   .nm {{ display:block; font-weight:600; font-size:14px; }}
   .mt {{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }}
+  .ds {{ display:block; font-size:12px; font-style:italic; color:#666; margin-top:4px; }}
+  .tags {{ display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }}
+  .tag {{ font-size:10px; background:#e1e9f5; color:#1F3A5F; padding:2px 6px; border-radius:4px; font-weight:bold; }}
   #none {{ padding:0 24px 24px; color:var(--muted); display:none; }}
   #toast {{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
             background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
@@ -458,7 +479,7 @@ class BlockLibraryPlugin(inkex.Effect):
   <h1>Quilt Tools - Block Library</h1>
   <p>{len(blocks)} block(s). Search below, or load any block with the in-Inkscape
      thumbnail picker (Extensions &rarr; Quilt Tools &rarr; 7. Block Library).</p>
-  <input id="q" type="search" placeholder="Search blocks by name or category..." oninput="flt()" autofocus>
+  <input id="q" type="search" placeholder="Search by name, description, or tags..." oninput="flt()" autofocus>
 </header>
 <div class="grid" id="grid">
 {grid}
@@ -470,7 +491,9 @@ function flt(){{
   var q=document.getElementById('q').value.trim().toLowerCase(), shown=0;
   document.querySelectorAll('.card').forEach(function(c){{
     var n=c.getAttribute('data-name').toLowerCase();
-    var ok=(!q || n.indexOf(q)>=0);
+    var d=c.getAttribute('data-desc').toLowerCase();
+    var t=c.getAttribute('data-tags').toLowerCase();
+    var ok=(!q || n.indexOf(q)>=0 || d.indexOf(q)>=0 || t.indexOf(q)>=0);
     c.style.display=ok?'':'none'; if(ok) shown++;
   }});
   document.getElementById('none').style.display=shown?'none':'block';

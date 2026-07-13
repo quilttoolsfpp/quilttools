@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>2.5. Shape Cut (Non-FPP)</name>
+  <name>06. Shape Cut</name>
   <id>org.quilttoolsplugin.quilttools_fpp_shape_cut</id>
   <dependency type="executable" location="extensions">quilttools_fpp_shape_cut.py</dependency>
 

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <name>01. Theme Manager</name>
+    <id>org.quilttools.pattern.theme_manager</id>
+    <dependency type="executable" location="extensions">quilttools_theme_manager.py</dependency>
+
+    <label appearance="header">Quilt Tools Pattern — Theme Manager</label>
+    
+    <param name="notebook" type="notebook">
+        <page name="active_theme_tab" gui-text="Active Theme">
+            <label appearance="header">Set Active Theme</label>
+            <param name="active_theme_id" type="string" gui-text="Theme ID to Set (e.g., ifh, childrens_moments):">ifh</param>
+            <param name="list_themes" type="bool" gui-text="List discovered themes on run">false</param>
+            <label>If checked, runs a discovery scan and reports all themes placed in the themes/ directory.</label>
+        </page>
+
+        <page name="validate_theme_tab" gui-text="Validate Theme">
+            <label appearance="header">Validate Theme Schema &amp; Fonts</label>
+            <param name="validate_theme_id" type="string" gui-text="Theme ID (leave blank for active theme):"></param>
+            <label>Checks that the theme JSON structure is valid and that all required_fonts are installed on your system.</label>
+        </page>
+
+        <page name="render_swatch_tab" gui-text="Render Swatch Card">
+            <label appearance="header">Render Visual Swatch Card</label>
+            <param name="swatch_theme_id" type="string" gui-text="Theme ID (leave blank for active theme):"></param>
+            <label>Drops a visual card on the current layer containing color chips and typeface samples for validation.</label>
+        </page>
+
+        <page name="new_theme_tab" gui-text="New Theme from Template">
+            <label appearance="header">Create New Theme from Template</label>
+            <param name="new_theme_id" type="string" gui-text="New Theme ID (e.g., my_summer_theme):">my_custom_theme</param>
+            <label>Clones the default 'ifh.json' theme to a new theme file. The new file location will be reported in a popup.</label>
+        </page>
+    </param>
+
+    <effect>
+        <object-type>all</object-type>
+        <effects-menu>
+            <submenu name="Quilt Tools Pattern"/>
+        </effects-menu>
+    </effect>
+    <script>
+        <command location="extensions" interpreter="python">quilttools_theme_manager.py</command>
+    </script>
+</inkscape-extension>

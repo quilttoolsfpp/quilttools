@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>8. Resize Block</name>
+  <name>04. Resize Block</name>
   <id>org.quilttoolsplugin.quilttools_fpp_resize</id>
   <dependency type="executable" location="extensions">quilttools_fpp_resize.py</dependency>
 

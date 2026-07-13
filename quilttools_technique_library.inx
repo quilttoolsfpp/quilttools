@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <name>05. Technique Library Injector</name>
+    <id>org.quilttools.fpp.technique_library</id>
+    <param name="technique" type="optiongroup" appearance="combo" gui-text="Technique:">
+        <option value="fg_4_at_a_time">No-waste 4-at-a-time Flying Geese</option>
+        <option value="hst_2_at_a_time">2-at-a-time Half-Square Triangles</option>
+        <option value="hst_8_at_a_time">8-at-a-time Half-Square Triangles</option>
+        <option value="qst_hourglass">Quarter-Square Triangles (Hourglass)</option>
+        <option value="square_in_square">Square-in-a-Square (Economy Block)</option>
+        <option value="stitch_and_flip">Stitch-and-Flip Corners</option>
+        <option value="strip_set">Strip-Set Sub-cutting</option>
+        <option value="hrt">Half-Rectangle Triangles</option>
+    </param>
+    <param name="finished_width" type="float" min="0.5" max="100.0" precision="3" gui-text="Finished Width (inches):">4.0</param>
+    <param name="finished_height" type="float" min="0.5" max="100.0" precision="3" gui-text="Finished Height (inches, if applicable):">2.0</param>
+    <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default)"></param>
+    <effect>
+        <object-type>all</object-type>
+        <effects-menu>
+            <submenu name="Quilt Tools Pattern"/>
+        </effects-menu>
+    </effect>
+    <script>
+        <command location="inx" interpreter="python">quilttools_technique_library.py</command>
+    </script>
+</inkscape-extension>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <name>06. Fabric Requirements Table</name>
+    <id>org.quilttools.fpp.fabric_calculator</id>
+    
+    <param name="calc_mode" type="optiongroup" appearance="combo" gui-text="Mode:">
+        <option value="fpp">FPP Mode (Read current block)</option>
+        <option value="manual">Manual Mode</option>
+    </param>
+    
+    <param name="manual_input" type="string" gui-text="Manual Mode Input (w,h; w,h):">2.5,4.0; 2.5,4.0</param>
+    
+    <param name="usable_wof" type="float" min="20.0" max="60.0" precision="1" gui-text="Usable WOF (inches):">41.0</param>
+    
+    <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default)"></param>
+
+    <effect>
+        <object-type>all</object-type>
+        <effects-menu>
+            <submenu name="Quilt Tools Pattern"/>
+        </effects-menu>
+    </effect>
+    <script>
+        <command location="inx" interpreter="python">quilttools_fabric_calculator.py</command>
+    </script>
+</inkscape-extension>

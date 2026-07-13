@@ -169,23 +169,6 @@ def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0):
         
     return fabric_estimates
 
-<<<<<<< Updated upstream
-def draw_fabric_layout_map(svg, block_data, finished_size_in, wof_in=40.0):
-    for layer in svg.findall(f".//{{{core.SVG_NS}}}g"):
-        if layer.get(f"{{{core.INKSCAPE_NS}}}label") == "FPP Fabric Layout Map":
-            layer.getparent().remove(layer)
-            
-    fabric_layer = etree.Element(
-        "{%s}g" % core.SVG_NS,
-        id="fpp-fabric-layout-map",
-        **{
-            f"{{{core.INKSCAPE_NS}}}label": "FPP Fabric Layout Map",
-            f"{{{core.INKSCAPE_NS}}}groupmode": "layer",
-            "style": "display:inline;",
-        },
-    )
-    svg.append(fabric_layer)
-=======
     def get_padded_poly(poly):
         padded = core.offset_polygon(poly, 0.75, miter_limit=2.0)
         if not padded:
@@ -285,27 +268,23 @@ def fabric_estimate(pieces, usable_wof=41.0, mode="fixed"):
 def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None):
     wof_px = wof_in * core.PX_PER_INCH
     map_scale = target_width / wof_px
->>>>>>> Stashed changes
     
-    wof_px = wof_in * core.PX_PER_INCH
     fabric_estimates = calculate_fabric_requirements(block_data, finished_size_in, wof_in)
     
-    user_colors = block_data.prefs.get("custom_colors", {})
-    unique_colors = sorted(list(set(est["color"] for est in fabric_estimates)))
-    color_codes = core.assign_color_codes(unique_colors, block_data.prefs.get("color_code_overrides", ""))
-    
-    start_x = 900.0
-    start_y = 100.0
-    
+    if color_codes is None:
+        unique_colors = sorted(list(set(est["color"] for est in fabric_estimates)))
+        color_codes = core.assign_color_codes(unique_colors, block_data.prefs.get("color_code_overrides", ""))
+        
+    # Header label
     etree.SubElement(
-        fabric_layer,
+        container,
         "{%s}text" % core.SVG_NS,
         x=str(start_x),
-        y=str(start_y - 40),
-        style="font-size:20px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+        y=str(start_y),
+        style="font-size:14px;font-family:sans-serif;font-weight:bold;fill:#333333;",
     ).text = f"Fabric Cut Layout Map (WOF = {wof_in}\", Size = {finished_size_in}\")"
     
-    curr_y = start_y
+    curr_y = start_y + 25.0
     for est in fabric_estimates:
         color_hex = est["color"]
         code = color_codes.get(color_hex, "FAB")
@@ -330,48 +309,74 @@ def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data
                 ]
             w = max(pt[0] for pt in padded) - min(pt[0] for pt in padded)
             h = max(pt[1] for pt in padded) - min(pt[1] for pt in padded)
-            boxes.append((w, h, r))
+            boxes.append((w, h, r, padded))
             
-        total_h, placements = pack_fabric_strip_with_coords(boxes, wof_px)
+        total_h, placements = pack_fabric_strip_with_coords([(w, h, r) for (w, h, r, p) in boxes], wof_px)
         
         if total_h <= 0:
             continue
             
+        # Draw strip label
         etree.SubElement(
-            fabric_layer,
+            container,
             "{%s}text" % core.SVG_NS,
             x=str(start_x),
-            y=str(curr_y - 10),
-            style="font-size:12px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+            y=str(curr_y),
+            style="font-size:10px;font-family:sans-serif;font-weight:bold;fill:#333333;",
         ).text = f"Fabric {code} ({color_hex}) - Packed Height: {total_h/core.PX_PER_INCH:.1f}\" (Qty: {len(boxes)} pieces)"
         
+        curr_y += 8.0
+        
+        # WOF Boundary box
         etree.SubElement(
-            fabric_layer,
+            container,
             "{%s}rect" % core.SVG_NS,
             x=str(start_x),
             y=str(curr_y),
-            width=str(wof_px),
-            height=str(total_h),
-            style=f"fill:none;stroke:{color_hex};stroke-width:2.0;stroke-dasharray:6,6;",
+            width=str(wof_px * map_scale),
+            height=str(total_h * map_scale),
+            style=f"fill:none;stroke:{color_hex};stroke-width:1.0;stroke-dasharray:4,4;",
         )
         
-        for idx, (w, h, r) in enumerate(boxes):
+        for idx, (w, h, r, padded) in enumerate(boxes):
             px, py, pw, ph = placements[idx]
+            
+            # 1. Draw light dashed bounding box for fabric block cut size
             etree.SubElement(
-                fabric_layer,
+                container,
                 "{%s}rect" % core.SVG_NS,
-                x=str(start_x + px),
-                y=str(curr_y + py),
-                width=str(pw),
-                height=str(ph),
-                style=f"fill:{color_hex};fill-opacity:0.4;stroke:#333333;stroke-width:1.0;stroke-linejoin:round;",
+                x=str(start_x + px * map_scale),
+                y=str(curr_y + py * map_scale),
+                width=str(pw * map_scale),
+                height=str(ph * map_scale),
+                style="fill:none;stroke:#bbbbbb;stroke-width:0.5;stroke-dasharray:2,2;",
             )
+            
+            # 2. Draw actual FPP piece polygon shape (e.g. triangle) shifted and scaled
+            min_x = min(pt[0] for pt in padded)
+            min_y = min(pt[1] for pt in padded)
+            shifted_pts = []
+            for pt in padded:
+                sx = start_x + (px + (pt[0] - min_x)) * map_scale
+                sy = curr_y + (py + (pt[1] - min_y)) * map_scale
+                shifted_pts.append(f"{sx:.2f},{sy:.2f}")
+            pts_str = " ".join(shifted_pts)
+            
             etree.SubElement(
-                fabric_layer,
+                container,
+                "{%s}polygon" % core.SVG_NS,
+                points=pts_str,
+                style=f"fill:{color_hex};fill-opacity:0.4;stroke:#333333;stroke-width:0.75;stroke-linejoin:round;",
+            )
+            
+            # 3. Text label inside the piece (centred in bounding box)
+            label_fs = max(6.0, min(10.0, 10.0 * map_scale * 1.5))
+            etree.SubElement(
+                container,
                 "{%s}text" % core.SVG_NS,
-                x=str(start_x + px + pw/2),
-                y=str(curr_y + py + ph/2),
-                style="font-size:11px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
+                x=str(start_x + (px + pw/2) * map_scale),
+                y=str(curr_y + (py + ph/2) * map_scale),
+                style=f"font-size:{label_fs:.1f}px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
             ).text = f"{r.label}"
             
-        curr_y += total_h + 80.0
+        curr_y += total_h * map_scale + 20.0

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>4. Display Settings &amp; Colors</name>
+  <name>05. FPP Display Toggle</name>
   <id>org.quilttoolsplugin.quilttools_fpp_display</id>
   <dependency type="executable" location="extensions">quilttools_fpp_display.py</dependency>
 

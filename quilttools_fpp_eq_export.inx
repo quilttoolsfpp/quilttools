@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>9. EQ Export</name>
+  <name>08. Electric Quilt Export</name>
   <id>org.quilttoolsplugin.quilttools_fpp_eq_export</id>
   <dependency type="executable" location="extensions">quilttools_fpp_eq_export.py</dependency>
 

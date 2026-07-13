@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <name>08. Pattern Template Scaffold</name>
+    <id>org.quilttools.fpp.pattern_template</id>
+    
+    <param name="pattern_title" type="string" gui-text="Pattern Title:">My New Quilt</param>
+    <param name="pattern_subtitle" type="string" gui-text="Subtitle:">A modern FPP design</param>
+    
+    <param name="header_prefs" type="description">Leave Author/Brand and Logo empty to use your saved preferences.</param>
+    <param name="author_brand" type="string" gui-text="Author / Brand Name:"></param>
+    <param name="logo_path" type="string" gui-text="Logo Path (absolute):"></param>
+    
+    <param name="page_size" type="optiongroup" appearance="combo" gui-text="Page Size:">
+        <option value="A4">A4</option>
+        <option value="US_Letter">US Letter</option>
+    </param>
+    
+    <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default)"></param>
+
+    <effect>
+        <object-type>all</object-type>
+        <effects-menu>
+            <submenu name="Quilt Tools Pattern"/>
+        </effects-menu>
+    </effect>
+    <script>
+        <command location="inx" interpreter="python">quilttools_pattern_template.py</command>
+    </script>
+</inkscape-extension>

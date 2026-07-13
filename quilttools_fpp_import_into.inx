@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>07. Import into Region</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_import_into</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_import_into.py</dependency>
+
+  <label appearance="header">Import a Library Block into Selected Region(s)</label>
+  <label>Select one or more FPP piece paths on the canvas, then run this tool to subdivide them.</label>
+
+  <param name="svg_file" type="path" mode="file" filetypes="svg" gui-text="SVG block file (optional - overrides picker)"></param>
+
+  <separator/>
+  <label appearance="header">Placement &amp; Sizing</label>
+  <param name="sizing_mode" type="optiongroup" appearance="combo" gui-text="Sizing mode:">
+    <option value="stretch">Stretch to fit (non-proportional)</option>
+    <option value="cover">Proportional crop (scale to cover)</option>
+    <option value="tile_stretch">Tile (stretch to fit even tiles)</option>
+    <option value="tile_ratio">Tile (keep ratio, crop ends)</option>
+  </param>
+
+  <param name="auto_align" type="bool" gui-text="Auto-align to region orientation (longest edge)">true</param>
+
+  <param name="rotation" type="optiongroup" appearance="combo" gui-text="Additional Rotation:">
+    <option value="0">0°</option>
+    <option value="45">45°</option>
+    <option value="90">90°</option>
+    <option value="135">135°</option>
+    <option value="180">180°</option>
+    <option value="270">270°</option>
+  </param>
+
+  <param name="flip" type="optiongroup" appearance="combo" gui-text="Flip:">
+    <option value="none">None</option>
+    <option value="horizontal">Horizontal (left-right)</option>
+    <option value="vertical">Vertical (up-down)</option>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="extensions" interpreter="python">quilttools_fpp_import_into.py</command>
+  </script>
+</inkscape-extension>

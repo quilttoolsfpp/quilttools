@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>6. Export &amp; Layout</name>
+  <name>10. Block Pattern Export</name>
   <id>org.quilttoolsplugin.quilttools_fpp_export</id>
   <dependency type="executable" location="extensions">quilttools_fpp_export.py</dependency>
 
@@ -62,6 +62,7 @@
       </param>
       <param name="mirror_templates" type="bool" gui-text="Mirror templates on Pages 2+ (Recommended for FPP)">true</param>
       <param name="mirror_preview" type="bool" gui-text="Mirror Page 1 Block Preview (Usually false)">false</param>
+      <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default)"></param>
     </page>
   </param>
 

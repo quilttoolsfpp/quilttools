@@ -179,11 +179,35 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--template_copies", type=int, default=1)
         pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
         pars.add_argument("--notebook", type=str, default="")
+        pars.add_argument("--theme_override", type=str, default="")
 
     def effect(self):
+        import quilttools_theme as qtheme
+        theme = qtheme.resolve_active_theme(self.options)
+        
+        # Override STYLE_CONFIG with theme fonts and colors dynamically
+        STYLE_CONFIG["font_family"] = theme.font("body")["family"]
+        STYLE_CONFIG["font_size_title"] = f"{theme.type_pt('title')}px"
+        STYLE_CONFIG["font_size_subtitle"] = f"{theme.type_pt('subtitle')}px"
+        STYLE_CONFIG["font_size_header"] = f"{theme.type_pt('heading')}px"
+        STYLE_CONFIG["font_size_body"] = f"{theme.type_pt('body')}px"
+        STYLE_CONFIG["font_size_caption"] = f"{theme.type_pt('caption')}px"
+        STYLE_CONFIG["font_size_tiny"] = f"{max(6, theme.type_pt('caption') - 1)}px"
+        
+        STYLE_CONFIG["color_dark"] = theme.colour("ink")
+        STYLE_CONFIG["color_mid"] = theme.colour("muted")
+        STYLE_CONFIG["color_light"] = theme.colour("muted")
+        STYLE_CONFIG["color_warn"] = theme.colour("warning")
+        STYLE_CONFIG["color_accent"] = theme.colour("accent")
+        STYLE_CONFIG["color_white"] = theme.colour("background")
+
         g, block_data = core.find_fpp_group(self.svg)
-        if block_data and block_data.is_exact_library_block():
-            self.options.copyright_notice = "For personal use only."
+        if block_data:
+            if block_data.is_exact_library_block():
+                self.options.copyright_notice = "For personal use only."
+            lib_name = block_data.prefs.get("block_library_name")
+            if lib_name and (not self.options.block_name or self.options.block_name == "My Quilt Block"):
+                self.options.block_name = lib_name
 
         if self.options.action == "step1":
             self._generate_open_canvas()
@@ -210,9 +234,11 @@ class ExportPlugin(inkex.Effect):
                         color_hex = core.get_color_for_label(r.label, color_mode, idx)
                     all_colors.append(color_hex)
                 unique_colors = set(all_colors)
-                if len(unique_colors) > 20:
+                if len(unique_colors) > 10 and not self.options.separate_section_alignment_image:
                     start_page += 1
             if self.options.separate_section_alignment_image:
+                start_page += 1
+            if self.options.include_fabric_estimation:
                 start_page += 1
         return start_page
 
@@ -765,7 +791,20 @@ class ExportPlugin(inkex.Effect):
                     resolved_base_size = max(canvas_w, canvas_h) / core.PX_PER_INCH
                 else:
                     resolved_base_size = 12.0
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, resolved_base_size, self.options.wof_in)
+            
+            for layer in self.svg.findall(f".//{{{core.SVG_NS}}}g"):
+                if layer.get(f"{{{core.INKSCAPE_NS}}}label") == "FPP Fabric Layout Map":
+                    layer.getparent().remove(layer)
+                    
+            fabric_layer = etree.SubElement(self.svg, "{%s}g" % core.SVG_NS, id="fpp-fabric-layout-map", **{
+                f"{{{core.INKSCAPE_NS}}}label": "FPP Fabric Layout Map",
+                f"{{{core.INKSCAPE_NS}}}groupmode": "layer",
+                "style": "display:inline;"
+            })
+            quilttools_fpp_fabric.draw_fabric_layout_map(
+                fabric_layer, 900.0, 100.0, 700.0,
+                block_data, resolved_base_size, self.options.wof_in
+            )
             
         inkex.utils.debug(
             "Open Canvas Generated. Freely rotate and drag items across the grids, then select 'Finalize'!"
@@ -802,6 +841,24 @@ class ExportPlugin(inkex.Effect):
 
         spacing_px = self.options.spacing_in * core.PX_PER_INCH
         start_page = self._get_start_page()
+        # Try to dynamically detect start_page from existing layout_layer grids
+        detected_start_page = None
+        for txt in layout_layer.findall(f".//{{{core.SVG_NS}}}text"):
+            if txt.text == "Page 1":
+                try:
+                    tx = float(txt.get("x", 0))
+                    ty = float(txt.get("y", 0))
+                    px = tx - 10
+                    py = ty - 20
+                    col = round(px / avail_w)
+                    row = round(py / avail_h)
+                    detected_start_page = row * 5 + col
+                    break
+                except Exception:
+                    pass
+        if detected_start_page is not None:
+            start_page = detected_start_page
+
         sim_page, sim_x, sim_y, sim_row_h = start_page, 0, 0, 0.0
         for sec in processed_sections:
             if sim_x + sec["width"] > avail_w:
@@ -1037,13 +1094,15 @@ class ExportPlugin(inkex.Effect):
         if self.options.include_colouring_page:
             pages_list.append({"type": "colouring"})
 
+        page_shift = current_len - start_page
+        for item in packable_items:
+            item["target_page"] += page_shift
+
         self._render_pdf_pages(
             packable_items, pages_list, g.getparent(), block_data
         )
         
-        if self.options.visualize_fabric_layout:
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, base_size, self.options.wof_in)
-            
+
         inkex.utils.debug(
             "Finalize Complete! Custom rotations preserved and snapped seamlessly to PDF grids."
         )
@@ -1409,9 +1468,7 @@ class ExportPlugin(inkex.Effect):
             all_packed_items, pages_list, g.getparent(), block_data
         )
         
-        if self.options.visualize_fabric_layout:
-            quilttools_fpp_fabric.draw_fabric_layout_map(self.svg, block_data, base_size, self.options.wof_in)
-            
+
         inkex.utils.debug("Smart Pack Layout complete! Geometry preserved.")
 
     def _draw_assembly_and_legend(self, layout_layer, panel_x, panel_y, block_data, side_by_side=False, right_col_x=None):
@@ -1721,7 +1778,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + offset),
                 y=str(header_y),
-                style="font-size:11px;font-family:sans-serif;font-weight:bold;fill:#555555;",
+                style=f"font-size:11px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
             ).text = text
             
         row_y = header_y + 30
@@ -1740,14 +1797,14 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 60),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = est['color']
             etree.SubElement(
                 layout_layer,
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 150),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = str(est['pieces_count'])
             
             fixed_yd = est['fixed_in'] / 36.0
@@ -1757,7 +1814,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 220),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = fixed_str
             
             free_yd = est['free_in'] / 36.0
@@ -1767,7 +1824,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 350),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#444444;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = free_str
             
             free_in_fq = est["fq_free_in"]
@@ -1784,7 +1841,7 @@ class ExportPlugin(inkex.Effect):
                 "{%s}text" % core.SVG_NS,
                 x=str(table_x + 480),
                 y=str(row_y),
-                style="font-size:10px;font-family:sans-serif;fill:#333333;font-weight:bold;",
+                style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};font-weight:bold;",
             ).text = suggested
             
             etree.SubElement(
@@ -1797,6 +1854,7 @@ class ExportPlugin(inkex.Effect):
                 style="stroke:#eeeeee;stroke-width:0.5;",
             )
             row_y += 24
+        return row_y
 
     def _draw_alignment_ticks(self, container, r, scale, cx_hull, cx, cy, best_angle, alignment_marks, block_data, mirror_templates):
         orig_r = block_data.tree.regions.get(str(r["id"])) or block_data.tree.regions.get(r["id"])
@@ -1874,9 +1932,11 @@ class ExportPlugin(inkex.Effect):
         grid_rows = math.ceil(total_pages / MAX_COLUMNS)
         grid_w, grid_h = grid_cols * pw + (grid_cols - 1) * margin, grid_rows * ph + (grid_rows - 1) * margin
 
-        self.svg.set("width", f"{grid_w}")
-        self.svg.set("height", f"{grid_h}")
-        self.svg.set("viewBox", f"0 0 {grid_w} {grid_h}")
+        # Set root SVG size to match Page 1 size. This prevents Inkscape's PDF export
+        # from making Page 1 double-width (matching the overall grid size).
+        self.svg.set("width", f"{pw}")
+        self.svg.set("height", f"{ph}")
+        self.svg.set("viewBox", f"0 0 {pw} {ph}")
 
         page_offsets = {}
         for pi in range(total_pages):
@@ -1947,7 +2007,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(header_y),
-                    style="font-size:10px;font-family:sans-serif;font-weight:bold;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"{self.options.block_name}{sz_lbl}"
                 
                 etree.SubElement(
@@ -1957,7 +2017,7 @@ class ExportPlugin(inkex.Effect):
                     y1=str(py + margin + header_gap - 5),
                     x2=str(px + pw - margin),
                     y2=str(py + margin + header_gap - 5),
-                    style="stroke:#dddddd;stroke-width:0.5;",
+                    style=f"stroke:{STYLE_CONFIG['header_footer_line_stroke']};stroke-width:{STYLE_CONFIG['header_footer_line_stroke_width']};",
                 )
                 
                 footer_y = py + ph - margin - header_gap / 2
@@ -1967,7 +2027,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(footer_y + 4),
-                    style="font-size:9px;font-family:sans-serif;fill:#888888;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_light']};",
                 ).text = f"{credit_str}  |  {self.options.copyright_notice}"
                 
                 etree.SubElement(
@@ -1975,7 +2035,7 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + pw - margin),
                     y=str(footer_y + 4),
-                    style="font-size:10px;font-family:sans-serif;font-weight:bold;text-anchor:end;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:end;fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"Page {pi + 1} of {total_pages}"
                 
                 etree.SubElement(
@@ -2151,14 +2211,14 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 30),
-                    style="font-size:22px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
                 ).text = f"Fabric Requirements ({sz:.1f}\" Block)"
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 55),
-                    style="font-size:12px;font-family:sans-serif;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"Estimates based on {self.options.wof_in:.1f}\" usable Width of Fabric (WOF) and include 3/4\" padding around each piece."
 
                 if int(self.options.template_copies) > 1:
@@ -2171,7 +2231,13 @@ class ExportPlugin(inkex.Effect):
                     ).text = f"Note: quantities below are for ONE block. This document contains {int(self.options.template_copies)} template sets."
                 
                 fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(block_data, sz, self.options.wof_in)
-                self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
+                end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
+                
+                if self.options.visualize_fabric_layout:
+                    quilttools_fpp_fabric.draw_fabric_layout_map(
+                        layout_layer, px + margin, end_table_y + 30, avail_w,
+                        block_data, sz, self.options.wof_in, color_codes
+                    )
                 
             elif p_type == "colouring":
                 etree.SubElement(
@@ -2179,14 +2245,14 @@ class ExportPlugin(inkex.Effect):
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 30),
-                    style="font-size:22px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
                 ).text = "Color Planning Page"
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 55),
-                    style="font-size:12px;font-family:sans-serif;fill:#666666;",
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = "Use this sheet to plan your fabrics and color layout before sewing."
                 
                 preview_w = int(avail_w * 0.75)

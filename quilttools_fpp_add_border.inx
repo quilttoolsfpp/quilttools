@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>08. Add Plain Border</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_add_border</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_add_border.py</dependency>
+
+  <label appearance="header">Add a Plain Border Around Current Block</label>
+  <label>This adds 4 new border regions to your FPP block, growing the block size.</label>
+
+  <param name="border_width_in" type="float" min="0.1" max="100.0" precision="2" gui-text="Border Width (inches)">2.00</param>
+  
+  <param name="border_layout" type="optiongroup" appearance="combo" gui-text="Border Layout:">
+    <option value="long_horizontal">Long Horizontal (top/bottom continuous)</option>
+    <option value="long_vertical">Long Vertical (left/right continuous)</option>
+    <option value="log_cabin_cw">Log Cabin Clockwise</option>
+    <option value="log_cabin_ccw">Log Cabin Anticlockwise</option>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="extensions" interpreter="python">quilttools_fpp_add_border.py</command>
+  </script>
+</inkscape-extension>

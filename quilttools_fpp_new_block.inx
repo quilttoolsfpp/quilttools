@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>1. New Block</name>
+  <name>01. New Block</name>
   <id>org.quilttoolsplugin.quilttools_fpp_new_block</id>
   <dependency type="executable" location="extensions">quilttools_fpp_new_block.py</dependency>
 

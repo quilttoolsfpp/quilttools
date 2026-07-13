@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>5. Heal &amp; Guides</name>
+  <name>03. Heal Block</name>
   <id>org.quilttoolsplugin.quilttools_fpp_heal</id>
   <dependency type="executable" location="extensions">quilttools_fpp_heal.py</dependency>
 
