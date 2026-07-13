@@ -14,7 +14,7 @@
   #q { width:100%; max-width:420px; padding:9px 12px; font-size:14px;
         border:1px solid var(--accent); border-radius:8px; }
   .grid { display:grid; gap:16px; padding:24px;
-           grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }
+           grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
   .card { margin:0; background:#fff; border:1px solid #e3ddd0; border-radius:10px;
            overflow:hidden; cursor:pointer; transition:transform .08s, box-shadow .08s; }
   .card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(31,58,95,.14);
@@ -25,6 +25,9 @@
   figcaption { padding:10px 12px; border-top:1px solid #efeae0; }
   .nm { display:block; font-weight:600; font-size:14px; }
   .mt { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .ds { display:block; font-size:12px; font-style:italic; color:#666; margin-top:4px; }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .tag { font-size:10px; background:#e1e9f5; color:#1F3A5F; padding:2px 6px; border-radius:4px; font-weight:bold; }
   #none { padding:0 24px 24px; color:var(--muted); display:none; }
   #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
             background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
@@ -34,29 +37,11 @@
 <body>
 <header>
   <h1>Quilt Tools - Block Library</h1>
-<<<<<<< Updated upstream
-  <p>12 block(s). Search below, or load any block with the in-Inkscape
-=======
-  <p>57 block(s). Search below, or load any block with the in-Inkscape
->>>>>>> Stashed changes
+  <p>56 block(s). Search below, or load any block with the in-Inkscape
      thumbnail picker (Extensions &rarr; Quilt Tools &rarr; 7. Block Library).</p>
-  <input id="q" type="search" placeholder="Search blocks by name or category..." oninput="flt()" autofocus>
+  <input id="q" type="search" placeholder="Search by name, description, or tags..." oninput="flt()" autofocus>
 </header>
 <div class="grid" id="grid">
-<<<<<<< Updated upstream
-<figure class="card" data-name="Basics/Churndash" onclick="pick('Basics/Churndash')" title="Click to copy the name"><div class="thumb"><img src="Basics/Churndash.svg" alt="Basics/Churndash" loading="lazy"></div><figcaption><span class="nm">Basics/Churndash</span><span class="mt">6.00" x 6.00" · 17 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/Drunkards Path" onclick="pick('Basics/Drunkards Path')" title="Click to copy the name"><div class="thumb"><img src="Basics/Drunkards%20Path.svg" alt="Basics/Drunkards Path" loading="lazy"></div><figcaption><span class="nm">Basics/Drunkards Path</span><span class="mt">6.00" x 6.00" · 2 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/Half Square Triangle" onclick="pick('Basics/Half Square Triangle')" title="Click to copy the name"><div class="thumb"><img src="Basics/Half%20Square%20Triangle.svg" alt="Basics/Half Square Triangle" loading="lazy"></div><figcaption><span class="nm">Basics/Half Square Triangle</span><span class="mt">6.00" x 6.00" · 2 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/Hourglass" onclick="pick('Basics/Hourglass')" title="Click to copy the name"><div class="thumb"><img src="Basics/Hourglass.svg" alt="Basics/Hourglass" loading="lazy"></div><figcaption><span class="nm">Basics/Hourglass</span><span class="mt">6.00" x 6.00" · 4 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/Square in a Square" onclick="pick('Basics/Square in a Square')" title="Click to copy the name"><div class="thumb"><img src="Basics/Square%20in%20a%20Square.svg" alt="Basics/Square in a Square" loading="lazy"></div><figcaption><span class="nm">Basics/Square in a Square</span><span class="mt">6.00" x 6.00" · 5 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/SquarePatches/Four Patch" onclick="pick('Basics/SquarePatches/Four Patch')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Four%20Patch.svg" alt="Basics/SquarePatches/Four Patch" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Four Patch</span><span class="mt">6.00" x 6.00" · 4 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/SquarePatches/Nine Patch" onclick="pick('Basics/SquarePatches/Nine Patch')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Nine%20Patch.svg" alt="Basics/SquarePatches/Nine Patch" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Nine Patch</span><span class="mt">6.00" x 6.00" · 9 pieces</span></figcaption></figure>
-<figure class="card" data-name="Basics/SquarePatches/Nine Patch FPP" onclick="pick('Basics/SquarePatches/Nine Patch FPP')" title="Click to copy the name"><div class="thumb"><img src="Basics/SquarePatches/Nine%20Patch%20FPP.svg" alt="Basics/SquarePatches/Nine Patch FPP" loading="lazy"></div><figcaption><span class="nm">Basics/SquarePatches/Nine Patch FPP</span><span class="mt">6.00" x 6.00" · 9 pieces</span></figcaption></figure>
-<figure class="card" data-name="Curves/Double Drunk" onclick="pick('Curves/Double Drunk')" title="Click to copy the name"><div class="thumb"><img src="Curves/Double%20Drunk.svg" alt="Curves/Double Drunk" loading="lazy"></div><figcaption><span class="nm">Curves/Double Drunk</span><span class="mt">6.00" x 6.00" · 3 pieces</span></figcaption></figure>
-<figure class="card" data-name="Flying Geese/Flying Geese" onclick="pick('Flying Geese/Flying Geese')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese.svg" alt="Flying Geese/Flying Geese" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese</span><span class="mt">6.00" x 3.00" · 3 pieces</span></figcaption></figure>
-<figure class="card" data-name="Flying Geese/Flying Geese Double" onclick="pick('Flying Geese/Flying Geese Double')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese%20Double.svg" alt="Flying Geese/Flying Geese Double" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese Double</span><span class="mt">6.00" x 6.00" · 6 pieces</span></figcaption></figure>
-<figure class="card" data-name="Simple FPP/LittleHouse" onclick="pick('Simple FPP/LittleHouse')" title="Click to copy the name"><div class="thumb"><img src="Simple%20FPP/LittleHouse.svg" alt="Simple FPP/LittleHouse" loading="lazy"></div><figcaption><span class="nm">Simple FPP/LittleHouse</span><span class="mt">6.00" x 6.00" · 10 pieces</span></figcaption></figure>
-=======
 <figure class="card" data-name="Basics/Bow Tie" data-desc="A bow tie variation (no partial seams)" data-tags="basics,geometric" onclick="pick('Basics/Bow Tie')" title="Click to copy the name"><div class="thumb"><img src="Basics/Bow%20Tie.svg" alt="Basics/Bow Tie" loading="lazy"></div><figcaption><span class="nm">Basics/Bow Tie</span><span class="mt">6.00" x 6.00" · 8 pieces</span><span class="ds">A bow tie variation (no partial seams)</span><div class="tags"><span class="tag">basics</span><span class="tag">geometric</span></div></figcaption></figure>
 <figure class="card" data-name="Basics/Churndash" data-desc="" data-tags="" onclick="pick('Basics/Churndash')" title="Click to copy the name"><div class="thumb"><img src="Basics/Churndash.svg" alt="Basics/Churndash" loading="lazy"></div><figcaption><span class="nm">Basics/Churndash</span><span class="mt">6.00" x 6.00" · 17 pieces</span></figcaption></figure>
 <figure class="card" data-name="Basics/Economy" data-desc="A square in a square in a square - two rounds of corner triangles." data-tags="economy,corners" onclick="pick('Basics/Economy')" title="Click to copy the name"><div class="thumb"><img src="Basics/Economy.svg" alt="Basics/Economy" loading="lazy"></div><figcaption><span class="nm">Basics/Economy</span><span class="mt">6.00" x 6.00" · 9 pieces</span><span class="ds">A square in a square in a square - two rounds of corner triangles.</span><div class="tags"><span class="tag">economy</span><span class="tag">corners</span></div></figcaption></figure>
@@ -98,7 +83,6 @@
 <figure class="card" data-name="Curves/Rainbow Arch" data-desc="Concentric quarter rings from the corner - a nod to Rainbow Ribbon." data-tags="curve,rings" onclick="pick('Curves/Rainbow Arch')" title="Click to copy the name"><div class="thumb"><img src="Curves/Rainbow%20Arch.svg" alt="Curves/Rainbow Arch" loading="lazy"></div><figcaption><span class="nm">Curves/Rainbow Arch</span><span class="mt">6.00" x 6.00" · 4 pieces</span><span class="ds">Concentric quarter rings from the corner - a nod to Rainbow Ribbon.</span><div class="tags"><span class="tag">curve</span><span class="tag">rings</span></div></figcaption></figure>
 <figure class="card" data-name="Curves/Snake Curves" data-desc="" data-tags="" onclick="pick('Curves/Snake Curves')" title="Click to copy the name"><div class="thumb"><img src="Curves/Snake%20Curves.svg" alt="Curves/Snake Curves" loading="lazy"></div><figcaption><span class="nm">Curves/Snake Curves</span><span class="mt">8.50" x 12.00" · 14 pieces</span></figcaption></figure>
 <figure class="card" data-name="Curves/Winding Ways" data-desc="Overlapping corner arcs weaving a four-petal star." data-tags="curve,advanced" onclick="pick('Curves/Winding Ways')" title="Click to copy the name"><div class="thumb"><img src="Curves/Winding%20Ways.svg" alt="Curves/Winding Ways" loading="lazy"></div><figcaption><span class="nm">Curves/Winding Ways</span><span class="mt">6.00" x 6.00" · 9 pieces</span><span class="ds">Overlapping corner arcs weaving a four-petal star.</span><div class="tags"><span class="tag">curve</span><span class="tag">advanced</span></div></figcaption></figure>
-<figure class="card" data-name="EQ Imports/Bronwyn Blocks _ BYO" data-desc="A simple boat (3 FPP Sections)" data-tags="eq-import" onclick="pick('EQ Imports/Bronwyn Blocks _ BYO')" title="Click to copy the name"><div class="thumb"><img src="EQ%20Imports/Bronwyn%20Blocks%20_%20BYO.svg" alt="EQ Imports/Bronwyn Blocks _ BYO" loading="lazy"></div><figcaption><span class="nm">EQ Imports/Bronwyn Blocks _ BYO</span><span class="mt">13.00" x 16.00" · 49 pieces</span><span class="ds">A simple boat (3 FPP Sections)</span><div class="tags"><span class="tag">eq-import</span></div></figcaption></figure>
 <figure class="card" data-name="Flying Geese/Flying Geese" data-desc="" data-tags="" onclick="pick('Flying Geese/Flying Geese')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese.svg" alt="Flying Geese/Flying Geese" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese</span><span class="mt">6.00" x 3.00" · 3 pieces</span></figcaption></figure>
 <figure class="card" data-name="Flying Geese/Flying Geese Double" data-desc="" data-tags="" onclick="pick('Flying Geese/Flying Geese Double')" title="Click to copy the name"><div class="thumb"><img src="Flying%20Geese/Flying%20Geese%20Double.svg" alt="Flying Geese/Flying Geese Double" loading="lazy"></div><figcaption><span class="nm">Flying Geese/Flying Geese Double</span><span class="mt">6.00" x 6.00" · 6 pieces</span></figcaption></figure>
 <figure class="card" data-name="Log Cabin/3 Courthouse Steps" data-desc="Couthouse Steps Variation with 3 steps" data-tags="eq-import" onclick="pick('Log Cabin/3 Courthouse Steps')" title="Click to copy the name"><div class="thumb"><img src="Log%20Cabin/3%20Courthouse%20Steps.svg" alt="Log Cabin/3 Courthouse Steps" loading="lazy"></div><figcaption><span class="nm">Log Cabin/3 Courthouse Steps</span><span class="mt">8.00" x 8.00" · 13 pieces</span><span class="ds">Couthouse Steps Variation with 3 steps</span><div class="tags"><span class="tag">eq-import</span></div></figcaption></figure>
@@ -114,7 +98,6 @@
 <figure class="card" data-name="Stars/Ohio Star" data-desc="Quarter-square triangle points around a plain centre." data-tags="star,qst,classic" onclick="pick('Stars/Ohio Star')" title="Click to copy the name"><div class="thumb"><img src="Stars/Ohio%20Star.svg" alt="Stars/Ohio Star" loading="lazy"></div><figcaption><span class="nm">Stars/Ohio Star</span><span class="mt">6.00" x 6.00" · 21 pieces</span><span class="ds">Quarter-square triangle points around a plain centre.</span><div class="tags"><span class="tag">star</span><span class="tag">qst</span><span class="tag">classic</span></div></figcaption></figure>
 <figure class="card" data-name="Stars/Sawtooth Star" data-desc="Star points pieced as flying geese meeting the centre square, corner posts around." data-tags="star,geese" onclick="pick('Stars/Sawtooth Star')" title="Click to copy the name"><div class="thumb"><img src="Stars/Sawtooth%20Star.svg" alt="Stars/Sawtooth Star" loading="lazy"></div><figcaption><span class="nm">Stars/Sawtooth Star</span><span class="mt">6.00" x 6.00" · 17 pieces</span><span class="ds">Star points pieced as flying geese meeting the centre square, corner posts around.</span><div class="tags"><span class="tag">star</span><span class="tag">geese</span></div></figcaption></figure>
 <figure class="card" data-name="Stars/Star In a Star" data-desc="Variation on a Sawtooth with a second star" data-tags="eq-import" onclick="pick('Stars/Star In a Star')" title="Click to copy the name"><div class="thumb"><img src="Stars/Star%20In%20a%20Star.svg" alt="Stars/Star In a Star" loading="lazy"></div><figcaption><span class="nm">Stars/Star In a Star</span><span class="mt">12.00" x 12.00" · 33 pieces</span><span class="ds">Variation on a Sawtooth with a second star</span><div class="tags"><span class="tag">eq-import</span></div></figcaption></figure>
->>>>>>> Stashed changes
 </div>
 <p id="none">No blocks match your search.</p>
 <div id="toast"></div>
@@ -123,7 +106,9 @@ function flt(){
   var q=document.getElementById('q').value.trim().toLowerCase(), shown=0;
   document.querySelectorAll('.card').forEach(function(c){
     var n=c.getAttribute('data-name').toLowerCase();
-    var ok=(!q || n.indexOf(q)>=0);
+    var d=c.getAttribute('data-desc').toLowerCase();
+    var t=c.getAttribute('data-tags').toLowerCase();
+    var ok=(!q || n.indexOf(q)>=0 || d.indexOf(q)>=0 || t.indexOf(q)>=0);
     c.style.display=ok?'':'none'; if(ok) shown++;
   });
   document.getElementById('none').style.display=shown?'none':'block';
