@@ -5,17 +5,29 @@ are listed first.
 
 ---
 
-## Changes in v2.1 (Traditional Piecing & Applique, Y-Seam Separability, SVG Importer) - July 2026
+## Changes in v2.2 (Planned / Upcoming) - TBA
 
-### 🎨 Traditional Pieced & Applique Block Kinds
-* **Block Kind Selector**: Added dropdown in the Display Toggle dialog (`quilttools_fpp_display.py`) to classify blocks as FPP, Traditional Pieced, or Applique.
-* **Applique Backdrops & Scraping**: Applique blocks automatically render a background bounding polygon (`qt-block-bg`) on the canvas. Painting the background directly on the canvas and saving colors automatically updates the block's `bg_color` configuration.
-* **Differentiated Seam Allowance Padding**: Background, applique, and traditionally pieced templates are estimated using exact $0.25″$ (24px) seam-allowance margins instead of the larger $0.75″$ (72px) FPP foundation padding.
-* **Applique Base Seam Extensions**: Implemented `resolve_appliques` to automatically union (`quilttools_geometry.get_polygon_union`) background pieces with the applique shapes they support. This ensures backing fabrics extend under applique shapes without raw gaps.
-* **Calculator Normalization**: Single-block fabric calculations refactored to use `pieces_from_block`, bringing mixed-mode block kinds support to both single-block and whole-quilt calculations.
+### 🎨 Applique Block Kind & Layering
+* **Applique Block Kind**: A new block kind option to designate applique blocks, generating a backing fabric block base and calculating yardage for individual applique shapes.
+* **Applique Backdrops & Scraping**: Applique blocks automatically render a background bounding polygon (`qt-block-bg`) on the canvas for direct coloring and automatic color scraping.
+* **Applique Base Seam Extensions**: Implemented `resolve_appliques` to automatically union (`quilttools_geometry.get_polygon_union`) background pieces with the applique shapes they support, ensuring backing fabrics extend under applique shapes without raw gaps.
 
-### 📐 Y-Seam Separability & Straight-Cut Policies
-* **Guillotine/Straight Cut Separability Checks**: Straight cuts now verify piece-level separability using `virtual_sewing_validator`. Straight cuts that introduce Y-seams are automatically rolled back with an error warning.
+---
+
+## Changes in v2.1 (Traditional Piecing, Colour Suite, Y-Seam Separability, SVG Importer) - July 2026
+
+### 🎨 Traditional Pieced Block Kind
+* **Block Kind Selector**: Added option in the Display Toggle dialog (`quilttools_fpp_display.py`) to classify blocks as Traditional Pieced (Templates) rather than FPP.
+* **Differentiated Seam Allowance Padding**: Traditionally pieced templates are estimated using exact $0.25″$ (24px) seam-allowance margins instead of the larger $0.75″$ (72px) FPP foundation padding.
+* **Calculator Normalization**: Single-block fabric calculations refactored to use `pieces_from_block`, bringing template-mode block kinds support to both single-block and whole-quilt calculations.
+
+### 🌈 Quilt Tools Colour Suite
+* **Unified Colour Menu**: Consolidated all color tools under the dedicated `Quilt Tools Colour` submenu.
+* **Interactive Palette Generator**: Generate harmonious palettes using OKLCh color space calculations with interactive anchor color picking directly from Inkscape's color wheel, and export as GPL palettes.
+* **Colour Randomiser & Reroll**: Instantly randomize block or quilt layout colors, featuring a streamlined Reroll action bindable to a hotkey for quick design iteration.
+* **Smart Context Detection**: Integrated a standard-library canvas context detector (`quilttools_colour.py`) that classifies the canvas (block / quilt / both / none) without Inkex dependencies, protecting placed cells from accidental edits.
+
+### 📐 Y-Seam Separability & Shape-Cut Policies
 * **Shape Cut Bypass & Technique Badging**: Shape cuts permit Y-seams under an explicit "Allow Y-seams" bypass option. Unseparable shapes are automatically tagged with the `technique="y_seam"` attribute.
 * **Technique badging**: Added a high-contrast orange (`#d35400`) "Y-Seam" badge to the legend markup catalog and review card.
 

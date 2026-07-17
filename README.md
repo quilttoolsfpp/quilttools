@@ -9,7 +9,7 @@ Quilt Tools FPP is a vector-based extension suite for **Inkscape** designed for 
 ### 1. Block Drafting (`Quilt Tools Block`)
 * **Interactive Slicing**: Slice block polygons using straight-line **Guillotine Cuts** or curved **Shape Cuts**.
 * **Auto-Labelling**: Re-label sewing sequences and sections automatically, ensuring proper sew-order.
-* **Separability Policy & Y-Seams**: Automatically detects and blocks Y-seam anomalies on straight-line cuts. Permits them on shape cuts under a bypass option, automatically tagging unseparable pieces with `technique="y_seam"`.
+* **Separability Policy & Y-Seams**: Enforces FPP piece-level separability checks on curved shape cuts, permitting them under a bypass option and automatically tagging unseparable pieces with `technique="y_seam"`. Guillotine straight cuts remain unaffected.
 * **SVG Block Importer**: Load external SVG vector designs directly into standard FPP blocks with recursive geometry parsing, outlines extraction, and auto sew-ordering.
 
 ### 2. Colour & Palette Management (`Quilt Tools Colour`)

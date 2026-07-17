@@ -76,6 +76,6 @@ This document tracks the current state of the repository, completed phases, and 
 ## Next Steps
 
 ### Phase D: Fill Blocks from Library (Prerequisites & Engine)
-* **Placement Engine Extraction**: Extract stretch-to-fit/cover proportional scale sizing, auto-alignment, rotation, and flip algorithms into `quilttools_placement.py` for shared use.
-* **Block Kind Schema Extension**: Extend the block schema to support `pieced` and `applique` block kinds alongside FPP.
-* **Fill Blocks tool (`04. Fill Blocks from Library`)**: Create the plugin to select quilt placeholder cells and fill them with library blocks.
+* [x] **Placement Engine Extraction**: Extract stretch-to-fit/cover proportional scale sizing, auto-alignment, rotation, and flip algorithms into `quilttools_placement.py` for shared use.
+* [x] **Block Kind Schema Extension**: Extend the block schema to support `pieced` and `applique` block kinds alongside FPP. (Applique release notes deferred to v2.2).
+* [ ] **Fill Blocks tool (`04. Fill Blocks from Library`)**: Create the plugin to select quilt placeholder cells and fill them with library blocks.
