@@ -39,13 +39,16 @@ class FillBlocksPlugin(inkex.Effect):
         pars.add_argument("--auto_align", type=inkex.Boolean, default=True)
         pars.add_argument("--rotation", type=float, default=0.0)
         pars.add_argument("--flip", type=str, default="none")
-        pars.add_argument("--theme_override", type=str, default="")
+        pars.add_argument("--empty_target_mode", type=str, default="all")
+
+    def parse_arguments(self, args):
+        self.options, unknown = self.arg_parser.parse_known_args(args)
 
     def effect(self):
         # 1. Identify quilt layer
         g_quilt, quilt_data = qcore.find_quilt_group(self.svg)
         if g_quilt is None:
-            return inkex.errormsg("No Quilt Layout layer found. Run '02. New Quilt' first.")
+            return inkex.errormsg("No Quilt Layout layer found. Run '01. New Quilt' first.")
 
         # 2. Identify selected cells
         selected_cell_ids = set()
@@ -58,13 +61,21 @@ class FillBlocksPlugin(inkex.Effect):
                     break
                 cur = cur.getparent()
 
-        if not selected_cell_ids:
-            return inkex.errormsg("No quilt grid cells selected. Please select one or more block cells (e.g. '1-1') to fill.")
-
-        # Filter out non-block roles (sashing, borders, binding shouldn't be filled with library blocks)
-        block_cell_ids = [cid for cid in selected_cell_ids if quilt_data.cells[cid]["role"] == "block"]
-        if not block_cell_ids:
-            return inkex.errormsg("None of the selected layout cells are block cells. You can only place library blocks into Block grid cells.")
+        empty_selection = not selected_cell_ids
+        if empty_selection:
+            block_cell_ids = []
+        else:
+            # EXPLICIT selection may fill any cell except binding (borders,
+            # cornerstones, sashing, setting triangles are all fair game for
+            # pieced designs). Bulk fills without a selection stay
+            # blocks-only - see the empty_selection branch below.
+            block_cell_ids = [cid for cid in selected_cell_ids
+                              if quilt_data.cells[cid]["role"] != "binding"]
+            skipped = len(selected_cell_ids) - len(block_cell_ids)
+            if not block_cell_ids:
+                return inkex.errormsg("Only binding cells are selected - binding is a folded strip and cannot hold a pieced block.")
+            if skipped:
+                inkex.utils.debug(f"Skipped {skipped} binding cell(s); binding cannot hold a pieced block.")
 
         # Sizing and orientation parameters
         chosen = {"path": None}
@@ -73,9 +84,27 @@ class FillBlocksPlugin(inkex.Effect):
             "auto_align": self.options.auto_align,
             "rotation": self.options.rotation,
             "flip": self.options.flip,
+            "empty_target_mode": self.options.empty_target_mode,
         }
 
+
+
+        # If exactly one cell is selected and it already has a placed block, pre-load its settings
+        if len(block_cell_ids) == 1:
+            placed = quilt_data.cells[block_cell_ids[0]].get("placed_block")
+            if placed and placed.get("source"):
+                src = placed["source"]
+                p_path = src if os.path.isabs(src) else os.path.join(LIB_DIR, src)
+                if os.path.isfile(p_path):
+                    chosen["path"] = p_path
+                settings["sizing_mode"] = placed.get("sizing_mode", settings["sizing_mode"])
+                settings["rotation"] = placed.get("rotation", settings["rotation"])
+                settings["flip"] = placed.get("flip", settings["flip"])
+
         # 3. Check for manual/override file
+        # NOTE: never print() to stdout here - stdout is the SVG stream
+        # returned to Inkscape; stray text makes the document invalid and
+        # Inkscape silently discards the whole edit.
         fallback_file = (self.options.svg_file or "").strip()
         if fallback_file and os.path.isfile(fallback_file):
             chosen["path"] = fallback_file
@@ -91,45 +120,19 @@ class FillBlocksPlugin(inkex.Effect):
                 if not blocks:
                     return inkex.errormsg(f"The Block Library is empty under:\n  {LIB_DIR}")
                 
+                import quilttools_blockpicker as qpick
+
                 dialog = Gtk.Dialog(title="Quilt Tools Pattern - Fill Blocks from Library")
                 dialog.set_default_size(900, 600)
                 content = dialog.get_content_area()
                 content.set_spacing(6)
-                
-                # Search Bar
-                search = Gtk.SearchEntry()
-                search.set_placeholder_text("Search blocks...")
-                search.set_margin_top(8)
-                search.set_margin_start(10)
-                search.set_margin_end(10)
-                
-                # Left Catalog Scroller
-                scroller = Gtk.ScrolledWindow()
-                scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-                scroller.set_vexpand(True)
-                
-                flow = Gtk.FlowBox()
-                flow.set_valign(Gtk.Align.START)
-                flow.set_max_children_per_line(3)
-                flow.set_selection_mode(Gtk.SelectionMode.NONE)
-                flow.set_row_spacing(8)
-                flow.set_column_spacing(8)
-                for side in ("top", "bottom", "start", "end"):
-                    getattr(flow, f"set_margin_{side}")(10)
-                scroller.add(flow)
-                
-                empty = Gtk.Label(label="No blocks match search.")
-                empty.set_no_show_all(True)
-                
+
                 # Split columns
                 hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
                 content.pack_start(hbox, True, True, 0)
-                
+
                 left_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
                 hbox.pack_start(left_vbox, True, True, 0)
-                left_vbox.pack_start(search, False, False, 0)
-                left_vbox.pack_start(scroller, True, True, 0)
-                left_vbox.pack_start(empty, False, False, 4)
                 
                 right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
                 right_vbox.set_size_request(340, -1)
@@ -144,7 +147,15 @@ class FillBlocksPlugin(inkex.Effect):
                 sizing_combo = Gtk.ComboBoxText()
                 sizing_combo.append("stretch", "Stretch to fit")
                 sizing_combo.append("cover", "Proportional Crop (Cover)")
-                sizing_combo.set_active(0 if settings["sizing_mode"] == "stretch" else 1)
+                sizing_combo.append("tile_stretch", "Tile (stretch to fit even tiles)")
+                sizing_combo.append("tile_ratio", "Tile (keep ratio, crop ends)")
+                
+                active_idx = 0
+                for idx, mode in enumerate(["stretch", "cover", "tile_stretch", "tile_ratio"]):
+                    if settings["sizing_mode"] == mode:
+                        active_idx = idx
+                sizing_combo.set_active(active_idx)
+                
                 sizing_box.pack_start(sizing_lbl, False, False, 0)
                 sizing_box.pack_start(sizing_combo, True, True, 0)
                 right_vbox.pack_start(sizing_box, False, False, 0)
@@ -182,7 +193,20 @@ class FillBlocksPlugin(inkex.Effect):
                 flip_box.pack_start(flip_lbl, False, False, 0)
                 flip_box.pack_start(flip_combo, True, True, 0)
                 right_vbox.pack_start(flip_box, False, False, 0)
-                
+
+                # Target mode (which cells to fill when nothing is selected)
+                target_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                target_lbl = Gtk.Label(label="Target Blocks:")
+                target_combo = Gtk.ComboBoxText()
+                target_combo.append("all", "Fill ALL blocks (overwrite)")
+                target_combo.append("empty", "Fill EMPTY blocks only")
+                target_combo.set_active(
+                    1 if settings["empty_target_mode"] == "empty" else 0)
+                target_box.pack_start(target_lbl, False, False, 0)
+                target_box.pack_start(target_combo, True, True, 0)
+                if empty_selection:
+                    right_vbox.pack_start(target_box, False, False, 0)
+
                 # Preview Draw Area
                 preview_label = Gtk.Label(label="Live Preview:")
                 preview_label.set_halign(Gtk.Align.START)
@@ -194,57 +218,20 @@ class FillBlocksPlugin(inkex.Effect):
                 
                 # Library Data Cache
                 lib_bd_cache = {}
-                labels_by_child = {}
-                
-                def make_click(p):
-                    def _cb(_btn):
-                        chosen["path"] = p
-                        preview_area.queue_draw()
-                    return _cb
-                
-                def make_double_click(p):
-                    def _cb(_btn, event):
-                        if event.button == 1 and event.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
-                            chosen["path"] = p
-                            dialog.response(Gtk.ResponseType.OK)
-                            return True
-                        return False
-                    return _cb
-                
-                for label, full in blocks:
-                    btn = Gtk.Button()
-                    btn.set_relief(Gtk.ReliefStyle.NONE)
-                    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-                    try:
-                        pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(full, 120, 120, True)
-                        box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
-                    except Exception:
-                        pass
-                    lbl = Gtk.Label(label=label)
-                    lbl.set_line_wrap(True)
-                    lbl.set_max_width_chars(15)
-                    lbl.set_justify(Gtk.Justification.CENTER)
-                    box.pack_start(lbl, False, False, 0)
-                    btn.add(box)
-                    btn.set_tooltip_text(label)
-                    btn.connect("clicked", make_click(full))
-                    btn.connect("button-press-event", make_double_click(full))
-                    flow.add(btn)
-                    labels_by_child[btn.get_parent()] = label.lower()
-                    
-                def do_filter(child):
-                    q = search.get_text().strip().lower()
-                    if not q:
-                        return True
-                    return q in labels_by_child.get(child, "")
-                
-                flow.set_filter_func(do_filter)
-                
-                def on_search(_w):
-                    flow.invalidate_filter()
-                    any_visible = any(do_filter(c) for c in labels_by_child)
-                    empty.set_visible(not any_visible)
-                search.connect("search-changed", on_search)
+
+                def on_pick(p):
+                    chosen["path"] = p
+                    preview_area.queue_draw()
+
+                def on_activate(p):
+                    chosen["path"] = p
+                    dialog.response(Gtk.ResponseType.OK)
+
+                browser = qpick.build_block_browser(
+                    Gtk, GdkPixbuf, blocks, on_pick,
+                    on_activate=on_activate, Gdk=Gdk, thumb=120, columns=3)
+                left_vbox.pack_start(browser["widget"], True, True, 0)
+                search = browser["search"]
                 
                 def on_draw(widget, ctx):
                     w_a = widget.get_allocated_width()
@@ -253,7 +240,14 @@ class FillBlocksPlugin(inkex.Effect):
                     ctx.paint()
                     
                     # Draw target cell polygon outline
-                    poly = quilt_data.cells[block_cell_ids[0]]["polygon"]
+                    if block_cell_ids:
+                        target_cid = block_cell_ids[0]
+                    else:
+                        all_blocks = [cid for cid, info in quilt_data.cells.items() if info["role"] == "block"]
+                        if not all_blocks:
+                            return
+                        target_cid = all_blocks[0]
+                    poly = quilt_data.cells[target_cid]["polygon"]
                     xs = [p[0] for p in poly]
                     ys = [p[1] for p in poly]
                     min_x, max_x = min(xs), max(xs)
@@ -302,30 +296,31 @@ class FillBlocksPlugin(inkex.Effect):
                                 
                                 lib_regions = lib_bd.tree.leaf_regions()
                                 all_L_pts = [pt for r in lib_regions for pt in r.polygon]
-                                map_pt, _ = qplace.calculate_placement_transform(all_L_pts, poly, sm, rot, flp, aa)
+                                map_pt_list, _ = qplace.calculate_tiled_placement_transforms(all_L_pts, poly, sm, rot, flp, aa)
                                 
-                                # Draw sub-regions
+                                # Draw sub-regions for each tile
                                 ctx.set_line_width(1.0)
-                                for idx, r in enumerate(lib_regions):
-                                    r_poly = [map_pt(p) for p in r.polygon]
-                                    if len(r_poly) < 3:
-                                        continue
-                                    col = core.get_color_for_label(r.label, "piece", idx)
-                                    col_hex = col.lstrip("#")
-                                    r_v = int(col_hex[0:2], 16) / 255.0
-                                    g_v = int(col_hex[2:4], 16) / 255.0
-                                    b_v = int(col_hex[4:6], 16) / 255.0
-                                    
-                                    ctx.set_source_rgb(r_v, g_v, b_v)
-                                    sp = to_screen(r_poly[0])
-                                    ctx.move_to(sp[0], sp[1])
-                                    for pt in r_poly[1:]:
-                                        s_pt = to_screen(pt)
-                                        ctx.line_to(s_pt[0], s_pt[1])
-                                    ctx.close_path()
-                                    ctx.fill_preserve()
-                                    ctx.set_source_rgb(0.1, 0.1, 0.1)
-                                    ctx.stroke()
+                                for map_pt in map_pt_list:
+                                    for idx, r in enumerate(lib_regions):
+                                        r_poly = [map_pt(p) for p in r.polygon]
+                                        if len(r_poly) < 3:
+                                            continue
+                                        col = core.get_color_for_label(r.label, "piece", idx)
+                                        col_hex = col.lstrip("#")
+                                        r_v = int(col_hex[0:2], 16) / 255.0
+                                        g_v = int(col_hex[2:4], 16) / 255.0
+                                        b_v = int(col_hex[4:6], 16) / 255.0
+                                        
+                                        ctx.set_source_rgb(r_v, g_v, b_v)
+                                        sp = to_screen(r_poly[0])
+                                        ctx.move_to(sp[0], sp[1])
+                                        for pt in r_poly[1:]:
+                                            s_pt = to_screen(pt)
+                                            ctx.line_to(s_pt[0], s_pt[1])
+                                        ctx.close_path()
+                                        ctx.fill_preserve()
+                                        ctx.set_source_rgb(0.1, 0.1, 0.1)
+                                        ctx.stroke()
                         except Exception as ex:
                             ctx.set_source_rgb(0.9, 0.1, 0.1)
                             ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
@@ -344,9 +339,13 @@ class FillBlocksPlugin(inkex.Effect):
                 flip_combo.connect("changed", on_setting_changed)
                 
                 dialog.add_button("Browse files\u2026", 100)
-                dialog.add_button("Fill Selected Cells", Gtk.ResponseType.OK)
+                btn_label = "Fill Selected Cells" if selected_cell_ids else "Fill Blocks"
+                dialog.add_button(btn_label, Gtk.ResponseType.OK)
                 dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                dialog.set_modal(True)
+                dialog.set_keep_above(True)
                 dialog.show_all()
+                dialog.present()
                 search.grab_focus()
                 
                 while True:
@@ -379,14 +378,32 @@ class FillBlocksPlugin(inkex.Effect):
                         settings["auto_align"] = align_check.get_active()
                         settings["rotation"] = float(rot_combo.get_active_id() or 0.0)
                         settings["flip"] = flip_combo.get_active_id()
+                        settings["empty_target_mode"] = (
+                            target_combo.get_active_id() or
+                            settings["empty_target_mode"])
                         break
                     else:
                         chosen["path"] = None
                         break
                 dialog.destroy()
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
             except Exception as e:
                 # GTK failed or headless fallback
                 inkex.utils.debug(f"GTK picker skipped: {e}")
+                
+        # Resolve target block cell IDs if nothing was selected
+        if empty_selection and chosen["path"]:
+            target_mode = settings.get("empty_target_mode", self.options.empty_target_mode)
+            all_blocks = [cid for cid, info in quilt_data.cells.items() if info["role"] == "block"]
+            if target_mode == "empty":
+                block_cell_ids = [cid for cid in all_blocks if quilt_data.cells[cid]["placed_block"] is None]
+                if not block_cell_ids:
+                    return inkex.utils.debug("All quilt blocks are already filled. Nothing to do.")
+            else:
+                block_cell_ids = all_blocks
+                if not block_cell_ids:
+                    return inkex.errormsg("This quilt layout has no block cells to fill.")
                 
         # 4. Perform Placement
         import_path = chosen["path"]
@@ -432,6 +449,12 @@ class FillBlocksPlugin(inkex.Effect):
                 if child.tag not in (f"{{{core.SVG_NS}}}defs", f"{{{core.SVG_NS}}}metadata", f"{{{core.SVG_NS}}}desc", "{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview"):
                     g_lib.append(copy.deepcopy(child))
                     
+        # Ensure we have a defs element inside g_quilt for clip-paths (inherits layer transforms)
+        defs = g_quilt.find(f"{{{core.SVG_NS}}}defs")
+        if defs is None:
+            defs = etree.Element("{%s}defs" % core.SVG_NS)
+            g_quilt.insert(0, defs)
+
         # Apply transformation and insert block to each target cell
         rel_path = os.path.relpath(import_path, LIB_DIR) if import_path.startswith(LIB_DIR) else os.path.basename(import_path)
         
@@ -449,9 +472,19 @@ class FillBlocksPlugin(inkex.Effect):
                 if placed_el.get("id") == f"{cell_id}-placed":
                     g_cell.remove(placed_el)
                     
-            # 2. Compute placement matrix
+            # 2. Setup clip-path for this cell
+            clip_id = f"clip-{cell_id}"
+            clip_path_el = defs.find(f"{{{core.SVG_NS}}}clipPath[@id='{clip_id}']")
+            if clip_path_el is not None:
+                defs.remove(clip_path_el)
+                
+            clip_path_el = etree.SubElement(defs, "{%s}clipPath" % core.SVG_NS, id=clip_id, clipPathUnits="userSpaceOnUse")
             poly = quilt_data.cells[cell_id]["polygon"]
-            _, transform_matrix_str = qplace.calculate_placement_transform(
+            pts_str = " ".join(f"{pt[0]},{pt[1]}" for pt in poly)
+            etree.SubElement(clip_path_el, "{%s}polygon" % core.SVG_NS, points=pts_str)
+
+            # 3. Compute placement matrices (handles tiling)
+            _, matrix_str_list = qplace.calculate_tiled_placement_transforms(
                 all_L_pts,
                 poly,
                 sizing_mode=settings["sizing_mode"],
@@ -460,17 +493,25 @@ class FillBlocksPlugin(inkex.Effect):
                 auto_align=settings["auto_align"]
             )
             
-            # 3. Create content group and clone children
-            g_placed = etree.SubElement(g_cell, "{%s}g" % core.SVG_NS, id=f"{cell_id}-placed", attrib={
-                "transform": transform_matrix_str,
-                "class": "placed-block-content"
-            })
-            for child in g_lib:
-                if child.tag in (f"{{{core.SVG_NS}}}desc", f"{{{core.SVG_NS}}}title", f"{{{core.SVG_NS}}}metadata"):
-                    continue
-                g_placed.append(copy.deepcopy(child))
+            # 4. Create content groups for each tile and clone children.
+            # The clip polygon is in canvas coordinates, so the clip-path
+            # must sit on an UNTRANSFORMED outer group: putting it on the
+            # transformed group would scale/shift the clip region with the
+            # placement matrix, clipping the block down to a corner sliver.
+            for tile_idx, transform_matrix_str in enumerate(matrix_str_list):
+                g_placed = etree.SubElement(g_cell, "{%s}g" % core.SVG_NS, id=f"{cell_id}-placed-{tile_idx}", attrib={
+                    "class": "placed-block-content",
+                    "clip-path": f"url(#{clip_id})"
+                })
+                g_inner = etree.SubElement(g_placed, "{%s}g" % core.SVG_NS, attrib={
+                    "transform": transform_matrix_str,
+                })
+                for child in g_lib:
+                    if child.tag in (f"{{{core.SVG_NS}}}desc", f"{{{core.SVG_NS}}}title", f"{{{core.SVG_NS}}}metadata"):
+                        continue
+                    g_inner.append(copy.deepcopy(child))
                 
-            # 4. Update serialised registry state
+            # 5. Update serialised registry state
             quilt_data.cells[cell_id]["state"] = "placed"
             quilt_data.cells[cell_id]["placed_block"] = {
                 "source": rel_path,
@@ -485,8 +526,21 @@ class FillBlocksPlugin(inkex.Effect):
         desc_el = g_quilt.find(f"{{{core.SVG_NS}}}desc[@id='{qcore.QUILT_DATA_TAG_ID}']")
         if desc_el is not None:
             desc_el.text = quilt_data.to_json()
-            
-        inkex.utils.debug(f"Successfully filled {filled_count} cell(s) with '{os.path.basename(import_path)}'.")
+
+        if settings["sizing_mode"] == "stretch":
+            for cid in block_cell_ids:
+                poly = quilt_data.cells[cid]["polygon"]
+                xs = [p[0] for p in poly]
+                ys = [p[1] for p in poly]
+                w, h = max(xs) - min(xs), max(ys) - min(ys)
+                if min(w, h) > 0 and max(w, h) / min(w, h) > 2.5:
+                    inkex.utils.debug(
+                        "Tip: some filled cells are long strips - 'Stretch to "
+                        "fit' will distort the block; the Tile sizing modes "
+                        "usually look better in borders and sashing.")
+                    break
+
+
 
 if __name__ == "__main__":
     FillBlocksPlugin().run()

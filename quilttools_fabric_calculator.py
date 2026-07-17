@@ -6,11 +6,14 @@ from lxml import etree
 import quilttools_fpp_core as core
 import quilttools_fpp_fabric as fabric
 
+import quilttools_quilt_core as qcore
 import quilttools_theme as qtheme
 
 class FabricCalculatorPlugin(inkex.EffectExtension):
     def add_arguments(self, pars):
         pars.add_argument("--calc_mode", type=str, default="fpp")
+        pars.add_argument("--cutting_math", type=str, default="techniques")
+        pars.add_argument("--share_techniques", type=inkex.Boolean, default=True)
         pars.add_argument("--manual_input", type=str, default="")
         pars.add_argument("--usable_wof", type=float, default=41.0)
         pars.add_argument("--theme_override", type=str, default="")
@@ -23,46 +26,62 @@ class FabricCalculatorPlugin(inkex.EffectExtension):
         results = [] # list of (Role, Yardage, Notes)
         
         if self.options.calc_mode == "fpp":
-            try:
-                block_data = core.extract_block_data_from_svg_root(self.svg)
-                if not block_data:
-                    raise ValueError("No FPP block found.")
-                
-                finished_in = 10.0 # Default fallback
-                
-                # Scale geometry to inches
-                all_pts = [pt for r in block_data.tree.leaf_regions() for pt in r.polygon]
-                if all_pts:
-                    orig_w = max(p[0] for p in all_pts) - min(p[0] for p in all_pts)
-                    orig_h = max(p[1] for p in all_pts) - min(p[1] for p in all_pts)
-                    scale = finished_in / max(orig_w, orig_h) if max(orig_w, orig_h) > 0 else 1.0
-                else:
-                    scale = 1.0
+            g_quilt, quilt_data = qcore.find_quilt_group(self.svg)
+            if g_quilt is not None:
+                # 2.1 Whole Quilt Mode!
+                try:
+                    plan = fabric.calculate_quilt_fabric_requirements(
+                        quilt_data, g_quilt, self.options.usable_wof, self.options
+                    )
                     
-                color_mode = block_data.prefs.get("color_mode", "piece")
-                user_colors = block_data.prefs.get("custom_colors", {})
-                
-                pieces = []
-                for idx, r in enumerate(sorted(block_data.tree.leaf_regions(), key=lambda x: x.label)):
-                    color_hex = user_colors.get(str(r.id)) or user_colors.get(r.id)
-                    if not color_hex:
-                        color_hex = core.get_color_for_label(r.label, color_mode, idx)
+                    for color, res in sorted(plan["fabrics"].items()):
+                        total_in = res["total_length_in"]
+                        req = total_in / 36.0 # in yards
+                        suggested = res.get("suggested_purchase") or fabric.suggest_purchase(total_in, res.get("fq_total_in"))
+                        
+                        # Count total pieces
+                        total_pieces = 0
+                        for op in res["ops"]:
+                            if op["op"] in ("strip", "panel"):
+                                total_pieces += op.get("pieces", 0)
+                            elif op["op"] == "pieced_strip":
+                                total_pieces += sum(len(sub["labels"]) for sub in op.get("subcuts", []))
+                            elif op["op"] == "binding":
+                                total_pieces += 1
+                        
+                        note = f"For {total_pieces} pieces ({suggested})"
+                        warnings = res.get("warnings", [])
+                        if any("exceeds" in w.lower() for w in warnings):
+                            note += " (WARNING: exceeds WOF)"
+                        results.append((f"Fabric {color}", f"{req:.2f} yd", note))
+                except Exception as e:
+                    inkex.errormsg(f"Whole Quilt Mode failed: {e}")
+                    return
+            else:
+                # 2.2 Standard Single Block FPP Mode
+                try:
+                    block_data = core.extract_block_data_from_svg_root(self.svg)
+                    if not block_data:
+                        raise ValueError("No FPP block found in selection or layout.")
                     
-                    sc_poly = [(pt[0]*scale, pt[1]*scale) for pt in r.polygon]
-                    pieces.append((sc_poly, color_hex))
+                    finished_in = 10.0 # Default fallback
+                    pieces_dict, _ = fabric.pieces_from_block(block_data, finished_in)
+                    pieces = []
+                    for p in pieces_dict:
+                        pieces.append((p["polygon"], p["fabric"], p.get("meta", {})))
+                        
+                    estimates = fabric.fabric_estimate(pieces, usable_wof=self.options.usable_wof)
                     
-                estimates = fabric.fabric_estimate(pieces, usable_wof=self.options.usable_wof)
-                
-                for color, est in estimates.items():
-                    req = max(est["fixed_in"], est["free_in"]) / 36.0 # in yards
-                    note = f"For {est['pieces_count']} pieces"
-                    if est["exceeds_wof"]:
-                        note += " (WARNING: exceeds WOF)"
-                    results.append((f"Fabric {color}", f"{req:.2f} yd", note))
-                    
-            except Exception as e:
-                inkex.errormsg(f"FPP Mode failed: {e}")
-                return
+                    for color, est in sorted(estimates.items()):
+                        req = max(est["fixed_in"], est["free_in"]) / 36.0 # in yards
+                        note = f"For {est['pieces_count']} pieces"
+                        if est["exceeds_wof"]:
+                            note += " (WARNING: exceeds WOF)"
+                        results.append((f"Fabric {color}", f"{req:.2f} yd", note))
+                        
+                except Exception as e:
+                    inkex.errormsg(f"FPP Mode failed: {e}")
+                    return
                 
         else: # Manual Mode
             pieces = []

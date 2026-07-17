@@ -1,4 +1,16 @@
 {
   "theme": "childrens_moments",
-  "author_brand": "a"
+  "author_brand": "a",
+  "colour_randomiser": {
+    "scope": "quilt",
+    "mode": "full_random",
+    "palette_source": "current",
+    "gpl_file": "",
+    "rule": "analogous",
+    "anchor": "",
+    "tolerance": 15.0,
+    "block_variation": 0.05,
+    "locked_colors": "",
+    "seed": "quilt-seed"
+  }
 }

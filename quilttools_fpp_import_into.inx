@@ -35,10 +35,12 @@
     <option value="vertical">Vertical (up-down)</option>
   </param>
 
+  <param name="auto_label" type="bool" gui-text="Auto-label block after import">true</param>
+
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script>

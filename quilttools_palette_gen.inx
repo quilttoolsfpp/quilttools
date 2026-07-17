@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>01. Palette Generator (works anywhere)</name>
+  <id>org.quilttools.pattern.palette_gen</id>
+  <dependency type="executable" location="extensions">quilttools_palette_gen.py</dependency>
+
+  <param name="notebook" type="notebook">
+    <page name="rules_page" gui-text="1. Palette Settings">
+      <param name="n" type="int" min="1" max="100" gui-text="Number of Colors (N):">6</param>
+      <param name="rule" type="optiongroup" appearance="combo" gui-text="Harmony Rule:">
+        <option value="analogous">Analogous</option>
+        <option value="complementary">Complementary</option>
+        <option value="triad">Triad</option>
+        <option value="high_contrast">High Contrast (spread lightness)</option>
+        <option value="low_contrast">Low Contrast (hold lightness close)</option>
+      </param>
+      <param name="anchor_source" type="optiongroup" appearance="combo" gui-text="Anchor Colour:">
+        <option value="hex">Typed hex below (empty = random)</option>
+        <option value="picker">Picked below (colour wheel / sliders)</option>
+        <option value="random">Random (ignore both)</option>
+      </param>
+      <param name="anchor_pick" type="color" appearance="colorbutton" gui-text="Pick anchor colour:">0x5e8c61ff</param>
+      <param name="anchor" type="string" gui-text="...or type an anchor hex:"></param>
+      <param name="tolerance" type="float" min="0.0" max="360.0" precision="3" gui-text="Tolerance (Hue deg / Lightness fraction):">15.0</param>
+      <param name="seed" type="string" gui-text="Optional Seed (Empty for random):"></param>
+      <label>For hue rules (analogous, complementary, triad), tolerance is in degrees (0-360). For lightness rules (low_contrast), tolerance is a fraction of lightness (0.0-1.0, e.g. 0.05). If tolerance &gt; 1.0 it is scaled automatically.</label>
+    </page>
+
+    <page name="output_page" gui-text="2. Output Options">
+      <param name="export_gpl" type="bool" gui-text="Export as GIMP/Inkscape GPL Palette:">true</param>
+      <param name="palette_name" type="string" gui-text="Palette Name (for exported file):">Generated_Palette</param>
+      <param name="draw_swatches" type="bool" gui-text="Draw Swatches directly on Canvas:">true</param>
+      <label>Exported GPL files are saved to APPDATA/inkscape/palettes/ and can be loaded from the Inkscape color bar palette selection menu.</label>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Colour"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="extensions" interpreter="python">quilttools_palette_gen.py</command>
+  </script>
+</inkscape-extension>

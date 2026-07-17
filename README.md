@@ -1,56 +1,49 @@
-# Quilt Tools FPP for Inkscape
-**An advanced, open-source Foundation Paper Piecing (FPP) pattern design suite for Inkscape.**
+# Quilt Tools FPP — Inkscape Extension Suite
 
-Created by quilting enthusiast, this plugin suite bridges the gap between raw vector graphics and the physical constraints of quilt piecing.
+Quilt Tools FPP is a vector-based extension suite for **Inkscape** designed for block drafting, whole-quilt layout design, color palette management, and pattern sheet generation. It supports Foundation Paper Piecing (FPP), Traditional Template Piecing, and Applique block kinds.
 
-Unlike standard drawing tools, Quilt Tools FPP understands how fabric is actually sewn together. It features a custom "Virtual Sewing Machine" geometric engine that mathematically prevents Y-seams, dynamically generates true-offset seam allowances, and automatically calculates structurally perfect sewing sequences for complex blocks (like Log Cabins and spiraling stars).
+---
 
-## ✨ Features
-Currently, the extension is split into four modular tools located under **Extensions > Quilt Tools**:
+## 🚀 Features
 
-* **1. New Block:** Generate perfectly scaled base grids. Includes a non-destructive scaling engine to import background images, resize them (Fit, Crop, Stretch), and automatically clip them to your block dimensions for easy tracing.
-* **2. Guillotine Cut:** A strictly FPP-compliant cutting tool. Draw lines across shapes and cleanly slice them using infinite-ray projection math. Made a mistake? Use the **Heal** action to mathematically weld two pieces back together.
-* **3. Labels & Guides:** The brain of the operation.
-    * **Fully Auto-Label:** Uses an "Inside-Out" heuristic to automatically find the center of your block and perfectly sequence it outward without Y-seams.
-    * **Define Section:** Manually group pieces into Sections (e.g., Section B). The tool runs a geometric validation check to ensure your selection is actually sewable before labeling it.
-    * **Convert to Guides:** Instantly transform your finished block into blue Inkscape guide paths for layout and template generation.
-* **4. Display & SA:** A smart-block management panel. Toggle 1/4" true-geometric seam allowances (with automated miter-limits for sharp points) and swap between Rainbow Piece coloring or Section-based coloring.
+### 1. Block Drafting (`Quilt Tools Block`)
+* **Interactive Slicing**: Slice block polygons using straight-line **Guillotine Cuts** or curved **Shape Cuts**.
+* **Auto-Labelling**: Re-label sewing sequences and sections automatically, ensuring proper sew-order.
+* **Separability Policy & Y-Seams**: Automatically detects and blocks Y-seam anomalies on straight-line cuts. Permits them on shape cuts under a bypass option, automatically tagging unseparable pieces with `technique="y_seam"`.
+* **SVG Block Importer**: Load external SVG vector designs directly into standard FPP blocks with recursive geometry parsing, outlines extraction, and auto sew-ordering.
 
-## 📥 Installation
+### 2. Colour & Palette Management (`Quilt Tools Colour`)
+* **Unified Colour Menu**: Manage colors across blocks and quilts using a central menu.
+* **Fabric Palette**: Sample colors directly from canvas selections or traced images, save custom block palettes, and export `.gpl` palettes.
+* **Palette Generator**: Choose a primary color and automatically generate harmonious secondary values (monochrome, complementary, triadic, etc.) using OKLCh color models.
+* **Colour Randomiser**: Rapidly randomize layout colors with keybindable rerolls to test palette options instantly.
 
-1. Download or clone this repository. You should have 9 files:
-   * `quilttools_fpp_core.py` (The shared mathematical library)
-   * `quilttools_fpp_new_block.inx` / `.py`
-   * `quilttools_fpp_cut.inx` / `.py`
-   * `quilttools_fpp_labels.inx` / `.py`
-   * `quilttools_fpp_display.inx` / `.py`
-2. Open Inkscape.
-3. Go to **Edit > Preferences > System**.
-4. Find the **User extensions** folder path and click the "Open" icon next to it.
-5. Copy all 9 files directly into that folder.
-6. Restart Inkscape. The tools will now appear under **Extensions > Quilt Tools**.
+### 3. Layout Grid & PDF Generation (`Quilt Tools Pattern`)
+* **Quilt Layouts**: Generate grids with custom rows, columns, sashing, cornerstones, nested borders, and bindings.
+* **Block Placement**: Tile and fit library blocks onto layout cells using rotation, flipping, and scaling.
+* **Technique-Aware Fabric Planning**: Generate exact fabric templates, paired HST cutting plans, stitch-and-flip corner restorations, sashing strips, and binding calculations.
+* **Applique Layering**: Supports overlapping applique templates, automatically unioning background pieces under applique layers so fabrics overlap without gaps.
+* **Scaffolding & PDF Export**: Output ready-to-print PDF pattern sheets complete with assembly maps, cutting instructions, and template pages.
 
-## 🛠️ How to Use
+---
 
-### Step 1: Start a Block
-Go to **Extensions > Quilt Tools > 1. New Block**. Define your block size in inches. If you want to trace an image, import your photo into Inkscape, select it, and choose "Crop to fit" in the extension menu. The tool will generate your block and seamlessly mask your image inside it.
+## 🛠️ Installation
 
-### Step 2: Draft your Pattern
-Use the Inkscape Pen/Bezier tool to draw lines across your block where you want your seams to be.
-Select the line(s), then go to **Extensions > Quilt Tools > 2. Guillotine Cut** and hit Apply. The block will automatically shatter along those lines.
-* *Note: To heal a cut, select exactly two adjacent pieces, change the Action to "Heal", and hit Apply.*
+1. Copy all `.py` and `.inx` files (and the `BlockLibrary`, `FabricLibrary`, `LayoutLibrary`, and `themes` folders) into your Inkscape user extensions directory:
+   * **Windows**: `%APPDATA%\inkscape\extensions`
+   * **macOS/Linux**: `~/.config/inkscape/extensions`
+2. Restart Inkscape. The tools will appear under the `Extensions` menu in three submenus:
+   * **Quilt Tools Block**
+   * **Quilt Tools Colour**
+   * **Quilt Tools Pattern**
 
-### Step 3: Sequence and Label
-Go to **Extensions > Quilt Tools > 3. Labels & Guides**.
-* Choose **Fully Auto-Label** to let the algorithm mathematically sort your pieces into printable FPP sections (A1, A2, B1, B2, etc.).
-* To manually group a section, select the pieces you want, choose **Define Section from Selection**, and hit Apply. The tool will check for Y-seams and re-alphabetize the board around your choices.
+---
 
-### Step 4: Appearance
-Go to **Extensions > Quilt Tools > 4. Display & SA**. Here you can turn your 1/4" Seam Allowances on or off, and change the block colors to help you visualize your sewing sections. Hit Apply, and the block will instantly redraw to match your preferences.
+## 🧪 Developer Testing
 
-## 📄 License & Reuse
-This project is open-source and licensed under the **GNU General Public License v3.0 (GPLv3)**.
+The suite is backed by an automated unit test suite. Run tests using Inkscape's bundled Python environment:
 
-We strongly believe in keeping tools accessible for makers and creators. You are completely free to use this extension to design commercial quilt patterns, modify the code for your own workflow, and share it. Our only requirement is that if you alter and distribute this code, your version must also remain open-source and free for the community.
-
-Happy quilting! 🧵✨
+```powershell
+# Set Inkscape extensions path to PYTHONPATH and run unit tests
+$env:PYTHONPATH="C:\Program Files\Inkscape\share\inkscape\extensions"; & "C:\Program Files\Inkscape\bin\python.exe" -m unittest discover
+```

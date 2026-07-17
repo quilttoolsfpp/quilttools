@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>08. Pattern Template Scaffold</name>
+    <name>06. Pattern Template Scaffold</name>
     <id>org.quilttools.fpp.pattern_template</id>
     
     <param name="pattern_title" type="string" gui-text="Pattern Title:">My New Quilt</param>

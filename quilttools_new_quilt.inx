@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>02. New Quilt</name>
+  <name>01. New Quilt</name>
   <id>org.quilttools.pattern.new_quilt</id>
   <dependency type="executable" location="extensions">quilttools_new_quilt.py</dependency>
 
   <param name="notebook" type="notebook">
     <page name="grid_page" gui-text="1. Grid &amp; Blocks">
       <param name="quilt_name" type="string" gui-text="Quilt Title:">My New Quilt</param>
+      <param name="use_picker" type="bool" gui-text="Select layout from Library/Presets:">false</param>
       <param name="setting" type="optiongroup" appearance="combo" gui-text="Quilt Setting:">
         <option value="straight">Straight Grid</option>
         <option value="on-point">On-Point (Diamond)</option>
@@ -22,8 +23,23 @@
       <separator/>
       <label appearance="header">Borders (inches)</label>
       <param name="border_1_in" type="float" min="0.0" max="50.0" precision="3" gui-text="Border 1 Width:">0.0</param>
+      <param name="border_1_style" type="optiongroup" appearance="combo" gui-text="Border 1 Style:">
+        <option value="long_h">Horizontal First</option>
+        <option value="long_v">Vertical First</option>
+        <option value="cornerstone">Cornerstones</option>
+      </param>
       <param name="border_2_in" type="float" min="0.0" max="50.0" precision="3" gui-text="Border 2 Width:">0.0</param>
+      <param name="border_2_style" type="optiongroup" appearance="combo" gui-text="Border 2 Style:">
+        <option value="long_h">Horizontal First</option>
+        <option value="long_v">Vertical First</option>
+        <option value="cornerstone">Cornerstones</option>
+      </param>
       <param name="border_3_in" type="float" min="0.0" max="50.0" precision="3" gui-text="Border 3 Width:">0.0</param>
+      <param name="border_3_style" type="optiongroup" appearance="combo" gui-text="Border 3 Style:">
+        <option value="long_h">Horizontal First</option>
+        <option value="long_v">Vertical First</option>
+        <option value="cornerstone">Cornerstones</option>
+      </param>
       <separator/>
       <param name="binding_w_in" type="float" min="0.0" max="5.0" precision="3" gui-text="Binding Width (inches):">0.25</param>
     </page>

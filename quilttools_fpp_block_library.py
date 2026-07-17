@@ -170,12 +170,7 @@ class BlockLibraryPlugin(inkex.Effect):
         if self.options.resize_page:
             self._set_page(w_px, h_px)
 
-        n = len(new_bd.tree.leaf_regions())
-        inkex.utils.debug(
-            f'Loaded "{os.path.basename(path)}" '
-            f'({w_px / core.PX_PER_INCH:.2f}" x {h_px / core.PX_PER_INCH:.2f}", '
-            f"{n} pieces; {note}). Your previous block was replaced."
-        )
+        pass
 
     # ------------------------------------------------------------------
     # LOAD - in-Inkscape visual thumbnail picker (GTK) with search
@@ -206,87 +201,29 @@ class BlockLibraryPlugin(inkex.Effect):
 
         chosen = {"path": None}
         try:
+            import quilttools_blockpicker as qpick
+
             dialog = Gtk.Dialog(title="Quilt Tools - Block Library")
             dialog.set_default_size(760, 600)
             content = dialog.get_content_area()
             content.set_spacing(6)
 
-            # --- search box ---
-            search = Gtk.SearchEntry()
-            search.set_placeholder_text("Search blocks by name or category...")
-            search.set_margin_top(8)
-            search.set_margin_start(10)
-            search.set_margin_end(10)
-            content.pack_start(search, False, False, 0)
+            def on_pick(p):
+                chosen["path"] = p
+                dialog.response(Gtk.ResponseType.OK)
 
-            scroller = Gtk.ScrolledWindow()
-            scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            scroller.set_vexpand(True)
-            content.pack_start(scroller, True, True, 0)
-
-            flow = Gtk.FlowBox()
-            flow.set_valign(Gtk.Align.START)
-            flow.set_max_children_per_line(4)
-            flow.set_selection_mode(Gtk.SelectionMode.NONE)
-            flow.set_row_spacing(8)
-            flow.set_column_spacing(8)
-            for side in ("top", "bottom", "start", "end"):
-                getattr(flow, f"set_margin_{side}")(10)
-            scroller.add(flow)
-
-            # An empty-state label shown when a search matches nothing.
-            empty = Gtk.Label(label="No blocks match your search.")
-            empty.set_no_show_all(True)
-            content.pack_start(empty, False, False, 4)
-
-            labels_by_child = {}
-
-            def make_click(p):
-                def _cb(_btn):
-                    chosen["path"] = p
-                    dialog.response(Gtk.ResponseType.OK)
-                return _cb
-
-            for label, full in blocks:
-                btn = Gtk.Button()
-                btn.set_relief(Gtk.ReliefStyle.NONE)
-                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-                try:
-                    pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(full, 150, 150, True)
-                    box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
-                except Exception:
-                    pass
-                lbl = Gtk.Label(label=label)
-                lbl.set_line_wrap(True)
-                lbl.set_max_width_chars(18)
-                lbl.set_justify(Gtk.Justification.CENTER)
-                box.pack_start(lbl, False, False, 0)
-                btn.add(box)
-                btn.set_tooltip_text(label)
-                btn.connect("clicked", make_click(full))
-                flow.add(btn)
-                labels_by_child[btn.get_parent()] = label.lower()
-
-            def do_filter(child):
-                q = search.get_text().strip().lower()
-                if not q:
-                    return True
-                return q in labels_by_child.get(child, "")
-
-            flow.set_filter_func(do_filter)
-
-            def on_search(_w):
-                flow.invalidate_filter()
-                any_visible = any(
-                    do_filter(c) for c in labels_by_child
-                )
-                empty.set_visible(not any_visible)
-
-            search.connect("search-changed", on_search)
+            browser = qpick.build_block_browser(
+                Gtk, GdkPixbuf, blocks, on_pick, thumb=150, columns=4,
+                label_chars=18)
+            content.pack_start(browser["widget"], True, True, 0)
+            search = browser["search"]
 
             dialog.add_button("Browse files\u2026", 100)
             dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            dialog.set_modal(True)
+            dialog.set_keep_above(True)
             dialog.show_all()
+            dialog.present()
             search.grab_focus()
 
             while True:
@@ -316,6 +253,8 @@ class BlockLibraryPlugin(inkex.Effect):
                     continue
                 break
             dialog.destroy()
+            while Gtk.events_pending():
+                Gtk.main_iteration()
         except Exception as e:
             return self._catalogue(
                 note=f"(Thumbnail window error: {e}. Opened the browser "
@@ -389,16 +328,7 @@ class BlockLibraryPlugin(inkex.Effect):
         except Exception:
             pass
 
-        n = len(save_bd.tree.leaf_regions())
-        b = core.block_bounds(save_bd)
-        w_in = (b[2] - b[0]) / core.PX_PER_INCH if b else 0
-        h_in = (b[3] - b[1]) / core.PX_PER_INCH if b else 0
-        inkex.utils.debug(
-            f'Saved "{parts[-1]}" ({w_in:.2f}" x {h_in:.2f}", {n} pieces) to:\n'
-            f"  {out_path}\n\n"
-            "It will appear in the thumbnail picker and the visual library "
-            "straight away."
-        )
+        pass
 
     # ------------------------------------------------------------------
     # VISUAL CATALOGUE (browser) - searchable

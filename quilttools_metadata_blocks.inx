@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>07. Text &amp; Metadata Formatter</name>
+    <name>05. Text &amp; Metadata Formatter</name>
     <id>org.quilttools.fpp.metadata_blocks</id>
     
     <param name="block_text" type="string" gui-text="Text Content:"></param>

@@ -7,6 +7,7 @@ from lxml import etree
 
 import quilttools_fpp_core as core
 import quilttools_fpp_fabric
+import quilttools_cutplan
 import quilttools_nesting as nesting
 
 # EXPORT STYLE CONFIGURATION
@@ -177,9 +178,291 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--finished_size_in", type=float, default=12.0)
         pars.add_argument("--finished_sizes", type=str, default="")
         pars.add_argument("--template_copies", type=int, default=1)
+        pars.add_argument("--oversize_batch", type=inkex.Boolean, default=True)
+        pars.add_argument("--cutting_math", type=str, default="techniques")
+        pars.add_argument("--template_dedupe", type=str, default="all")
+        pars.add_argument("--hst_templates", type=inkex.Boolean, default=True)
+        pars.add_argument("--squares_cutting_list_only", type=inkex.Boolean, default=False)
         pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
         pars.add_argument("--notebook", type=str, default="")
         pars.add_argument("--theme_override", type=str, default="")
+
+        # Unique page-specific parameters to avoid collisions
+        pars.add_argument("--finished_size_in_fpp", type=float, default=0.0)
+        pars.add_argument("--finished_sizes_fpp", type=str, default="")
+        pars.add_argument("--template_copies_fpp", type=int, default=1)
+        
+        pars.add_argument("--finished_size_in_temp", type=float, default=0.0)
+        pars.add_argument("--finished_sizes_temp", type=str, default="")
+        pars.add_argument("--template_copies_temp", type=int, default=1)
+        pars.add_argument("--template_dedupe_temp", type=str, default="all")
+        pars.add_argument("--squares_cutting_list_only_temp", type=inkex.Boolean, default=False)
+        
+        pars.add_argument("--finished_size_in_mixed", type=float, default=0.0)
+        pars.add_argument("--finished_sizes_mixed", type=str, default="")
+        pars.add_argument("--template_copies_mixed", type=int, default=1)
+        pars.add_argument("--template_dedupe_mixed", type=str, default="all")
+        pars.add_argument("--squares_cutting_list_only_mixed", type=inkex.Boolean, default=False)
+        pars.add_argument("--wof_draw_scale_pct", type=int, default=75)
+
+    def _show_gtk_setup_dialog(self, block_data):
+        try:
+            import gi
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk
+        except Exception:
+            return True
+
+        dialog = Gtk.Dialog(title="Quilt Tools - Export Setup", transient_for=None)
+        dialog.set_default_size(520, 520)
+        dialog.set_modal(True)
+        dialog.set_keep_above(True)
+        content = dialog.get_content_area()
+        content.set_spacing(8)
+
+        # Header
+        hdr = Gtk.Label()
+        hdr.set_markup("<span size='large' weight='bold'>Finalize Export Settings</span>")
+        hdr.set_margin_top(10)
+        hdr.set_margin_bottom(5)
+        content.pack_start(hdr, False, False, 0)
+
+        notebook = Gtk.Notebook()
+        notebook.set_margin_start(5)
+        notebook.set_margin_end(5)
+        content.pack_start(notebook, True, True, 0)
+
+        # PAGE 1: Credits & Page Features
+        grid1 = Gtk.Grid()
+        grid1.set_column_spacing(10)
+        grid1.set_row_spacing(8)
+        grid1.set_margin_start(15)
+        grid1.set_margin_end(15)
+        grid1.set_margin_top(15)
+        grid1.set_margin_bottom(15)
+
+        # Block Name
+        lbl_bn = Gtk.Label(label="Block / Pattern Name:")
+        lbl_bn.set_halign(Gtk.Align.START)
+        grid1.attach(lbl_bn, 0, 0, 1, 1)
+        entry_block_name = Gtk.Entry()
+        entry_block_name.set_text(self.options.block_name or "")
+        entry_block_name.set_hexpand(True)
+        grid1.attach(entry_block_name, 1, 0, 1, 1)
+
+        # Designer Name
+        lbl_dn = Gtk.Label(label="Designer Name / Credit:")
+        lbl_dn.set_halign(Gtk.Align.START)
+        grid1.attach(lbl_dn, 0, 1, 1, 1)
+        entry_designer_name = Gtk.Entry()
+        entry_designer_name.set_text(self.options.designer_name or "")
+        entry_designer_name.set_hexpand(True)
+        grid1.attach(entry_designer_name, 1, 1, 1, 1)
+
+        # Copyright Notice
+        lbl_cp = Gtk.Label(label="Copyright Notice:")
+        lbl_cp.set_halign(Gtk.Align.START)
+        grid1.attach(lbl_cp, 0, 2, 1, 1)
+        entry_copyright = Gtk.Entry()
+        entry_copyright.set_text(self.options.copyright_notice or "")
+        entry_copyright.set_hexpand(True)
+        grid1.attach(entry_copyright, 1, 2, 1, 1)
+
+        # Width of Fabric (WOF)
+        lbl_wof = Gtk.Label(label="Width of Fabric (WOF) (in):")
+        lbl_wof.set_halign(Gtk.Align.START)
+        grid1.attach(lbl_wof, 0, 3, 1, 1)
+        adj_wof = Gtk.Adjustment(value=self.options.wof_in, lower=20.0, upper=60.0, step_increment=0.5, page_increment=5.0, page_size=0.0)
+        spin_wof = Gtk.SpinButton(adjustment=adj_wof, climb_rate=0.5, digits=1)
+        grid1.attach(spin_wof, 1, 3, 1, 1)
+
+        # Checkboxes for layout details
+        chk_preview = Gtk.CheckButton(label="Include Cover Page (Page 1 Title/Summary & Hero)")
+        chk_preview.set_active(self.options.include_preview)
+        grid1.attach(chk_preview, 0, 4, 2, 1)
+
+        chk_align_img = Gtk.CheckButton(label="Include Section Map Page (Page 2)")
+        chk_align_img.set_active(self.options.separate_section_alignment_image)
+        grid1.attach(chk_align_img, 0, 5, 2, 1)
+
+        chk_fabric_est = Gtk.CheckButton(label="Include Fabric Requirements Page")
+        chk_fabric_est.set_active(self.options.include_fabric_estimation)
+        grid1.attach(chk_fabric_est, 0, 6, 2, 1)
+
+        chk_visualize_fab = Gtk.CheckButton(label="Draw Fabric Cutting Layout Map on Canvas")
+        chk_visualize_fab.set_active(self.options.visualize_fabric_layout)
+        grid1.attach(chk_visualize_fab, 0, 7, 2, 1)
+
+        chk_colouring = Gtk.CheckButton(label="Include Blank Colouring Outline Page at end")
+        chk_colouring.set_active(self.options.include_colouring_page)
+        grid1.attach(chk_colouring, 0, 8, 2, 1)
+
+        chk_sec_labels = Gtk.CheckButton(label="Show section header labels (e.g. 'Section A')")
+        chk_sec_labels.set_active(self.options.show_section_labels)
+        grid1.attach(chk_sec_labels, 0, 9, 2, 1)
+
+        notebook.append_page(grid1, Gtk.Label(label="Credits & Page Features"))
+
+        # PAGE 2: Page Setup & Margins
+        grid2 = Gtk.Grid()
+        grid2.set_column_spacing(10)
+        grid2.set_row_spacing(8)
+        grid2.set_margin_start(15)
+        grid2.set_margin_end(15)
+        grid2.set_margin_top(15)
+        grid2.set_margin_bottom(15)
+
+        # Paper Size
+        lbl_ps = Gtk.Label(label="Paper Size:")
+        lbl_ps.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_ps, 0, 0, 1, 1)
+        combo_page_size = Gtk.ComboBoxText()
+        combo_page_size.append("letter", "US Letter (8.5 x 11 in)")
+        combo_page_size.append("a4", "A4 (8.27 x 11.69 in)")
+        combo_page_size.append("a3", "A3 (11.69 x 16.54 in)")
+        combo_page_size.set_active_id(self.options.page_size or "letter")
+        grid2.attach(combo_page_size, 1, 0, 1, 1)
+
+        # Orientation
+        lbl_or = Gtk.Label(label="Orientation:")
+        lbl_or.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_or, 0, 1, 1, 1)
+        combo_orient = Gtk.ComboBoxText()
+        combo_orient.append("portrait", "Portrait")
+        combo_orient.append("landscape", "Landscape")
+        combo_orient.set_active_id(self.options.orientation or "portrait")
+        grid2.attach(combo_orient, 1, 1, 1, 1)
+
+        # Page Margin
+        lbl_mg = Gtk.Label(label="Page Margin (inches):")
+        lbl_mg.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_mg, 0, 2, 1, 1)
+        adj_margin = Gtk.Adjustment(value=self.options.margin_in, lower=0.0, upper=2.0, step_increment=0.05, page_increment=0.2, page_size=0.0)
+        spin_margin = Gtk.SpinButton(adjustment=adj_margin, climb_rate=0.05, digits=2)
+        grid2.attach(spin_margin, 1, 2, 1, 1)
+
+        # Seam Allowance
+        lbl_sa = Gtk.Label(label="Seam Allowance Size (inches):")
+        lbl_sa.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_sa, 0, 3, 1, 1)
+        adj_sa = Gtk.Adjustment(value=self.options.sa_in, lower=0.125, upper=1.0, step_increment=0.0625, page_increment=0.125, page_size=0.0)
+        spin_sa = Gtk.SpinButton(adjustment=adj_sa, climb_rate=0.01, digits=3)
+        grid2.attach(spin_sa, 1, 3, 1, 1)
+
+        # Min Spacing
+        lbl_sp = Gtk.Label(label="Min Spacing between pieces (in):")
+        lbl_sp.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_sp, 0, 4, 1, 1)
+        adj_spacing = Gtk.Adjustment(value=self.options.spacing_in, lower=0.0, upper=2.0, step_increment=0.05, page_increment=0.2, page_size=0.0)
+        spin_spacing = Gtk.SpinButton(adjustment=adj_spacing, climb_rate=0.05, digits=2)
+        grid2.attach(spin_spacing, 1, 4, 1, 1)
+
+        # Color Fill Mode
+        lbl_cm = Gtk.Label(label="Template Fabric Color Fill:")
+        lbl_cm.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_cm, 0, 5, 1, 1)
+        combo_color_mode = Gtk.ComboBoxText()
+        combo_color_mode.append("none", "White (Line-Art only)")
+        combo_color_mode.append("tag", "Color Swatch (Minimal ink)")
+        combo_color_mode.append("full", "Full Color Fill (Ink-heavy)")
+        combo_color_mode.set_active_id(self.options.template_color_mode or "none")
+        grid2.attach(combo_color_mode, 1, 5, 1, 1)
+
+        # Mirror Templates
+        chk_mirror_temp = Gtk.CheckButton(label="Mirror templates on Pages 2+ (Recommended for FPP)")
+        chk_mirror_temp.set_active(self.options.mirror_templates)
+        grid2.attach(chk_mirror_temp, 0, 6, 2, 1)
+
+        # Mirror Preview
+        chk_mirror_prev = Gtk.CheckButton(label="Mirror Page 1 Block Preview (Usually false)")
+        chk_mirror_prev.set_active(self.options.mirror_preview)
+        grid2.attach(chk_mirror_prev, 0, 7, 2, 1)
+
+        # WOF draw scale pct
+        lbl_wd = Gtk.Label(label="WOF Map Width on Page:")
+        lbl_wd.set_halign(Gtk.Align.START)
+        grid2.attach(lbl_wd, 0, 8, 1, 1)
+        combo_wof_scale = Gtk.ComboBoxText()
+        combo_wof_scale.append("50", "50% of available page width")
+        combo_wof_scale.append("75", "75% of available page width")
+        combo_wof_scale.append("100", "100% of available page width")
+        combo_wof_scale.set_active_id(str(self.options.wof_draw_scale_pct or "75"))
+        grid2.attach(combo_wof_scale, 1, 8, 1, 1)
+
+        notebook.append_page(grid2, Gtk.Label(label="Page Setup & Styling"))
+
+        # Buttons
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Export Pattern", Gtk.ResponseType.OK)
+
+        dialog.set_modal(True)
+        dialog.set_keep_above(True)
+        dialog.show_all()
+        dialog.present()
+
+        response = dialog.run()
+
+        success = False
+        if response == Gtk.ResponseType.OK:
+            self.options.block_name = entry_block_name.get_text().strip()
+            self.options.designer_name = entry_designer_name.get_text().strip()
+            self.options.copyright_notice = entry_copyright.get_text().strip()
+            self.options.wof_in = spin_wof.get_value()
+            
+            self.options.include_preview = chk_preview.get_active()
+            self.options.separate_section_alignment_image = chk_align_img.get_active()
+            self.options.include_fabric_estimation = chk_fabric_est.get_active()
+            self.options.visualize_fabric_layout = chk_visualize_fab.get_active()
+            self.options.include_colouring_page = chk_colouring.get_active()
+            self.options.show_section_labels = chk_sec_labels.get_active()
+            
+            self.options.page_size = combo_page_size.get_active_id() or "letter"
+            self.options.orientation = combo_orient.get_active_id() or "portrait"
+            self.options.margin_in = spin_margin.get_value()
+            self.options.sa_in = spin_sa.get_value()
+            self.options.spacing_in = spin_spacing.get_value()
+            self.options.template_color_mode = combo_color_mode.get_active_id() or "none"
+            
+            self.options.mirror_templates = chk_mirror_temp.get_active()
+            self.options.mirror_preview = chk_mirror_prev.get_active()
+            
+            scale_id = combo_wof_scale.get_active_id() or "75"
+            self.options.wof_draw_scale_pct = int(scale_id)
+            success = True
+
+        dialog.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        return success
+
+    def _show_lint_report_gui(self, lint_report):
+        has_warnings = any("[!]" in line or "WARNING" in line or "CRITICAL" in line for line in lint_report)
+        if not has_warnings:
+            return
+
+        try:
+            import gi
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk
+            
+            msg = "\n".join(lint_report)
+            
+            dialog = Gtk.MessageDialog(
+                transient_for=None,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text="FPP Pattern Validation Report"
+            )
+            dialog.format_secondary_text(msg)
+            dialog.set_keep_above(True)
+            dialog.run()
+            dialog.destroy()
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+        except Exception:
+            inkex.errormsg("FPP Pattern Validation Warning:\n" + "\n".join(lint_report))
 
     def effect(self):
         import quilttools_theme as qtheme
@@ -208,6 +491,34 @@ class ExportPlugin(inkex.Effect):
             lib_name = block_data.prefs.get("block_library_name")
             if lib_name and (not self.options.block_name or self.options.block_name == "My Quilt Block"):
                 self.options.block_name = lib_name
+
+        # Resolve notebook params to master values
+        tab = (self.options.notebook or "").strip()
+        if tab == "fpp_tab":
+            self.options.export_type = "fpp"
+            self.options.finished_size_in = self.options.finished_size_in_fpp
+            self.options.finished_sizes = self.options.finished_sizes_fpp
+            self.options.template_copies = self.options.template_copies_fpp
+        elif tab == "template_tab":
+            self.options.export_type = "template"
+            self.options.cutting_math = "templates_only"
+            self.options.finished_size_in = self.options.finished_size_in_temp
+            self.options.finished_sizes = self.options.finished_sizes_temp
+            self.options.template_copies = self.options.template_copies_temp
+            self.options.template_dedupe = self.options.template_dedupe_temp
+            self.options.squares_cutting_list_only = self.options.squares_cutting_list_only_temp
+        elif tab == "mixed_tab":
+            self.options.export_type = "template"
+            self.options.cutting_math = "techniques"
+            self.options.finished_size_in = self.options.finished_size_in_mixed
+            self.options.finished_sizes = self.options.finished_sizes_mixed
+            self.options.template_copies = self.options.template_copies_mixed
+            self.options.template_dedupe = self.options.template_dedupe_mixed
+            self.options.squares_cutting_list_only = self.options.squares_cutting_list_only_mixed
+
+        # Show secondary GTK dialog setup screen
+        if not self._show_gtk_setup_dialog(block_data):
+            return
 
         if self.options.action == "step1":
             self._generate_open_canvas()
@@ -305,27 +616,143 @@ class ExportPlugin(inkex.Effect):
             if desc is None:
                 desc = etree.SubElement(g, "{%s}desc" % core.SVG_NS, id=core.FPP_DATA_TAG_ID)
             desc.text = block_data.to_json()
-            inkex.utils.debug("Color changes detected on canvas have been automatically saved to block metadata.")
+            pass
 
         valid_sections = {}
         bad_labels = []
-        for r in tree.leaf_regions():
-            if self.options.export_type == "template":
-                # In template mode, each piece is its own section
-                valid_sections[r.label] = [(1, r)]
+        # Template dedupe: one printed template per unique SHAPE, labelled
+        # "cut N". Colours are combined: a template covering more than one
+        # fabric prints uncoloured (fabric placement lives on the layout
+        # page). Maps: rep label -> all labels / rep labels with mixed fabric.
+        self._template_dedupe = {}
+        self._template_multicolor = set()
+        # Hybrid export: sections opted into 'Always FPP' render as FPP
+        # foundation section templates inside a template export.
+        self._fpp_prefixes = set()
+        if self.options.export_type == "template":
+            self._fpp_prefixes = {
+                str(p).upper()
+                for p in (block_data.prefs.get("fpp_sections") or [])}
+
+        def _prefix_of(label):
+            m = re.match(r"^([A-Za-z]+)", label)
+            return m.group(1).upper() if m else ""
+
+        # Optional: squares/rectangles live in the cutting list only.
+        skip_squares = (self.options.export_type == "template"
+                        and getattr(self.options,
+                                    "squares_cutting_list_only", False))
+        use_tech_math = (self.options.export_type == "template"
+                         and getattr(self.options, "cutting_math",
+                                     "techniques") != "templates_only")
+        meta_all = block_data.piece_meta() \
+            if hasattr(block_data, "piece_meta") else {}
+        self._squares_skipped = []
+
+        # Resolve stitch-and-flip overrides to extend base pieces in template mode
+        overrides = {}
+        if use_tech_math:
+            regions_map = {str(r.id): r for r in tree.leaf_regions()}
+            def _poly_in(r):
+                return [(p[0]/core.PX_PER_INCH, p[1]/core.PX_PER_INCH) for p in r.polygon]
+            pieces_list = []
+            for rid, r in regions_map.items():
+                m = dict(meta_all.get(rid) or {})
+                if "sf_bases" in m and m["sf_bases"]:
+                    m["sf_bases"] = [str(b) for b in m["sf_bases"]]
+                pieces_list.append({"id": rid, "polygon": _poly_in(r), "label": r.label,
+                                    "meta": m})
+            _, overrides_in, _ = quilttools_cutplan.resolve_stitch_flips(pieces_list)
+            for rid, ext_poly_in in overrides_in.items():
+                overrides[int(rid)] = [(p[0] * core.PX_PER_INCH, p[1] * core.PX_PER_INCH)
+                                       for p in ext_poly_in]
+        self.poly_overrides = overrides
+
+        def _template_piece_wanted(r):
+            meta = meta_all.get(str(r.id)) or {}
+            # Pieces consumed by technique maths are cut from squares
+            # (stitch-and-flip corners, batch HSTs/geese) - the cutting
+            # instructions fully specify them, so a printed template of
+            # the finished shape would never be used.
+            if use_tech_math and meta.get("technique") in (
+                    "stitch_flip", "hst2", "hst8", "fg4"):
+                return False
+            if not skip_squares:
+                return True
+            if meta.get("grain") == "fussy":
+                return True  # fussy squares still need their template
+            
+            # Use overridden polygon if available!
+            poly = self.poly_overrides.get(r.id)
+            if poly is not None:
+                poly_in = [(p[0]/core.PX_PER_INCH, p[1]/core.PX_PER_INCH) for p in poly]
+                info = quilttools_cutplan.classify_piece(poly_in)
             else:
-                match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
-                if not match:
-                    bad_labels.append(r.label)
+                info = quilttools_cutplan.classify_piece(r.polygon)
+                
+            if info["kind"] in ("square", "rect"):
+                self._squares_skipped.append(r.label)
+                return False
+            return True
+
+        if (self.options.export_type == "template"
+                and getattr(self.options, "template_dedupe", "all") == "unique"):
+            colors_by_id = quilttools_fpp_fabric.region_colors(block_data)
+            shape_groups = {}
+            for r in tree.leaf_regions():
+                if _prefix_of(r.label) in self._fpp_prefixes:
+                    match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
+                    if match:
+                        valid_sections.setdefault(
+                            match.group(1).upper(), []).append(
+                            (int(match.group(2)), r))
                     continue
-                prefix, num = match.groups()
-                prefix = prefix.upper()
-                if prefix not in valid_sections:
-                    valid_sections[prefix] = []
-                valid_sections[prefix].append((int(num), r))
+                if not _template_piece_wanted(r):
+                    continue
+                poly = self.poly_overrides.get(r.id, r.polygon)
+                key = quilttools_cutplan.congruence_key(poly, tol=1.0)
+                shape_groups.setdefault(key, []).append(r)
+            for grp in shape_groups.values():
+                grp.sort(key=lambda rr: rr.label)
+                rep = grp[0]
+                valid_sections[rep.label] = [(1, rep)]
+                if len(grp) > 1:
+                    self._template_dedupe[rep.label] = [rr.label for rr in grp]
+                if len({colors_by_id.get(rr.id) for rr in grp}) > 1:
+                    self._template_multicolor.add(rep.label)
+        else:
+            for r in tree.leaf_regions():
+                if self.options.export_type == "template":
+                    if _prefix_of(r.label) in self._fpp_prefixes:
+                        match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
+                        if match:
+                            valid_sections.setdefault(
+                                match.group(1).upper(), []).append(
+                                (int(match.group(2)), r))
+                        continue
+                    if not _template_piece_wanted(r):
+                        continue
+                    # In template mode, each piece is its own section
+                    valid_sections[r.label] = [(1, r)]
+                else:
+                    match = re.match(r"^([A-Za-z]+)(\d+)$", r.label)
+                    if not match:
+                        bad_labels.append(r.label)
+                        continue
+                    prefix, num = match.groups()
+                    prefix = prefix.upper()
+                    if prefix not in valid_sections:
+                        valid_sections[prefix] = []
+                    valid_sections[prefix].append((int(num), r))
 
         if not valid_sections:
-            inkex.errormsg("ERROR: Block has not been labeled. You must run '3. Labels & Guides > Fully Auto-Label' (or define sections manually) before exporting.")
+            if self.options.export_type == "template" and tree.leaf_regions():
+                # Legitimate in template mode: every piece is cut from
+                # technique squares / the cutting list (no printed
+                # templates), e.g. an all-HST block. Continue with an
+                # empty section list so instruction pages still render.
+                return g, block_data, []
+            inkex.errormsg("ERROR: Block has not been labeled. You must run 'Quilt Tools Block > 11. Labels & Guides > Fully Auto-Label' (or define sections manually) before exporting.")
             return None, None, None
 
         if bad_labels:
@@ -362,10 +789,11 @@ class ExportPlugin(inkex.Effect):
             # Scale regions to target size
             regions_scaled = []
             for r in regions:
+                poly = self.poly_overrides.get(r.id, r.polygon)
                 regions_scaled.append({
                     "label": r.label,
                     "id": r.id,
-                    "polygon": [(pt[0] * scale, pt[1] * scale) for pt in r.polygon]
+                    "polygon": [(pt[0] * scale, pt[1] * scale) for pt in poly]
                 })
 
             polys = [r["polygon"] for r in regions_scaled]
@@ -611,7 +1039,7 @@ class ExportPlugin(inkex.Effect):
             return
             
         lint_report = self._run_pre_export_lint(block_data, processed_sections)
-        inkex.utils.debug("\n".join(lint_report))
+        self._show_lint_report_gui(lint_report)
 
         layout_layer, defs, _ = self._setup_layout_layer()
 
@@ -739,7 +1167,10 @@ class ExportPlugin(inkex.Effect):
                 d=sa_d,
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
-            if self.options.export_type == "template":
+            if self.options.export_type == "template" and \
+                    len(sec["regions"]) == 1:
+                # Hybrid: multi-piece sections are FPP foundations - edge
+                # lengths belong on single-piece templates only.
                 self._draw_template_edge_labels(sec_g, sec["sa_poly"])
 
             for r in sec["regions"]:
@@ -768,13 +1199,17 @@ class ExportPlugin(inkex.Effect):
                     self.options.mirror_templates
                 )
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
+                canvas_label = r["label"]
+                dd = getattr(self, "_template_dedupe", {}).get(r["label"])
+                if dd:
+                    canvas_label = f"{r['label']} - cut {len(dd)}"
                 etree.SubElement(
                     sec_g,
                     "{%s}text" % core.SVG_NS,
                     x=f"{r_cx:.2f}",
                     y=f"{r_cy:.2f}",
                     style="font-size:14px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
-                ).text = r["label"]
+                ).text = canvas_label
 
         self.svg.append(layout_layer)
         
@@ -903,7 +1338,7 @@ class ExportPlugin(inkex.Effect):
             lint_report.append("[✓] Layout: No overlaps or out-of-bounds pieces detected.")
         lint_report.append("=========================================")
 
-        inkex.utils.debug("\n".join(lint_report))
+        self._show_lint_report_gui(lint_report)
 
         packable_items = []
         global_tab_counter = 1
@@ -937,7 +1372,7 @@ class ExportPlugin(inkex.Effect):
                 max_page_idx = max(max_page_idx, target_page)
 
                 validation_report_overlap = f"[!] Layout: Section {sec['prefix']} overlaps with Section {overlap_partner} on canvas. Automatically relocated to new Page {target_page + 1} at the back."
-                inkex.utils.debug(validation_report_overlap)
+                pass
 
                 rot_min_x = min(p[0] for p in placed_poly)
                 rot_max_x = max(p[0] for p in placed_poly)
@@ -1080,7 +1515,12 @@ class ExportPlugin(inkex.Effect):
                 pages_list.append({"type": "section_map"})
 
         if self.options.include_preview and self.options.include_fabric_estimation:
-            pages_list.append({"type": "fabric_requirements", "size": base_size})
+            pw_pg, ph_pg = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
+            if self.options.orientation == "landscape":
+                pw_pg, ph_pg = ph_pg, pw_pg
+            pages_list.extend(self._fabric_pages_for_size(
+                block_data, base_size, pw_pg, ph_pg,
+                self.options.margin_in * core.PX_PER_INCH))
 
         current_len = len(pages_list)
         total_pages = max(max_page_idx + 1, current_len)
@@ -1138,7 +1578,7 @@ class ExportPlugin(inkex.Effect):
                         pass
 
         lint_report = self._run_pre_export_lint(block_data, base_sections)
-        inkex.utils.debug("\n".join(lint_report))
+        self._show_lint_report_gui(lint_report)
 
         regions = block_data.tree.leaf_regions()
         user_colors = block_data.prefs.get("custom_colors", {})
@@ -1173,10 +1613,11 @@ class ExportPlugin(inkex.Effect):
 
         for sz in sizes:
             if self.options.include_fabric_estimation:
-                pages_list.append({"type": "fabric_requirements", "size": sz})
+                pages_list.extend(self._fabric_pages_for_size(
+                    block_data, sz, pw, ph, margin))
 
             g_sz, _, sections = self._get_processed_sections(sz, allow_rotate=True)
-            if not sections:
+            if sections is None:
                 continue
 
             size_items = []
@@ -1202,6 +1643,39 @@ class ExportPlugin(inkex.Effect):
                     "sa_poly": [],
                     "regions": [],
                 })
+
+            # HST sewing-line templates: one printable square per unique
+            # 2-at-a-time HST size (draw two seams, cut on the diagonal).
+            if (self.options.export_type == "template"
+                    and getattr(self.options, "hst_templates", True)):
+                req = self._template_req(block_data, sz)
+                hst_sizes = set()
+                for res in req["plan"]["fabrics"].values():
+                    for op in res["ops"]:
+                        if op["op"] != "strip":
+                            continue
+                        for sc in op["subcuts"]:
+                            if sc.get("source") == "hst2":
+                                hst_sizes.add(round(sc["w"], 3))
+                for side_in in sorted(hst_sizes):
+                    side_px = side_in * core.PX_PER_INCH
+                    if side_px > min(avail_w, avail_h):
+                        continue
+                    size_items.append({
+                        "prefix": "HST",
+                        "part_str": "",
+                        "T_w": side_px,
+                        "T_h": side_px,
+                        "core_w": side_px,
+                        "core_h": side_px,
+                        "pad_l": 0, "pad_r": 0, "pad_t": 0, "pad_b": 0,
+                        "inner_transform": "",
+                        "right_glue": None, "left_align": None,
+                        "bottom_glue": None, "top_align": None,
+                        "sa_poly": [],
+                        "regions": [],
+                        "hst_size_in": side_in,
+                    })
 
             # Multiple template sets: repeat every section n_copies times.
             # The nesting engine packs all copies together, so identical
@@ -1384,7 +1858,7 @@ class ExportPlugin(inkex.Effect):
             # upright and is pinned to the first page of its size.
             nest_inputs = []
             for item in size_items:
-                if item["prefix"] == "CAL":
+                if item["prefix"] in ("CAL", "HST"):
                     hull = [(0.0, 0.0), (item["T_w"], 0.0), (item["T_w"], item["T_h"]), (0.0, item["T_h"])]
                     rots = [0.0]
                 elif item["part_str"]:
@@ -1469,7 +1943,7 @@ class ExportPlugin(inkex.Effect):
         )
         
 
-        inkex.utils.debug("Smart Pack Layout complete! Geometry preserved.")
+        pass
 
     def _draw_assembly_and_legend(self, layout_layer, panel_x, panel_y, block_data, side_by_side=False, right_col_x=None):
         steps, has_sewing_warning = core.calculate_section_sewing_order(block_data)
@@ -1856,10 +2330,219 @@ class ExportPlugin(inkex.Effect):
             row_y += 24
         return row_y
 
+    def _cutplan_options(self):
+        return {
+            "wof_in": self.options.wof_in,
+            "sa_in": self.options.sa_in,
+            "oversize_batch": bool(self.options.oversize_batch),
+            "use_techniques": self.options.cutting_math != "templates_only",
+        }
+
+    def _template_req(self, block_data, sz):
+        """calculate_template_requirements, cached per size (used for page
+        planning, rendering AND the HST template sizes)."""
+        cache = getattr(self, "_tpl_req_cache", None)
+        if cache is None:
+            cache = self._tpl_req_cache = {}
+        key = round(float(sz), 4)
+        if key not in cache:
+            fpp_prefixes = {str(p).upper() for p in
+                            (block_data.prefs.get("fpp_sections") or [])}
+            cache[key] = quilttools_fpp_fabric.calculate_template_requirements(
+                block_data, sz, self._cutplan_options(),
+                fpp_prefixes=fpp_prefixes)
+        return cache[key]
+
+    @staticmethod
+    def _wrap_text(text, width=110):
+        words = text.split(" ")
+        lines, cur = [], ""
+        for w in words:
+            if cur and len(cur) + 1 + len(w) > width:
+                lines.append(cur)
+                cur = w
+            else:
+                cur = (cur + " " + w).strip()
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _cutting_plan_rows(self, block_data, sz):
+        """Flatten the cutting instructions into styled rows so they can be
+        split across as many pages as needed. Cached per size so the page
+        planning pass and every chunk render agree on row boundaries."""
+        cache = getattr(self, "_plan_rows_cache", None)
+        if cache is None:
+            cache = self._plan_rows_cache = {}
+        key = round(float(sz), 4)
+        if key in cache:
+            return cache[key]
+
+        colors_map = quilttools_fpp_fabric.region_colors(block_data)
+        color_codes = core.assign_color_codes(
+            sorted(set(colors_map.values())),
+            block_data.prefs.get("color_code_overrides", ""))
+        req = self._template_req(block_data, sz)
+        plan = req["plan"]
+        rows = []
+
+        def add(kind, text, indent=0.0, fab=None, wrap=True):
+            for k, ln in enumerate(self._wrap_text(text)
+                                   if wrap else [text]):
+                rows.append({"kind": kind, "text": ln, "indent": indent,
+                             "fab": fab if k == 0 else None})
+
+        if self.options.cutting_math == "templates_only":
+            add("warn", "Cutting math: TEMPLATES ONLY - technique tags "
+                "(stitch-and-flip, batch HSTs, flying geese) are ignored "
+                "for this export.")
+        if req.get("fpp_prefixes"):
+            add("note", "Sections %s are delivered as FPP FOUNDATIONS - "
+                "their rough-cut estimates include 3/4\" padding and are "
+                "included in each fabric's total below."
+                % ", ".join(sorted(req["fpp_prefixes"])))
+        if getattr(self.options, "squares_cutting_list_only", False):
+            add("note", "Square/rectangle pieces are listed below but not "
+                "printed as templates (cut them straight from these "
+                "measurements).")
+        if self.options.cutting_math != "templates_only" and \
+                hasattr(block_data, "piece_meta") and any(
+                    (m or {}).get("technique") in
+                    ("stitch_flip", "hst2", "hst8", "fg4")
+                    for m in block_data.piece_meta().values()):
+            add("note", "Pieces cut via technique squares (stitch-and-flip "
+                "corners, batch HSTs, flying geese) are fully specified "
+                "below and are not printed as shape templates.")
+        for note in plan.get("notes", []):
+            add("note", note)
+        for warn in plan.get("warnings", []):
+            add("warn", "! " + warn)
+        rows.append({"kind": "gap", "text": "", "indent": 0, "fab": None})
+
+        for fab_est in req["per_fabric"]:
+            fab = fab_est["color"]
+            code = color_codes.get(fab, "FAB")
+            suggested = quilttools_fpp_fabric.suggest_purchase(
+                fab_est["total_in"], fab_est["fq_total_in"])
+            n_pc = fab_est["pieces_count"] + fab_est.get("fpp_pieces", 0)
+            add("header",
+                f"        Fabric {code} ({fab}) - {n_pc} piece"
+                f"{'s' if n_pc != 1 else ''} - total "
+                f"{quilttools_cutplan.fmt_in(fab_est['total_in'])} x WOF - "
+                f"suggested: {suggested}", fab=fab)
+            for line in fab_est["lines"]:
+                add("line", line, indent=14.0)
+            if fab_est.get("fpp_in"):
+                add("line", "FPP foundation sections: allow "
+                    f"{quilttools_cutplan.fmt_in(fab_est['fpp_in'])} x WOF "
+                    f"({fab_est['fpp_pieces']} rough-cut piece"
+                    f"{'s' if fab_est['fpp_pieces'] != 1 else ''}, "
+                    "3/4\" padding included).", indent=14.0)
+            for note in fab_est["notes"]:
+                add("note", note, indent=14.0)
+            for warn in fab_est["warnings"]:
+                add("warn", "! " + warn, indent=14.0)
+            rows.append({"kind": "gap", "text": "", "indent": 0,
+                         "fab": None})
+        cache[key] = rows
+        return rows
+
+    def _fabric_pages_for_size(self, block_data, sz, pw, ph, margin):
+        """Page descriptors for one size's fabric requirements - template
+        mode paginates the row stream instead of truncating, and the
+        optional cutting layout map gets its own paginated page(s)."""
+        if self.options.export_type != "template":
+            return [{"type": "fabric_requirements", "size": sz}]
+        rows = self._cutting_plan_rows(block_data, sz)
+        rows_pp = max(18, int((ph - 2 * margin - 130) / 13.0))
+        n = max(1, math.ceil(len(rows) / rows_pp)) if rows else 1
+        pages = [{"type": "fabric_requirements", "size": sz, "chunk": k,
+                  "nchunks": n, "rows_pp": rows_pp} for k in range(n)]
+
+        if self.options.visualize_fabric_layout:
+            req = self._template_req(block_data, sz)
+            map_w = (pw - 2 * margin) * (self.options.wof_draw_scale_pct / 100.0)
+            heights = quilttools_fpp_fabric.estimate_map_heights(
+                req["plan"], self.options.wof_in, map_w)
+            # Simple blocks: tuck the whole map under the last page of
+            # instructions when it fits in the leftover space; only spill
+            # onto dedicated map page(s) when it genuinely cannot fit.
+            rows_last = len(rows) - (n - 1) * rows_pp
+            remaining = (ph - 2 * margin - 130) - rows_last * 13.0 - 30.0
+            total_map_h = sum(heights.values())
+            if heights and total_map_h <= remaining:
+                pages[-1]["map_inline"] = True
+                pages[-1]["map_w"] = map_w
+            elif heights:
+                avail = ph - 2 * margin - 140
+                groups, cur, cur_h = [], [], 0.0
+                for fab, h in heights.items():
+                    if cur and cur_h + h > avail:
+                        groups.append(cur)
+                        cur, cur_h = [], 0.0
+                    cur.append(fab)
+                    cur_h += h
+                if cur:
+                    groups.append(cur)
+                for k, fabs in enumerate(groups):
+                    pages.append({"type": "cutting_map", "size": sz,
+                                  "fabrics": fabs, "chunk": k,
+                                  "nchunks": len(groups), "map_w": map_w})
+        return pages
+
+    def _render_cutting_plan_page(self, layout_layer, px, py, pw, ph, margin,
+                                  avail_w, block_data, sz, color_codes,
+                                  chunk=0, nchunks=1, rows_pp=None,
+                                  map_inline=False, map_w=None):
+        """Template-mode fabric page: one chunk of the cutting-instruction
+        rows, plus the layout map after the final chunk."""
+        req = self._template_req(block_data, sz)
+        rows = self._cutting_plan_rows(block_data, sz)
+        if rows_pp is None:
+            rows_pp = max(18, int((ph - 2 * margin - 130) / 13.0))
+        page_rows = rows[chunk * rows_pp:(chunk + 1) * rows_pp]
+
+        styles = {
+            "line": f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};",
+            "note": f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
+            "warn": f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_warn']};",
+            "header": f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+        }
+        y = py + margin + 100
+        max_y = py + ph - margin - 20
+        for row in page_rows:
+            if row["kind"] == "gap":
+                y += 6
+                continue
+            if row["fab"]:
+                etree.SubElement(
+                    layout_layer, "{%s}rect" % core.SVG_NS,
+                    x=str(px + margin), y=str(y - 9), width="26",
+                    height="11",
+                    style=f"fill:{row['fab']};stroke:#999999;stroke-width:0.5;",
+                )
+            etree.SubElement(
+                layout_layer, "{%s}text" % core.SVG_NS,
+                x=str(px + margin + row["indent"]), y=str(y),
+                style=styles.get(row["kind"], styles["line"]),
+            ).text = row["text"]
+            y += 13.0
+
+        # Simple blocks: the map fits under the instructions and rides on
+        # this page; otherwise it lives on dedicated "cutting_map" pages.
+        if map_inline and chunk == nchunks - 1:
+            y += 14
+            quilttools_fpp_fabric.draw_cutting_plan_map(
+                layout_layer, px + margin, y,
+                map_w or (avail_w * (self.options.wof_draw_scale_pct / 100.0)), req["plan"],
+                self.options.wof_in, color_codes,
+                max_height=max_y - y)
+        return y
+
     def _draw_alignment_ticks(self, container, r, scale, cx_hull, cx, cy, best_angle, alignment_marks, block_data, mirror_templates):
         orig_r = block_data.tree.regions.get(str(r["id"])) or block_data.tree.regions.get(r["id"])
         if orig_r and alignment_marks:
-            poly = orig_r.polygon
+            poly = self.poly_overrides.get(r["id"], self.poly_overrides.get(str(r["id"]), orig_r.polygon))
             for (m_pt, m_norm) in alignment_marks:
                 min_dist = float("inf")
                 for v_idx in range(len(poly)):
@@ -2206,22 +2889,34 @@ class ExportPlugin(inkex.Effect):
                 
             elif p_type == "fabric_requirements":
                 sz = page_info["size"]
+                is_template_mode = self.options.export_type == "template"
+                chunk = page_info.get("chunk", 0)
+                nchunks = page_info.get("nchunks", 1)
+                cont = (f" - page {chunk + 1} of {nchunks}"
+                        if nchunks > 1 else "")
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 30),
                     style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
-                ).text = f"Fabric Requirements ({sz:.1f}\" Block)"
+                ).text = (f"Cutting Instructions ({sz:.1f}\" Block){cont}"
+                          if is_template_mode
+                          else f"Fabric Requirements ({sz:.1f}\" Block)")
+                if is_template_mode:
+                    subtitle = (f"Exact template shapes ({self.options.sa_in:.2f}\" seam allowance included), "
+                                f"planned on {self.options.wof_in:.1f}\" usable Width of Fabric (WOF).")
+                else:
+                    subtitle = f"Estimates based on {self.options.wof_in:.1f}\" usable Width of Fabric (WOF) and include 3/4\" padding around each piece."
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin + 55),
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
-                ).text = f"Estimates based on {self.options.wof_in:.1f}\" usable Width of Fabric (WOF) and include 3/4\" padding around each piece."
+                ).text = subtitle
 
-                if int(self.options.template_copies) > 1:
+                if int(self.options.template_copies) > 1 and chunk == 0:
                     etree.SubElement(
                         layout_layer,
                         "{%s}text" % core.SVG_NS,
@@ -2229,16 +2924,54 @@ class ExportPlugin(inkex.Effect):
                         y=str(py + margin + 75),
                         style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
                     ).text = f"Note: quantities below are for ONE block. This document contains {int(self.options.template_copies)} template sets."
-                
-                fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(block_data, sz, self.options.wof_in)
-                end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
-                
-                if self.options.visualize_fabric_layout:
-                    quilttools_fpp_fabric.draw_fabric_layout_map(
-                        layout_layer, px + margin, end_table_y + 30, avail_w,
-                        block_data, sz, self.options.wof_in, color_codes
-                    )
-                
+
+                if is_template_mode:
+                    self._render_cutting_plan_page(
+                        layout_layer, px, py, pw, ph, margin, avail_w,
+                        block_data, sz, color_codes,
+                        chunk=chunk, nchunks=nchunks,
+                        rows_pp=page_info.get("rows_pp"),
+                        map_inline=page_info.get("map_inline", False),
+                        map_w=page_info.get("map_w"))
+                else:
+                    fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(block_data, sz, self.options.wof_in)
+                    end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
+
+                    if self.options.visualize_fabric_layout:
+                        quilttools_fpp_fabric.draw_fabric_layout_map(
+                            layout_layer, px + margin, end_table_y + 30, avail_w,
+                            block_data, sz, self.options.wof_in, color_codes
+                        )
+
+            elif p_type == "cutting_map":
+                sz = page_info["size"]
+                chunk = page_info.get("chunk", 0)
+                nchunks = page_info.get("nchunks", 1)
+                cont = (f" - page {chunk + 1} of {nchunks}"
+                        if nchunks > 1 else "")
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin + 30),
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                ).text = f"Cutting Layout Map ({sz:.1f}\" Block){cont}"
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin + 55),
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
+                ).text = (f"Each bar is a WOF strip ({self.options.wof_in:.1f}\" usable width); "
+                          "shapes show the subcuts at scale.")
+                req = self._template_req(block_data, sz)
+                quilttools_fpp_fabric.draw_cutting_plan_map(
+                    layout_layer, px + margin, py + margin + 90,
+                    page_info.get("map_w", avail_w * (self.options.wof_draw_scale_pct / 100.0)), req["plan"],
+                    self.options.wof_in, color_codes,
+                    max_height=ph - 2 * margin - 120,
+                    fabrics=set(page_info.get("fabrics") or []))
+
             elif p_type == "colouring":
                 etree.SubElement(
                     layout_layer,
@@ -2307,6 +3040,65 @@ class ExportPlugin(inkex.Effect):
                     y=str(sq_abs_y + 62.0),
                     style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_mid']};",
                 ).text = "Measure to verify scale"
+                continue
+
+            if item["prefix"] == "HST":
+                s_px = item["T_w"]
+                hx = page_offset_x + margin + item["page_x"]
+                hy = page_offset_y + margin + header_gap + item["page_y"]
+                hst_g = etree.SubElement(
+                    layout_layer, "{%s}g" % core.SVG_NS,
+                    id=f"hst-template-{item['target_page']}-{i}")
+                etree.SubElement(
+                    hst_g, "{%s}rect" % core.SVG_NS,
+                    x=str(hx), y=str(hy), width=str(s_px), height=str(s_px),
+                    style=f"fill:none;stroke:{STYLE_CONFIG['color_black']};stroke-width:1.5;",
+                )
+                # Solid diagonal = cut line; dashed lines 1/4" either side
+                # = the two seams (sew first, then cut apart).
+                etree.SubElement(
+                    hst_g, "{%s}line" % core.SVG_NS,
+                    x1=str(hx), y1=str(hy + s_px), x2=str(hx + s_px),
+                    y2=str(hy),
+                    style=f"stroke:{STYLE_CONFIG['color_black']};stroke-width:1.2;",
+                )
+                off = 0.25 * core.PX_PER_INCH * math.sqrt(2.0)
+                for sgn in (-1.0, 1.0):
+                    c = sgn * off
+                    # anti-diagonal: local x + y = s; sew lines are the
+                    # parallels x + y = s + c, clipped to the square.
+                    pts = []
+                    for lx in (0.0, s_px):
+                        ly = s_px + c - lx
+                        if 0.0 <= ly <= s_px:
+                            pts.append((lx, ly))
+                    for ly in (0.0, s_px):
+                        lx = s_px + c - ly
+                        if 0.0 < lx < s_px:
+                            pts.append((lx, ly))
+                    if len(pts) >= 2:
+                        etree.SubElement(
+                            hst_g, "{%s}line" % core.SVG_NS,
+                            x1=str(hx + pts[0][0]), y1=str(hy + pts[0][1]),
+                            x2=str(hx + pts[1][0]), y2=str(hy + pts[1][1]),
+                            style=f"stroke:{STYLE_CONFIG['color_mid']};stroke-width:1.0;stroke-dasharray:5,4;",
+                        )
+                size_txt = quilttools_cutplan.fmt_in(item["hst_size_in"])
+                etree.SubElement(
+                    hst_g, "{%s}text" % core.SVG_NS,
+                    x=str(hx + s_px * 0.28), y=str(hy + s_px * 0.22),
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;fill:{STYLE_CONFIG['color_black']};",
+                ).text = f"HST {size_txt}"
+                for k, txt in enumerate((
+                        "Layer 2 squares right sides together,",
+                        "sew on the dashed lines,",
+                        "cut apart on the solid diagonal.")):
+                    etree.SubElement(
+                        hst_g, "{%s}text" % core.SVG_NS,
+                        x=str(hx + s_px * 0.68),
+                        y=str(hy + s_px * 0.70 + k * 14.0),
+                        style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};text-anchor:middle;fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = txt
                 continue
 
             abs_x = page_offset_x + margin + item["page_x"]
@@ -2383,7 +3175,8 @@ class ExportPlugin(inkex.Effect):
                 d=sa_d,
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
-            if self.options.export_type == "template":
+            if self.options.export_type == "template" and \
+                    len(item["regions"]) == 1:
                 self._draw_template_edge_labels(shift_g, item["sa_poly"])
 
             for idx, r in enumerate(item["regions"]):
@@ -2404,6 +3197,12 @@ class ExportPlugin(inkex.Effect):
                 is_too_small = (pw_r < 40.0 or ph_r < 40.0 or area_r < 3686.0)
                 
                 mode = self.options.template_color_mode
+                is_multicolor = r["label"] in getattr(
+                    self, "_template_multicolor", set())
+                if is_multicolor:
+                    # Combined template covering several fabrics: print it
+                    # uncoloured - fabric placement is on the layout page.
+                    mode = "none"
                 if mode == "full" or (mode == "tag" and is_too_small):
                     fill_col = assigned_col
                 else:
@@ -2431,7 +3230,11 @@ class ExportPlugin(inkex.Effect):
                 
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
                 label_text = r["label"]
-                code_text = color_codes.get(assigned_col, "")
+                dedupe_labels = getattr(self, "_template_dedupe", {}).get(r["label"])
+                if dedupe_labels:
+                    label_text = f"{r['label']} - cut {len(dedupe_labels)}"
+                code_text = "" if is_multicolor \
+                    else color_codes.get(assigned_col, "")
                 
                 # Determine text colors based on contrast
                 text_color = STYLE_CONFIG["color_black"]
@@ -2489,6 +3292,26 @@ class ExportPlugin(inkex.Effect):
                             y=f"{r_cy:.2f}",
                             style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
                         ).text = label_text
+
+                if dedupe_labels and not is_too_small:
+                    covered = ", ".join(dedupe_labels)
+                    if len(covered) > 30:
+                        covered = covered[:27] + "..."
+                    etree.SubElement(
+                        shift_g,
+                        "{%s}text" % core.SVG_NS,
+                        x=f"{r_cx:.2f}",
+                        y=f"{r_cy + 32:.2f}",
+                        style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
+                    ).text = f"for: {covered}"
+                if is_multicolor and not is_too_small:
+                    etree.SubElement(
+                        shift_g,
+                        "{%s}text" % core.SVG_NS,
+                        x=f"{r_cx:.2f}",
+                        y=f"{r_cy + 44:.2f}",
+                        style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};font-style:italic;text-anchor:middle;fill:{subtext_color};",
+                    ).text = "mixed fabrics - see layout page"
 
             local_sa = [
                 inner_transform.apply_to_point((p[0], p[1])) for p in item["sa_poly"]
@@ -2649,6 +3472,34 @@ class ExportPlugin(inkex.Effect):
                         y=str(ty + overlap_px_tab / 2),
                         style=f"font-size:{STYLE_CONFIG['tab_font_size']};font-family:{STYLE_CONFIG['font_family']};font-weight:{STYLE_CONFIG['tab_font_weight']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['tab_text_color_align']};",
                     ).text = f"Align {tab_id}"
+
+        # Combined multi-fabric templates: flag the affected pages and point
+        # the user at the layout page for fabric placement.
+        multi_set = getattr(self, "_template_multicolor", set())
+        if multi_set:
+            multi_pages = sorted({
+                item["target_page"] for item in packable_items
+                if item.get("prefix") in multi_set
+                and item.get("target_page") in page_offsets})
+            for tp in multi_pages:
+                ox, oy = page_offsets[tp]
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(ox + margin),
+                    y=str(oy + margin + 14),
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-style:italic;fill:{STYLE_CONFIG['color_mid']};",
+                ).text = ("Templates marked 'mixed fabrics' are shared across "
+                          "several fabrics and print uncoloured - use the "
+                          "layout/preview page for fabric placement.")
+            hint = ""
+            if not self.options.separate_section_alignment_image:
+                hint = (" Tip: enable 'Include Section Map Page (Page 2)' "
+                        "for a printable fabric layout.")
+            inkex.utils.debug(
+                f"{len(multi_set)} combined template(s) cover more than one "
+                "fabric and are printed uncoloured. Print the layout page to "
+                "see which fabric each piece uses." + hint)
 
         self.svg.append(layout_layer)
 

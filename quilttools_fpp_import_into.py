@@ -33,6 +33,7 @@ class ImportIntoPlugin(inkex.Effect):
         pars.add_argument("--auto_align", type=inkex.Boolean, default=True)
         pars.add_argument("--rotation", type=float, default=0.0)
         pars.add_argument("--flip", type=str, default="none")
+        pars.add_argument("--auto_label", type=inkex.Boolean, default=True)
 
     def effect(self):
         # 1. Identify current FPP block
@@ -73,45 +74,19 @@ class ImportIntoPlugin(inkex.Effect):
                 if not blocks:
                     return inkex.errormsg(f"The Block Library is empty under:\n  {LIB_DIR}")
                 
+                import quilttools_blockpicker as qpick
+
                 dialog = Gtk.Dialog(title="Quilt Tools Pattern - Import into Region")
                 dialog.set_default_size(900, 600)
                 content = dialog.get_content_area()
                 content.set_spacing(6)
-                
-                # Search Bar
-                search = Gtk.SearchEntry()
-                search.set_placeholder_text("Search blocks...")
-                search.set_margin_top(8)
-                search.set_margin_start(10)
-                search.set_margin_end(10)
-                
-                # Left Catalog Scroller
-                scroller = Gtk.ScrolledWindow()
-                scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-                scroller.set_vexpand(True)
-                
-                flow = Gtk.FlowBox()
-                flow.set_valign(Gtk.Align.START)
-                flow.set_max_children_per_line(3)
-                flow.set_selection_mode(Gtk.SelectionMode.NONE)
-                flow.set_row_spacing(8)
-                flow.set_column_spacing(8)
-                for side in ("top", "bottom", "start", "end"):
-                    getattr(flow, f"set_margin_{side}")(10)
-                scroller.add(flow)
-                
-                empty = Gtk.Label(label="No blocks match search.")
-                empty.set_no_show_all(True)
-                
+
                 # Split columns
                 hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
                 content.pack_start(hbox, True, True, 0)
-                
+
                 left_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
                 hbox.pack_start(left_vbox, True, True, 0)
-                left_vbox.pack_start(search, False, False, 0)
-                left_vbox.pack_start(scroller, True, True, 0)
-                left_vbox.pack_start(empty, False, False, 4)
                 
                 right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
                 right_vbox.set_size_request(340, -1)
@@ -182,57 +157,20 @@ class ImportIntoPlugin(inkex.Effect):
                 
                 # Library Data Cache
                 lib_bd_cache = {}
-                labels_by_child = {}
-                
-                def make_click(p):
-                    def _cb(_btn):
-                        chosen["path"] = p
-                        preview_area.queue_draw()
-                    return _cb
-                
-                def make_double_click(p):
-                    def _cb(_btn, event):
-                        if event.button == 1 and event.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
-                            chosen["path"] = p
-                            dialog.response(Gtk.ResponseType.OK)
-                            return True
-                        return False
-                    return _cb
-                
-                for label, full in blocks:
-                    btn = Gtk.Button()
-                    btn.set_relief(Gtk.ReliefStyle.NONE)
-                    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-                    try:
-                        pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(full, 120, 120, True)
-                        box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
-                    except Exception:
-                        pass
-                    lbl = Gtk.Label(label=label)
-                    lbl.set_line_wrap(True)
-                    lbl.set_max_width_chars(15)
-                    lbl.set_justify(Gtk.Justification.CENTER)
-                    box.pack_start(lbl, False, False, 0)
-                    btn.add(box)
-                    btn.set_tooltip_text(label)
-                    btn.connect("clicked", make_click(full))
-                    btn.connect("button-press-event", make_double_click(full))
-                    flow.add(btn)
-                    labels_by_child[btn.get_parent()] = label.lower()
-                    
-                def do_filter(child):
-                    q = search.get_text().strip().lower()
-                    if not q:
-                        return True
-                    return q in labels_by_child.get(child, "")
-                
-                flow.set_filter_func(do_filter)
-                
-                def on_search(_w):
-                    flow.invalidate_filter()
-                    any_visible = any(do_filter(c) for c in labels_by_child)
-                    empty.set_visible(not any_visible)
-                search.connect("search-changed", on_search)
+
+                def on_pick(p):
+                    chosen["path"] = p
+                    preview_area.queue_draw()
+
+                def on_activate(p):
+                    chosen["path"] = p
+                    dialog.response(Gtk.ResponseType.OK)
+
+                browser = qpick.build_block_browser(
+                    Gtk, GdkPixbuf, blocks, on_pick,
+                    on_activate=on_activate, Gdk=Gdk, thumb=120, columns=3)
+                left_vbox.pack_start(browser["widget"], True, True, 0)
+                search = browser["search"]
                 
                 def on_draw(widget, ctx):
                     w_a = widget.get_allocated_width()
@@ -344,7 +282,10 @@ class ImportIntoPlugin(inkex.Effect):
                 dialog.add_button("Browse files\u2026", 100)
                 dialog.add_button("Import", Gtk.ResponseType.OK)
                 dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                dialog.set_modal(True)
+                dialog.set_keep_above(True)
                 dialog.show_all()
+                dialog.present()
                 search.grab_focus()
                 
                 while True:
@@ -383,6 +324,8 @@ class ImportIntoPlugin(inkex.Effect):
                         chosen["path"] = None
                         break
                 dialog.destroy()
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
             except Exception as e:
                 # No GTK or GTK error: use fallback options
                 inkex.utils.debug(f"GTK visual picker disabled or failed: {e}")
@@ -421,9 +364,11 @@ class ImportIntoPlugin(inkex.Effect):
             return inkex.errormsg("Import failed: No sub-regions could be placed inside the selection.")
             
         # Re-sequence labels and refresh
-        block_data.tree.rebuild_alphabet()
+        if self.options.auto_label:
+            block_data.tree.auto_partition_and_label(preserve_manual=False)
+        else:
+            block_data.tree.rebuild_alphabet()
         core.refresh_layer(g, block_data)
-        inkex.utils.debug(f"Successfully subdivided {len(target_regions)} region(s) with '{os.path.basename(import_path)}' ({total_subdivisions} new sub-regions created).")
 
 
 if __name__ == "__main__":

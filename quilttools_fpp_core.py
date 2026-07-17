@@ -161,6 +161,33 @@ class RegionTree:
                 return res
         return None
 
+    def _is_enclave(self, node):
+        """A split_boundary node marks one of two different things:
+
+        * a real boundary CUT (grid line, circle cut, crop frame): its
+          children geometrically partition it, and pieces on either side
+          of the cut must stay in separate structural groups;
+        * an ENCLAVE (a sub-block imported into a region / rebuilt from
+          pieces): its children are a _chain_leaves bookkeeping chain — an
+          internal child carries the node's own polygon, not a half of it.
+          The whole subtree is ONE structural group that simply must not
+          merge with pieces outside the node.
+
+        Recognises the explicit "enclave" flag value (written by newer
+        imports) AND legacy trees where True was stamped on a chain node,
+        which used to wrongly split the first imported piece into its own
+        one-piece group (and block merges/heals within the import)."""
+        if node.split_boundary == "enclave":
+            return True
+        if not node.split_boundary or not node.children:
+            return False
+        for cid in node.children:
+            child = self.regions.get(cid)
+            if child is not None and not child.is_leaf() and \
+                    _polys_equivalent(child.polygon, node.polygon):
+                return True
+        return False
+
     def separated_by_boundary(self, id1, id2):
         path1, path2 = (
             self.find_path(self.root_id, id1),
@@ -174,7 +201,10 @@ class RegionTree:
                 lca_id = p1
             else:
                 break
-        return self.regions[lca_id].split_boundary
+        lca = self.regions[lca_id]
+        # Two pieces whose common ancestor is an enclave are both INSIDE
+        # the imported block - no boundary runs between them.
+        return bool(lca.split_boundary) and not self._is_enclave(lca)
 
     def reset_to_boundaries(self):
         valid_nodes = set()
@@ -184,7 +214,9 @@ class RegionTree:
             node = self.regions[n_id]
             if not node.children:
                 return
-            if not node.split_boundary:
+            if not node.split_boundary or self._is_enclave(node):
+                # Enclaves collapse whole: recursing used to strand the
+                # first imported piece next to an overlapping chain node.
                 node.children = []
             else:
                 walk(node.children[0])
@@ -677,6 +709,10 @@ class RegionTree:
             path = self.find_path(self.root_id, sid)
             idx = path.index(lca_id)
             for node_id in path[idx:]:
+                if node_id == lca_id and self._is_enclave(self.regions[node_id]):
+                    # Everything selected sits inside this imported block;
+                    # healing within an enclave crosses no boundary.
+                    continue
                 if self.regions[node_id].split_boundary:
                     # Gather all leaf descendants of node_id to check if they are all selected
                     descendant_leaves = []
@@ -921,6 +957,12 @@ class RegionTree:
             left_leaves = walk(node.children[0])
             right_leaves = walk(node.children[1])
             if node.split_boundary:
+                if self._is_enclave(node):
+                    # Imported sub-block: ONE group, sealed from outside.
+                    combined = left_leaves + right_leaves
+                    if combined:
+                        groups.append(combined)
+                    return []
                 if left_leaves:
                     groups.append(left_leaves)
                 if right_leaves:
@@ -1546,6 +1588,32 @@ class BlockData:
 
     def to_json(self):
         return json.dumps({"tree": self.tree.to_dict(), "prefs": self.prefs})
+
+    def piece_meta(self):
+        """Per-region cutting metadata ({str(region_id): {...}}), pruned to
+        regions that still exist. Legacy blocks return {} — defaults apply
+        (grain free, technique template)."""
+        meta = self.prefs.get("piece_meta") or {}
+        valid = {str(r.id) for r in self.tree.leaf_regions()}
+        pruned = {k: v for k, v in meta.items() if str(k) in valid}
+        if len(pruned) != len(meta):
+            self.prefs["piece_meta"] = pruned
+        return pruned
+
+    def set_piece_meta(self, region_id, **kv):
+        """Merge cutting metadata for one region; None values delete keys.
+        Returns the region's resulting meta dict (removed from prefs
+        entirely when it empties)."""
+        meta = self.prefs.setdefault("piece_meta", {})
+        entry = meta.setdefault(str(region_id), {})
+        for k, v in kv.items():
+            if v is None:
+                entry.pop(k, None)
+            else:
+                entry[k] = v
+        if not entry:
+            meta.pop(str(region_id), None)
+        return entry
 
     def is_exact_library_block(self):
         if not self.prefs.get("is_library_block"):

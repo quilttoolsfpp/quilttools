@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>12. Mark Cutting Technique</name>
+  <id>org.quilttoolsplugin.quilttools_fpp_mark_technique</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_mark_technique.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="apply">Apply technique/grain to SELECTED pieces</option>
+    <option value="clear">Clear all tags on SELECTED pieces</option>
+    <option value="show">Show review card (all marked pieces)</option>
+    <option value="autodetect">Auto-detect stitch-and-flip corners (whole block)</option>
+  </param>
+
+  <param name="notebook" type="notebook">
+    <page name="tech_tab" gui-text="Technique">
+      <param name="technique" type="optiongroup" appearance="combo" gui-text="Cutting Technique">
+        <option value="template">Default (plain template)</option>
+        <option value="stitch_flip">Stitch-and-flip corner (select the triangle)</option>
+        <option value="hst2">HST - 2 at a time (select matching triangles)</option>
+        <option value="hst8">HST - 8 at a time (select matching triangles)</option>
+        <option value="fg4">Flying geese - 4 at a time (select goose + sky triangles)</option>
+        <option value="fpp_section">Always FPP (deliver the piece's WHOLE SECTION as an FPP foundation)</option>
+      </param>
+      <param name="grain" type="optiongroup" appearance="combo" gui-text="Grain / Direction">
+        <option value="keep">Keep current</option>
+        <option value="free">Direction free (default - rotate in 90&#176; steps)</option>
+        <option value="fixed">Direction fixed (directional print - no rotation)</option>
+        <option value="fussy">Fussy cut (keep exact design rotation)</option>
+      </param>
+      <label>Tags only change fabric requirements on TEMPLATE exports; FPP Foundation exports are unaffected. Tags are stored in the block and survive resizing.</label>
+    </page>
+    <page name="help_tab" gui-text="How it works">
+      <label appearance="header">Stitch-and-flip corners</label>
+      <label>Select the corner TRIANGLE and run Apply: the base piece(s) under the corner are found automatically along the seam, and their cut sizes are extended so both fabrics cover the full corner before trimming. If detection is ambiguous, select the triangle TOGETHER with its base piece(s). Non-guillotine layouts are refused - use a template for those corners.</label>
+      <label appearance="header">Batch HSTs and flying geese</label>
+      <label>Select ALL matching triangles (both fabrics) and Apply: they are grouped and the export cuts parent squares instead (2-at-a-time = finished + 1 inch by default; disable oversizing on the Export dialog to cut exact).</label>
+      <label appearance="header">Review</label>
+      <label>'Show review card' draws a small annotated panel beside the block listing every marked corner, batch group and grain tag. It is annotation only and never exported. Auto-detected corners show dashed badges with a '?' until confirmed by re-applying.</label>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Block"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fpp_mark_technique.py</command></script>
+</inkscape-extension>

@@ -5,6 +5,346 @@ are listed first.
 
 ---
 
+## Changes in v2.1 (Traditional Piecing & Applique, Y-Seam Separability, SVG Importer) - July 2026
+
+### 🎨 Traditional Pieced & Applique Block Kinds
+* **Block Kind Selector**: Added dropdown in the Display Toggle dialog (`quilttools_fpp_display.py`) to classify blocks as FPP, Traditional Pieced, or Applique.
+* **Applique Backdrops & Scraping**: Applique blocks automatically render a background bounding polygon (`qt-block-bg`) on the canvas. Painting the background directly on the canvas and saving colors automatically updates the block's `bg_color` configuration.
+* **Differentiated Seam Allowance Padding**: Background, applique, and traditionally pieced templates are estimated using exact $0.25″$ (24px) seam-allowance margins instead of the larger $0.75″$ (72px) FPP foundation padding.
+* **Applique Base Seam Extensions**: Implemented `resolve_appliques` to automatically union (`quilttools_geometry.get_polygon_union`) background pieces with the applique shapes they support. This ensures backing fabrics extend under applique shapes without raw gaps.
+* **Calculator Normalization**: Single-block fabric calculations refactored to use `pieces_from_block`, bringing mixed-mode block kinds support to both single-block and whole-quilt calculations.
+
+### 📐 Y-Seam Separability & Straight-Cut Policies
+* **Guillotine/Straight Cut Separability Checks**: Straight cuts now verify piece-level separability using `virtual_sewing_validator`. Straight cuts that introduce Y-seams are automatically rolled back with an error warning.
+* **Shape Cut Bypass & Technique Badging**: Shape cuts permit Y-seams under an explicit "Allow Y-seams" bypass option. Unseparable shapes are automatically tagged with the `technique="y_seam"` attribute.
+* **Technique badging**: Added a high-contrast orange (`#d35400`) "Y-Seam" badge to the legend markup catalog and review card.
+
+### 📥 SVG Block Importer
+* **Direct Vector Import**: Added a dedicated SVG Block Importer (`quilttools_fpp_import_svg.py` / `.inx`) supporting recursive polygon/path parsing, coordinate normalization, union outlines, Y-seam verification, and automatic sew-order labeling.
+
+---
+
+## Changes in v2.0 (Whole Quilt Layouts & Technique-Aware Cutting) - July 2026
+
+### 🌐 Quilt Tree & Layout Engine
+* **Grid Layout Core**: Implemented `quilttools_quilt_core.py` and `01. New Quilt` layout tool to construct block grids with custom rows, columns, sashing, cornerstones, borders, and bindings.
+* **Placed Block Sizing**: Projects library blocks onto quilt layout cells using tiled affine transformations (fit, stretch, rotate, flip).
+* **Fabric Aggregation**: Fabric requirement engine parses cell block instances to aggregate quilt-wide fabric totals.
+
+### ✂️ Technique-Aware Fabric Cutting Plans
+* **Exact Template Cutting Math**: Developed `quilttools_cutplan.py` to plan templates based on exact grain lines, strip-subcut nesting, HST pairs, and stitch-and-flip corners.
+* **Mark Cutting Technique**: Tag pieces with techniques like stitch-and-flip, batch HSTs, and geese. Base shapes are automatically extended to cover corner flips.
+
+---
+
+## Changes in v1.7 (Quilt Tools Colour menu) - July 2026
+
+### 🎨 Colour tools get their own top-level menu
+
+### 🔧 Fixes
+
+* **Palette Generator ran into two crashes:** its dialog's tab id
+  (`--notebook`) was not declared by the script (usage error on Apply), and
+  the swatch layer was appended via `self.svg.getroot()` (inkex's `self.svg`
+  IS the root). Both fixed - generation, GPL export to the Inkscape palettes
+  folder and canvas swatches verified end-to-end.
+* **Palette Generator anchor picker:** the anchor colour can now be picked
+  from Inkscape's colour widget (wheel/sliders) instead of typing a hex -
+  an "Anchor Colour" combo chooses between typed hex (default, blank =
+  random), the picked colour, or fully random; invalid hex input falls back
+  to random with a message instead of failing.
+* **Dialog/script drift audit:** every .inx parameter is now either declared
+  by its script or tolerated via `parse_known_args` - the same latent crash
+  was fixed in the Colour Randomiser (`--notebook`) and Pattern Template
+  Scaffold (`--header_prefs`) before anyone hit it.
+
+* **New menu taxonomy:** Extensions now organise as **Quilt Tools Block**
+  (renamed from "Quilt Tools"), **Quilt Tools Colour** (new) and **Quilt Tools
+  Pattern** — sorting alphabetically in that order. Colour tools serve BOTH
+  block drafting and quilt layouts from one place; every menu label carries an
+  explicit context tag: "(Blocks & Quilts)", "(Blocks only)", "(works anywhere)".
+* **Quilt Tools Colour contents:** 00. Fabric Palette · 01. Palette Generator ·
+  02. Colour Randomiser + 02b. Reroll (bind to a key) · 03. Custom Block
+  Colours + 03b. Quick Save Colours (bind to a key).
+* **Numbering convention:** standard tools use plain sequential numbers; a
+  letter suffix is reserved for keybindable quick variants of the tool they
+  accompany (02b Quick Cut, 02b Colour Reroll, 03b Quick Save Colours). The
+  Block menu renumbered accordingly: 03 Heal · 04 Resize · 05 FPP Display ·
+  06 Shape Cut · 07 Import into Region · 08 Import Block from SVG · 09 Add
+  Plain Border · 10 Electric Quilt Export · 11 Labels & Guides · 12 Mark
+  Cutting Technique · 13 Block Pattern Export.
+* **FPP Display split:** Quilt Tools Block ▸ 05. FPP Display Toggle is now a
+  pure design-assist tool — the one-click temporary bypass, default palette
+  view (rainbow/section), seam-allowance preview and colour grouping. Nothing
+  in it changes saved colours. The PERMANENT colour actions (save canvas
+  colours, sample from traced image, quantize to N fabrics, palette export,
+  clear) moved to **Quilt Tools Colour ▸ 03. Custom Block Colours**, with
+  signposts in both dialogs. Legacy dialog params are still accepted so stale
+  saved values never error.
+* **Shared context detection** (`quilttools_colour.detect_context`): every
+  colour tool now classifies the canvas (block / quilt / both / none) the same
+  way — a block nested inside a placed quilt cell correctly counts as quilt
+  artwork, not an editable block. Block-only tools refuse on quilt-only
+  canvases with precise guidance (use Fabric Palette / Colour Randomiser for
+  placed cells, or open the source block); completion messages always state
+  what was acted on, and when a canvas holds BOTH contexts, what was not
+  touched. Unit tests in test_colour_system.py.
+* **Theme Manager parked in the Colour menu** as `x. Theme Manager (pattern
+  PDF styling)` - the 'x.' prefix sorts it last, below the everyday tools
+  (it styles pattern documents, so it lives with the colour/styling family
+  without occupying a workflow number).
+* **Pattern menu renumbered** after Fabric Palette and Theme Manager moved
+  out: 01. New Quilt · 02. Fill Blocks · 03. Technique Library · 04. Fabric
+  Requirements Table · 05. Text & Metadata · 06. Pattern Template Scaffold.
+  Cross-references updated (colour-tool guidance and Fill Blocks messages now
+  point at '01. New Quilt').
+
+
+## Changes in v1.6.2 (Fill Blocks Fixes) - July 2026
+
+### 🧩 Hybrid exports, HST templates, square opt-out, multi-page instructions
+
+* **Always-FPP sections in Template exports:** tag any piece with the new
+  "Always FPP" technique (09b. Mark Cutting Technique) and its WHOLE SECTION is
+  delivered as an FPP foundation template inside a Template export — one export
+  can now mix FPP foundations, single-piece templates, stitch-and-flip corner
+  squares and batch HST/geese cutting maths. FPP sections are costed with the
+  rough-cut ¾"-padded estimate, folded into each fabric's total and flagged on
+  the instructions page. Stored as `prefs["fpp_sections"]` (section letters —
+  note re-running the auto-labeller can change letters); FPP badges on canvas
+  and a review-card line show what's opted in.
+* **HST sewing-line templates:** Template exports now include one printable
+  square per unique 2-at-a-time HST size — solid diagonal cut line, dashed seam
+  lines ¼" either side, and layered-squares instructions. Optional
+  ("Include HST sewing-line templates", default on).
+* **Squares to the cutting list only:** a new export option omits printed
+  templates for square/rectangular pieces — they are cut straight from the
+  strip/subcut measurements (fussy-cut squares keep their templates).
+  Independently, pieces consumed by technique squares (stitch-and-flip corners,
+  batch HSTs, geese) no longer print useless shape templates at all; an
+  instructions note says why.
+* **Multi-page cutting instructions:** the instructions are flattened into a
+  row stream and paginated across as many "Cutting Instructions (page k of n)"
+  pages as needed, instead of truncating with "continued fabrics omitted".
+* **The cutting layout map never overflows:** it used to be squeezed under the
+  instructions and could run off the bottom of the page (its height cap only
+  checked between fabrics). Per-fabric map heights are now estimated up front
+  (`estimate_map_heights`): when the whole map fits in the space left under the
+  final instructions page it stays INLINE there (simple blocks keep their
+  one-page summary); otherwise it moves to dedicated "Cutting Layout Map
+  (page k of n)" pages with fabrics binned to always fit. A per-strip safety
+  cap truncates gracefully if an estimate is ever wrong.
+* Blocks whose every piece is technique-consumed (e.g. an all-HST block) now
+  export cleanly with instruction pages and no piece templates.
+
+### ✂️ Stitch-and-flip fixes (Mark Cutting Technique)
+
+* **Noisy triangles are recognised:** EQ-imported blocks carry near-collinear
+  phantom vertices (seam endpoints sitting ~0.0001" off a piece's edge), which
+  made real corner triangles classify as 5-sided shapes and the Mark tool
+  reject them ("select the corner TRIANGLE"). The planner now strips vertices
+  within cutting tolerance (0.015") of the line between their neighbours before
+  classifying, finding hypotenuses, matching congruence, or extending seams.
+* **Corners over three or more base pieces work:** seam extension previously
+  clipped each base's cell independently, which overlaps (and falsely refuses)
+  when 3+ bases meet the corner on different seam lines. Bases are now peeled
+  off in hypotenuse order, splitting the footprint at each junction — with new
+  explicit refusals when the selected bases leave a gap on the corner seam,
+  overlap, or a junction's seams don't continue in one straight line.
+* **Eighth-inch snapping tolerates wobble:** cut sizes round UP to the next
+  1/8", but now ignore ~1/160" of numeric noise, so an 8.0002" extended base
+  cuts at 8" instead of 8-1/8".
+* Regression: piece E1 (4" corner over three pieced bases E2+E5+E10) now tags
+  with all bases auto-detected and exports as a 4½" corner square + un-snowballed
+  8" x 3" base rectangle.
+* **Double-layer corners:** a stitch-and-flip corner that is itself partly
+  covered by a LATER corner (sew corner 1, then corner 2 flips over the top of
+  it) used to be rejected — only its visible sliver exists in the drawing, so
+  its seam and size read wrong. Stitch-and-flip tags are now resolved in
+  dependency order (`resolve_stitch_flips`): the outer corner's seam extension
+  first restores the inner corner's full pre-trim footprint, and the inner
+  corner is then analysed on that extended shape — in the Mark tool (which
+  reports "double-layer" when it happens), the fabric planner, and the review
+  card's corner sizes. Regression: A2 (1" corner sewn first, flipped over by
+  2" corner A4) tags as a 1½" square onto A1, A4 as 2½", and base A1 cuts as
+  the full un-snowballed square.
+
+### 📁 Block Library browsing — folders by default, whole-library search
+
+* **New shared browser** (`quilttools_blockpicker.py`) used by Block Library,
+  Fill Blocks and Import into Region: the default view now browses the library
+  BY SUBFOLDER — folder cards with block counts, a breadcrumb and an Up button —
+  instead of one flat wall of every block. Typing in the search box instantly
+  flattens to matching blocks from the WHOLE library (name or folder matches),
+  each captioned with the folder it lives in; clearing the search returns to
+  the folder you were browsing. Thumbnails are cached per dialog, and the three
+  tools' previously copy-pasted picker code is now one implementation.
+
+### 🎨 03. Fabric Palette — Recolour tab & block-scoped colour swapping
+
+* **New "Recolour (Plain)" tab:** swap colours with a plain colour at three
+  scopes — the selected piece(s) only, every piece of that colour in THE SAME
+  BLOCK (the quilt cell or standalone block containing the selection), or every
+  piece of that colour in the whole quilt/document.
+* **"THIS BLOCK only" scope added to Colour-with-Fabric** too, so a fabric can
+  be painted onto one block's colour without touching its neighbours.
+* **Matching understands fabric fills:** the "same colour" scopes key on the
+  piece's own fill whether it is a plain colour or a fabric pattern — select a
+  fabric-filled piece and every piece wearing that fabric can be swapped to a
+  new fabric or a plain colour. Recolouring to plain clears the piece's
+  pre-fabric memory (so Remove Fabric can't resurrect the old colour) and
+  garbage-collects patterns that are no longer used.
+* Multi-selection matches the union of the selected pieces' colours.
+* **Palette-first colour picking:** the Recolour tab's new-colour popup reads
+  Inkscape's own session state — the colour on the tool indicator (eyedropper /
+  paint-bucket / last palette click, from preferences.xml) is offered as the
+  one-click default, and the swatch grid is the palette currently selected in
+  Inkscape's swatches panel (.gpl parsed with swatch names as tooltips, e.g.
+  Moda Bella Solids). A "Colour wheel…" button covers off-palette colours; an
+  option switches back to the fixed colour button. Headless runs fall back to
+  the tool colour automatically.
+* **Whole-block clicks just work:** clicking a quilt block selects the whole
+  cell group, so when the selection holds several colours a swatch chooser
+  pops up listing them (with piece counts and fabric names) to tick which
+  colour(s) to replace. An optional "Colour to replace (hex)" field skips the
+  chooser entirely; Alt+click still selects individual pieces natively.
+
+### 🧱 04. Fill Blocks from Library
+
+* **Silent failure fixed:** a leftover debug `print()` wrote to stdout — the SVG
+  stream returned to Inkscape — and Python's buffering flushed it AFTER `</svg>`,
+  making the returned document invalid XML. Inkscape discarded the entire edit
+  while the "Successfully filled N cell(s)" message (stderr) still appeared. The
+  fill logic itself was fine; removing the print makes placements land again.
+  Audited all other extensions for stray stdout prints: none found.
+* **Blocks appeared as a corner sliver / cells looked unfilled:** the placed
+  content group carried BOTH the placement matrix and the cell clip-path, but
+  `userSpaceOnUse` clip coordinates are evaluated in the element's own
+  (transformed) space — so the clip region itself was scaled/shifted by the
+  placement matrix, clipping each block down to a sliver (or nothing). Placed
+  content is now an untransformed outer group holding the clip (canvas coords)
+  with the matrix on an inner group. Verified by rendering: blocks fill their
+  cells edge-to-edge and re-filling replaces prior content cleanly.
+* **"Target Blocks" option restored to the popup:** the Fill-all-blocks /
+  Fill-empty-blocks-only combo is back in the GTK dialog (shown when nothing is
+  selected; it still exists on the .inx dialog's "3. Options" tab and the popup
+  defaults to that value). Verified: empty mode skips an already-full quilt with
+  a clear message; all mode overwrites existing placements without duplicates.
+* **Explicit-selection fills for borders & cornerstones:** with cells selected,
+  Fill Blocks can now place library blocks into BORDER, CORNERSTONE, SASHING and
+  SETTING-TRIANGLE cells (pieced borders etc.) — the Tile sizing modes tile the
+  block along the strip. This is opt-in by selection only: bulk fills with no
+  selection still target block cells exclusively, and binding cells are always
+  refused (a folded strip cannot hold a pieced block). A tip fires when
+  stretch-fitting into long strips where tiling usually looks better.
+* Piece labels drawn by the FPP tools are now locked (`sodipodi:insensitive`) so
+  canvas selection only ever grabs pieces, never their labels (v1.6.1 follow-up).
+
+## Changes in v1.6.1 (Enclave Boundary Fix) - July 2026
+
+### 🧩 Imported blocks no longer strand un-mergeable pieces
+
+* **Root cause:** Import into Region / Fill Blocks marks the host region
+  `split_boundary` while storing the imported pieces as a bookkeeping chain
+  (`_chain_leaves`). The structural-group walk read that flag as "my two children
+  are separate groups", so the FIRST imported piece landed alone in a one-piece
+  structural group — the auto-labeller's merge pass silently refused to absorb it
+  into any neighbouring section (each refusal invisible to the user, however often
+  auto-label was re-run), Heal refused with the "structural grid boundary" error,
+  and Reset-to-Boundaries produced an overlapping chain-node blob.
+* **Fix:** `split_boundary` now distinguishes a real boundary CUT (children
+  geometrically partition the node — grid lines, circle cuts, crop frames:
+  behaviour unchanged) from an ENCLAVE (imported sub-block: the whole subtree is
+  ONE structural group, sealed from outside). New imports write the explicit
+  `"enclave"` value; legacy saved blocks are recognised geometrically (an internal
+  child carrying the node's own polygon), so existing SVGs are fixed on load with
+  no file changes. Consumers updated: `get_structural_groups`,
+  `separated_by_boundary`, `smart_heal_regions` (healing within an imported block
+  is allowed; healing across its edge still requires selecting the whole block),
+  and `reset_to_boundaries` (an enclave collapses to one clean region).
+* Regression tests in `test_labels.py` (legacy flag, explicit flag, real-cut
+  separation still enforced, no false boundary between enclave members).
+
+## Changes in v1.6 (Technique-Aware Cutting Plans) - July 2026
+
+### ✂️ New: Template-mode Cutting Instructions (Block Pattern Export)
+
+* **Exact-shape fabric requirements for Template exports.** When Export Pattern Type is
+  *Template*, the Fabric Requirements page becomes a **Cutting Instructions** page driven
+  by a new pure-python planner (`quilttools_cutplan.py`, unit-tested by `test_cutplan.py`):
+  exact SA-offset template shapes, grouped into strip-and-subcut instructions
+  ("Cut 1 strip 8½" × WOF; subcut 4 × 8½" squares"). FPP Foundation exports keep the
+  generous ¾"-padded estimates unchanged.
+* **Grain policy:** direction-free is the default (rotation in 90° steps only — edges stay
+  on grain); squares/rectangles always cut square-to-grain even when set on point;
+  direction-fixed and fussy-cut are per-piece opt-ins. Unusual shapes (>4 sides) may rotate
+  freely when direction-free.
+* **Triangle pairing:** leftover 45° right triangles nest two-up into squares/rectangles
+  (the classic finished+⅞" HST square emerges from pure geometry) with a
+  "cut in half on the diagonal" instruction; grain-locked triangles that cannot pair are
+  reported.
+* **Strips are only recommended at ≥50% utilisation**; below that, pieces are NFP-nested
+  onto an open yardage panel (reusing the Smart Pack engine) with grain-constrained
+  rotations.
+* **Over-WOF pieces (borders):** pieced-strip plans — "cut N strips, join end-to-end,
+  subcut to length" — with straight joins by default (long-armer friendly) and a diagonal
+  option; same-width smaller pieces ride along in the run. `binding_plan()` provides
+  quilt-level binding maths (2L + 2W + 10" slack, always diagonal joins) for the coming
+  quilt export.
+* **New export options:** *Cutting Math* (Use marked techniques / Templates only) and
+  *Oversize batch units for trimming* (default on). The cutting layout map now draws real
+  strips, subcut lines and diagonal cuts in template mode.
+* **Duplicate Templates option (Template exports):** print a template for every piece
+  (default, unchanged) or one template per unique SHAPE, labelled "A1 - cut 8" with a
+  "for: A1, B2, ..." caption listing the pieces it covers. Colours are combined: when a
+  shared template covers more than one fabric it prints uncoloured (no fill, no fabric
+  code) with a "mixed fabrics - see layout page" caption, a note in the page header, and
+  a run-time tip recommending the Section Map / layout page for fabric placement.
+  Congruence is detected geometrically (rotation/translation only — mirrored pieces keep
+  their own template) via `quilttools_cutplan.congruence_key`; e.g. Churn Dash prints 3
+  templates instead of 17. Applies to Smart Pack, Open Canvas and Finalize; fabric
+  estimates still count every piece.
+* Removed dead/broken code from `quilttools_fpp_fabric.py` (unreachable duplicate helpers
+  and a `fabric_estimate` that would have raised NameError; `verify_fabric.py` scratch
+  harness deleted — superseded by `test_cutplan.py`).
+
+### 🪡 New: 09b. Mark Cutting Technique (Quilt Tools menu)
+
+* **Tag pieces with cutting techniques** stored in a new optional `piece_meta` key inside
+  the block's JSON metadata — fully backwards compatible (legacy SVGs behave exactly as
+  before; older tool versions round-trip the key untouched).
+* **Stitch-and-flip corners** (applied ONLY from this tool, never automatically): select
+  the corner triangle; base pieces are found along the seam automatically, validated with
+  guillotine seam extension — pieced bases are supported by continuing every straight seam
+  across the corner footprint, and non-guillotine layouts are refused with a clear
+  message. Fabric consequences: corner square = finished leg + ½", base piece(s) cut
+  un-snowballed (full footprint restored), bonus-HST note included.
+* **Batch techniques:** 2-at-a-time HSTs (default cut = finished + 1" with up-front
+  disclosure; exact ⅞" opt-out), 8-at-a-time HSTs (2×(finished+⅞"/1")), and 4-at-a-time
+  no-waste flying geese (width+1¼"/height+⅞", oversized +1½"/+1") — tagged triangles are
+  replaced by parent squares in the cut list, with remainder fallback warnings.
+* **Auto-detect** scans the block for stitch-and-flip corner candidates and marks them
+  "suggested" (dashed badges with '?') until confirmed or cleared.
+* **Review card:** "Show review card" draws an annotation panel beside the block — mini
+  block diagram with marked corners numbered plus a legend covering S&F corners, batch
+  groups, and grain tags. Annotation only; never exported.
+* Design record: `DESIGN_fabric_cutplan.md`.
+
+---
+
+## Changes in v1.5 (Fabric Palette) - July 2026
+
+### 🧶 New: 03. Fabric Palette (Quilt Tools Pattern menu)
+
+* **Colour layers with real fabric instead of hex codes.** A new `quilttools_fabric_palette.py` / `.inx` extension applies bitmap fabric images (photos/scans) as SVG `<pattern>` fills, always at true printed scale — a 2" check repeats every 2" on the page, so previews are life-accurate. Pattern tiles use `patternUnits="userSpaceOnUse"`, so the print flows continuously across adjacent patches like pieces cut from one cloth.
+* **Import Fabric tab:** pick an image, name it (`Category/Name` filing supported), and enter the real width of fabric shown in the image; pixel dimensions are read from PNG/JPEG/GIF/BMP headers directly (no PIL dependency) and the true dpi/height are derived. Fabrics live in a `FabricLibrary/` folder beside the extensions with a JSON sidecar per image.
+* **Colour with Fabric tab:** GTK thumbnail picker with search (browser-catalogue fallback, mirroring the Block Library UX). Apply to the selection, to *every shape with the same colour as the selection* (paint-pot recolouring of a whole quilt), or the whole current layer. Optional print scale % and rotation are applied as light-weight `<pattern xlink:href>` variants so the image is embedded only once per document. Images embed as base64 by default (portable SVGs), with a link-instead option.
+* **Palette Sheet tab:** draws labelled true-scale swatches of the library (optionally filtered) on a "Fabric Palette" layer beside the page, so an SVG can carry its own fabric palette; works with Edit → Paste Style.
+* **Remove Fabric tab:** every shape remembers its pre-fabric solid colour in `data-quilttools-orig-fill` and can be reverted (selection or whole document); unused fabric patterns and their embedded images are cleaned from `<defs>` afterwards.
+* **Web Catalogue tab:** searchable browser gallery of the fabric library; clicking a fabric copies its name. A starter `Samples/Red Check` fabric ships in the library.
+
+---
+
 ## Changes in v1.4 (Auto-Labeller Fragment Merging) - July 2026
 
 ### 🪡 Physical Sewability & Healed-Tree Repairs

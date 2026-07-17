@@ -229,7 +229,9 @@ def import_block_into_region(parent_tree, parent_region, lib_bd, sizing_mode="st
     # 3. Subdivide the final inside region by recursively copying the library block's subtree
     inside_region = parent_tree.regions[curr_inside_id]
     inside_region.children = []
-    inside_region.split_boundary = True
+    # "enclave": the imported subtree is ONE structural group, sealed from
+    # the surrounding block (not a cut separating its first two children).
+    inside_region.split_boundary = "enclave"
     
     match = re.match(r"^([A-Za-z]+)", inside_region.label)
     prefix = match.group(1) if match else "A"

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>00. Fabric Palette (Blocks &amp; Quilts)</name>
+  <id>org.quilttoolsplugin.quilttools_fabric_palette</id>
+  <dependency type="executable" location="extensions">quilttools_fabric_palette.py</dependency>
+
+  <param name="notebook" type="notebook">
+    <page name="apply" gui-text="Colour with Fabric">
+      <label appearance="header">Paint your quilt with real fabric</label>
+      <label>Leave the name box empty and click Apply to choose a fabric from a picture gallery. (Or type a fabric's name to skip the gallery.)</label>
+      <param name="fabric_name" type="string" gui-text="Fabric name (leave blank to pick visually)"></param>
+      <param name="apply_to" type="optiongroup" appearance="combo" gui-text="Apply the fabric to">
+        <option value="selection">The shapes I have selected</option>
+        <option value="same_fill_block">Same colour as my selection - THIS BLOCK only</option>
+        <option value="same_fill">Same colour as my selection - WHOLE document</option>
+        <option value="layer">Everything on the current layer</option>
+      </param>
+      <param name="scale_pct" type="float" min="5.0" max="2000.0" precision="1" gui-text="Fabric print scale (%, 100 = true size)">100.0</param>
+      <param name="rotation" type="float" min="-360.0" max="360.0" precision="1" gui-text="Rotate fabric (degrees)">0.0</param>
+      <param name="embed" type="bool" gui-text="Store the fabric image inside this SVG (recommended)">true</param>
+      <separator/>
+      <label>"Every shape with the same colour" works like swapping a paint pot: select one patch, and every patch in that colour becomes this fabric. Fabrics always appear at their real printed size, so your preview is true to life.</label>
+    </page>
+
+    <page name="recolour" gui-text="Recolour (Plain)">
+      <label appearance="header">Swap colours with a plain colour</label>
+      <param name="colour_source" type="optiongroup" appearance="combo" gui-text="New colour comes from">
+        <option value="ask">My Inkscape palette (popup; current tool colour is the default)</option>
+        <option value="fixed">The colour selected below</option>
+      </param>
+      <param name="plain_colour" type="color" appearance="colorbutton" gui-text="New colour (only used with 'selected below')">0x888888ff</param>
+      <param name="recolour_scope" type="optiongroup" appearance="combo" gui-text="Change">
+        <option value="selection">Only the piece(s) I have selected</option>
+        <option value="same_fill_block">Same colour as my selection - THIS BLOCK only</option>
+        <option value="same_fill">Same colour as my selection - WHOLE quilt/document</option>
+        <option value="layer">Everything on the current layer</option>
+      </param>
+      <param name="match_colour" type="string" gui-text="Colour to replace (hex, blank = ask/from selection)"></param>
+      <separator/>
+      <label>Works on plain colours AND fabric fills: select a piece and every piece sharing its colour (or its fabric) in the chosen scope becomes the new colour. "THIS BLOCK" means the quilt cell (or standalone block) containing your selection.</label>
+      <label>TIP: a single click in a quilt selects the whole block - that is fine! When your selection holds several colours, a swatch chooser pops up asking which colour(s) to replace. (Alt+click in Inkscape selects an individual piece if you prefer.)</label>
+      <label>The new-colour popup shows YOUR current Inkscape palette (e.g. Moda Bella Solids) with the colour on your tool indicator preselected - one click confirms it. A 'Colour wheel' button is there when you want a colour outside the palette.</label>
+    </page>
+
+    <page name="import" gui-text="Import Fabric">
+      <label appearance="header">Add a fabric to your library</label>
+      <param name="image_file" type="path" mode="file" filetypes="png,jpg,jpeg,gif,bmp" gui-text="Fabric photo or scan"></param>
+      <param name="fabric_name_new" type="string" gui-text="Fabric name (use Category/Name for folders)"></param>
+      <param name="real_width_in" type="float" min="0.1" max="120.0" precision="2" gui-text="Real width shown in the image (inches)">4.0</param>
+      <param name="tags" type="string" gui-text="Tags (comma-separated, e.g. floral, red)"></param>
+      <param name="overwrite" type="bool" gui-text="Overwrite if it already exists">false</param>
+      <separator/>
+      <label>The "real width" is what makes fabric appear at true size in your design. Easy method: photograph or scan the fabric with a ruler in shot, crop the picture to a tidy width (say exactly 4 inches of fabric), and type that number here. A flatbed scan cropped to 4 inches wide = 4.</label>
+      <label>Fabrics live in a "FabricLibrary" folder next to the Quilt Tools extension files. To remove one, delete its image and matching .json file from that folder.</label>
+    </page>
+
+    <page name="sheet" gui-text="Palette Sheet">
+      <label appearance="header">Draw fabric swatches into this document</label>
+      <param name="sheet_filter" type="string" gui-text="Only fabrics matching (name or tag, blank = all)"></param>
+      <param name="sheet_size_in" type="float" min="0.5" max="10.0" precision="1" gui-text="Swatch size (inches)">2.0</param>
+      <separator/>
+      <label>Adds a "Fabric Palette" layer with a labelled swatch of each fabric, placed just to the right of the page. The swatches travel with the SVG, so the file carries its own fabric palette. Copy a swatch and use Edit &gt; Paste Style to put its fabric on any shape.</label>
+    </page>
+
+    <page name="revert" gui-text="Remove Fabric">
+      <label appearance="header">Put the original colours back</label>
+      <param name="revert_scope" type="optiongroup" appearance="combo" gui-text="Remove fabric from">
+        <option value="selection">The shapes I have selected</option>
+        <option value="document">The whole document</option>
+      </param>
+      <label>Each shape remembers the solid colour it had before a fabric was applied, and gets it back. Unused fabric images are cleaned out of the file to keep it small.</label>
+    </page>
+
+    <page name="catalogue" gui-text="Web Catalogue">
+      <label appearance="header">Browse your fabric library</label>
+      <label>Click Apply to open a searchable picture gallery of every fabric in your library in the web browser. Click any fabric there to copy its name.</label>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Colour"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_fabric_palette.py</command></script>
+</inkscape-extension>

@@ -10,6 +10,7 @@ class ShapeCutPlugin(inkex.Effect):
         pars.add_argument("--action", type=str, default="shape_cut")
         pars.add_argument("--min_piece_area", type=float, default=0.25)
         pars.add_argument("--subdivisions", type=int, default=32)
+        pars.add_argument("--allow_y_seams", type=inkex.Boolean, default=False)
 
     def effect(self):
         self._shape_cut()
@@ -20,12 +21,20 @@ class ShapeCutPlugin(inkex.Effect):
             return inkex.errormsg("No Quilt Tools FPP block found.")
         tree = block_data.tree
 
+        # Save original JSON string and Y-seam status for rollback
+        desc = g.find(f"{{{core.SVG_NS}}}desc[@id='{core.FPP_DATA_TAG_ID}']")
+        original_json = desc.text
+        _, warn_before = core.calculate_section_sewing_order(block_data)
+        leaf_ids_before = [r.id for r in tree.leaf_regions()]
+        is_valid_before, _ = tree.virtual_sewing_validator(leaf_ids_before)
+        block_has_y_seams_before = (not is_valid_before) or warn_before
+        has_curves_before = hasattr(tree, "curves") and len(tree.curves) > 0
+
         selected = list(self.svg.selection.values())
         region_el = next((el for el in selected if el.get(core.FPP_REGION_ATTR)), None)
         shape_elements = [el for el in selected if not el.get(core.FPP_REGION_ATTR)]
 
         if not shape_elements:
-            # Auto-detect circle shape in the document if none is selected
             cands = [
                 el
                 for tag in ("circle", "ellipse", "path")
@@ -46,6 +55,7 @@ class ShapeCutPlugin(inkex.Effect):
         )
 
         total_cuts = 0
+        to_delete = []
         for shape_el in shape_elements:
             try:
                 xf_func = shape_el.composed_transform().apply_to_point
@@ -55,7 +65,6 @@ class ShapeCutPlugin(inkex.Effect):
             tag = shape_el.tag.split("}")[-1]
             is_circle = False
 
-            # Check if it has sodipodi arc attributes (very common for Inkscape circles)
             sodipodi_type = shape_el.get(f"{{{core.SODIPODI_NS}}}type")
             if sodipodi_type == "arc" or tag in ("circle", "ellipse"):
                 is_circle = True
@@ -87,7 +96,6 @@ class ShapeCutPlugin(inkex.Effect):
                             pass
 
                 if cx is None or cy is None or r is None:
-                    # Estimate center and radius from bounding box
                     try:
                         bbox = shape_el.bounding_box()
                         if bbox and bbox.width > 0:
@@ -100,7 +108,6 @@ class ShapeCutPlugin(inkex.Effect):
                 if cx is None or cy is None or r is None:
                     continue
 
-                # Transform circle properties to FPP group local space
                 p_center = inkex.Vector2d(cx, cy)
                 p_edge = inkex.Vector2d(cx + r, cy)
 
@@ -117,13 +124,12 @@ class ShapeCutPlugin(inkex.Effect):
                     cuts = tree.multi_circle_cut(
                         local_center, local_radius, man_id, self.options.subdivisions
                     )
-                    total_cuts += cuts
-                    if cuts > 0 and shape_el.getparent() is not None:
-                        shape_el.getparent().remove(shape_el)
+                    if cuts > 0:
+                        total_cuts += cuts
+                        to_delete.append(shape_el)
                 except ValueError:
                     pass
             else:
-                # General Path/Curve logic
                 path_d = shape_el.get("d")
                 if not path_d:
                     continue
@@ -141,9 +147,9 @@ class ShapeCutPlugin(inkex.Effect):
 
                 try:
                     cuts = tree.multi_path_cut(local_points, man_id)
-                    total_cuts += cuts
-                    if cuts > 0 and shape_el.getparent() is not None:
-                        shape_el.getparent().remove(shape_el)
+                    if cuts > 0:
+                        total_cuts += cuts
+                        to_delete.append(shape_el)
                 except ValueError:
                     pass
 
@@ -152,8 +158,40 @@ class ShapeCutPlugin(inkex.Effect):
                 "Shape Cut failed: The shape did not intersect any cuttable regions at exactly 2 points."
             )
 
+        # Check post-cut Y-seam and curve status
+        leaf_ids_after = [r.id for r in tree.leaf_regions()]
+        is_valid_after, sequence = tree.virtual_sewing_validator(leaf_ids_after)
+        _, warn_after = core.calculate_section_sewing_order(block_data)
+        block_has_y_seams_after = (not is_valid_after) or warn_after
+        has_curves_after = hasattr(tree, "curves") and len(tree.curves) > 0
+        
+        introduced_y_seams = block_has_y_seams_after and not block_has_y_seams_before
+        introduced_curves = has_curves_after and not has_curves_before
+        
+        if (introduced_y_seams or introduced_curves) and not self.options.allow_y_seams:
+            desc.text = original_json
+            return inkex.errormsg(
+                "Shape Cut failed: This cut would introduce Y-seams or curves. "
+                "Check 'Allow Y-seams / partial seams' in the options dialog if you wish to proceed anyway."
+            )
+
+        if block_has_y_seams_after or introduced_curves:
+            block_data.prefs["has_y_seams"] = True
+            if block_has_y_seams_after:
+                unseparable_ids = set(leaf_ids_after) - set(sequence)
+                for rid in unseparable_ids:
+                    block_data.set_piece_meta(rid, technique="y_seam")
+
+        # Success! Delete guide shapes
+        for shape_el in to_delete:
+            if shape_el.getparent() is not None:
+                shape_el.getparent().remove(shape_el)
+
         core.refresh_layer(g, block_data)
         warning_msg = ""
+        if warn_after or introduced_curves:
+            warning_msg += "\nWARNING: This block now contains Y-seams or partial seams!"
+            
         min_sq_in = self.options.min_piece_area
         for region in tree.leaf_regions():
             if region.area_sq_in() < min_sq_in:

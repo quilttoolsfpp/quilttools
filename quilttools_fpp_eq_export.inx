@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>08. Electric Quilt Export</name>
+  <name>10. Electric Quilt Export</name>
   <id>org.quilttoolsplugin.quilttools_fpp_eq_export</id>
   <dependency type="executable" location="extensions">quilttools_fpp_eq_export.py</dependency>
 
@@ -53,7 +53,7 @@ of the file it wrote. Look for that message in the popup.</label>
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script><command location="extensions" interpreter="python">quilttools_fpp_eq_export.py</command></script>

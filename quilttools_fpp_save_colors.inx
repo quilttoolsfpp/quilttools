@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>Save Canvas Colors</name>
+  <name>03b. Quick Save Colours (bind to a key, Blocks only)</name>
   <id>org.quilttools.fpp.save_colors</id>
   <dependency type="executable" location="extensions">quilttools_fpp_save_colors.py</dependency>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Colour"/>
     </effects-menu>
   </effect>
 

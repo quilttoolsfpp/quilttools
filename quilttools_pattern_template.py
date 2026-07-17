@@ -8,6 +8,7 @@ import quilttools_theme as qtheme
 
 class PatternTemplatePlugin(inkex.EffectExtension):
     def add_arguments(self, pars):
+        pars.add_argument("--header_prefs", type=str, default="")
         pars.add_argument("--pattern_title", type=str, default="My New Quilt")
         pars.add_argument("--pattern_subtitle", type=str, default="A modern FPP design")
         pars.add_argument("--author_brand", type=str, default="")

@@ -20,7 +20,7 @@
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script><command location="extensions" interpreter="python">quilttools_fpp_cut.py</command></script>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>04. Fill Blocks from Library</name>
+  <name>02. Fill Blocks from Library</name>
   <id>org.quilttools.pattern.fill_blocks</id>
   <dependency type="executable" location="extensions">quilttools_fill_blocks.py</dependency>
 
@@ -13,6 +13,8 @@
       <param name="sizing_mode" type="optiongroup" appearance="combo" gui-text="Sizing Mode:">
         <option value="stretch">Stretch to fit</option>
         <option value="cover">Proportional Crop (Cover)</option>
+        <option value="tile_stretch">Tile (stretch to fit even tiles)</option>
+        <option value="tile_ratio">Tile (keep ratio, crop ends)</option>
       </param>
       <param name="auto_align" type="bool" gui-text="Auto-align to cell orientation (longest edge):">true</param>
       <param name="rotation" type="optiongroup" appearance="combo" gui-text="Additional Rotation:">
@@ -30,7 +32,11 @@
       </param>
     </page>
     <page name="options_page" gui-text="3. Options">
-      <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default):"></param>
+      <param name="empty_target_mode" type="optiongroup" appearance="combo" gui-text="Target Blocks (if selection is empty):">
+        <option value="all">Fill all quilt blocks</option>
+        <option value="empty">Fill all empty quilt blocks</option>
+      </param>
+      <label>With an explicit selection you can also fill BORDER, CORNERSTONE, SASHING and SETTING-TRIANGLE cells (e.g. pieced borders). Bulk fills without a selection only ever target block cells. Binding can never be filled.</label>
     </page>
   </param>
 

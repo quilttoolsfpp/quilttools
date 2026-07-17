@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>05. Technique Library Injector</name>
+    <name>03. Technique Library Injector</name>
     <id>org.quilttools.fpp.technique_library</id>
     <param name="technique" type="optiongroup" appearance="combo" gui-text="Technique:">
         <option value="fg_4_at_a_time">No-waste 4-at-a-time Flying Geese</option>

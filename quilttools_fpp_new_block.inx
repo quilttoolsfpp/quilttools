@@ -5,6 +5,7 @@
   <dependency type="executable" location="extensions">quilttools_fpp_new_block.py</dependency>
 
   <param name="use_page_size" type="bool" gui-text="Use current page size for block (ignores inputs below)">false</param>
+  <param name="use_selection_path" type="bool" gui-text="Initialize block boundary from SELECTED path">false</param>
   <param name="block_w_in" type="float" min="0.5" max="120" precision="3" gui-text="Block width (inches)">6.0</param>
   <param name="block_h_in" type="float" min="0.5" max="120" precision="3" gui-text="Block height (inches)">6.0</param>
   <separator/>
@@ -24,7 +25,7 @@
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script><command location="extensions" interpreter="python">quilttools_fpp_new_block.py</command></script>

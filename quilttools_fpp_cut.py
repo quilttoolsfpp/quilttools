@@ -29,6 +29,14 @@ class CutPlugin(inkex.Effect):
             return inkex.errormsg("No Quilt Tools FPP block found.")
         tree = block_data.tree
 
+        # Save original JSON string and Y-seam status for rollback
+        desc = g.find(f"{{{core.SVG_NS}}}desc[@id='{core.FPP_DATA_TAG_ID}']")
+        original_json = desc.text
+        _, warn_before = core.calculate_section_sewing_order(block_data)
+        leaf_ids_before = [r.id for r in tree.leaf_regions()]
+        is_valid_before, _ = tree.virtual_sewing_validator(leaf_ids_before)
+        block_has_y_seams_before = (not is_valid_before) or warn_before
+
         selected = list(self.svg.selection.values())
         region_el = next((el for el in selected if el.get(core.FPP_REGION_ATTR)), None)
         guide_elements = [el for el in selected if not el.get(core.FPP_REGION_ATTR)]
@@ -56,6 +64,7 @@ class CutPlugin(inkex.Effect):
         is_bound = self.options.mark_boundary
 
         total_cuts = 0
+        to_delete = []
         for guide_el in guide_elements:
             try:
                 xf_func = guide_el.composed_transform().apply_to_point
@@ -105,9 +114,9 @@ class CutPlugin(inkex.Effect):
                 cuts = tree.multi_guillotine_cut(
                     local_p1, local_p2, snap, man_id, is_bound
                 )
-                total_cuts += cuts
-                if cuts > 0 and guide_el.getparent() is not None:
-                    guide_el.getparent().remove(guide_el)
+                if cuts > 0:
+                    total_cuts += cuts
+                    to_delete.append(guide_el)
             except ValueError:
                 pass
 
@@ -115,6 +124,24 @@ class CutPlugin(inkex.Effect):
             return inkex.errormsg(
                 "Cut failed: The drawn line(s) did not touch any cuttable regions."
             )
+
+        # Check if the cut introduced Y-seams
+        leaf_ids_after = [r.id for r in tree.leaf_regions()]
+        is_valid_after, _ = tree.virtual_sewing_validator(leaf_ids_after)
+        _, warn_after = core.calculate_section_sewing_order(block_data)
+        block_has_y_seams_after = (not is_valid_after) or warn_after
+
+        if block_has_y_seams_after and not block_has_y_seams_before:
+            desc.text = original_json
+            return inkex.errormsg(
+                "Cut failed: This cut would introduce Y-seams or partial seams. "
+                "Guillotine cuts must remain Y-seam free."
+            )
+
+        # Success! Delete guide shapes
+        for el in to_delete:
+            if el.getparent() is not None:
+                el.getparent().remove(el)
 
         core.refresh_layer(g, block_data)
         warning_msg = ""

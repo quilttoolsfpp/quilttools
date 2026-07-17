@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>02. Quick Cut (bind to a key)</name>
+  <name>02b. Quick Cut (bind to a key)</name>
   <id>org.quilttools.fpp.quick_cut</id>
   <dependency type="executable" location="extensions">quilttools_fpp_cut.py</dependency>
 
@@ -31,7 +31,7 @@
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
 

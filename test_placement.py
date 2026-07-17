@@ -50,5 +50,14 @@ class TestPlacement(unittest.TestCase):
         angle2 = qplace.get_longest_edge_angle(poly2)
         self.assertAlmostEqual(angle2, 45.0)
 
+    def test_tiled_placement_transforms(self):
+        src_poly = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        dst_poly = [(0, 0), (30, 0), (30, 10), (0, 10)]
+        map_pt_list, matrix_str_list = qplace.calculate_tiled_placement_transforms(
+            src_poly, dst_poly, sizing_mode="tile_stretch", rotation=0.0, flip="none", auto_align=False
+        )
+        self.assertEqual(len(map_pt_list), 3)
+        self.assertEqual(len(matrix_str_list), 3)
+
 if __name__ == "__main__":
     unittest.main()

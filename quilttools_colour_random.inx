@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>02. Colour Randomiser (Blocks &amp; Quilts)</name>
+  <id>org.quilttools.pattern.colour_random</id>
+  <dependency type="executable" location="extensions">quilttools_colour_random.py</dependency>
+
+  <param name="notebook" type="notebook">
+    <page name="general_page" gui-text="1. Mode &amp; Scope">
+      <param name="scope" type="optiongroup" appearance="combo" gui-text="Scope:">
+        <option value="quilt">Per Quilt (same color for each slot across blocks)</option>
+        <option value="block">Per Block (each block cell varies separately)</option>
+      </param>
+      <param name="mode" type="optiongroup" appearance="combo" gui-text="Randomise Mode:">
+        <option value="augmented">Augmented Random (Harmony Rules)</option>
+        <option value="shuffle">Shuffle Existing Colors</option>
+        <option value="palette">Randomise from Palette (.gpl / swatches)</option>
+        <option value="full_random">Full Random (OKLCh sane bounds)</option>
+      </param>
+      <param name="seed" type="string" gui-text="Optional Seed (Empty for random):"></param>
+      <param name="locked_colors" type="string" gui-text="Locked Colors (Comma-separated hex list):"></param>
+      <label>To lock specific pieces, select their paths on the canvas before running this extension. They will keep their original colors.</label>
+    </page>
+
+    <page name="augmented_page" gui-text="2. Harmony Rules">
+      <param name="rule" type="optiongroup" appearance="combo" gui-text="Harmony Rule:">
+        <option value="analogous">Analogous</option>
+        <option value="complementary">Complementary</option>
+        <option value="triad">Triad</option>
+        <option value="preserve_value">Preserve Value (keeps lightness)</option>
+        <option value="high_contrast">High Contrast (spread lightness)</option>
+        <option value="low_contrast">Low Contrast (hold lightness close)</option>
+      </param>
+      <param name="anchor" type="string" gui-text="Anchor Color Hex (Empty to pick random or locked):"></param>
+      <param name="tolerance" type="float" min="0.0" max="360.0" precision="3" gui-text="Tolerance (Hue deg / Lightness fraction):">15.0</param>
+      <param name="block_variation" type="float" min="0.0" max="1.0" precision="3" gui-text="Block Variation / Jitter (L units, for Per Block scope):">0.05</param>
+      <label>For hue rules (analogous, complementary, triad), tolerance is in degrees (0-360). For lightness rules (preserve_value, low_contrast), tolerance is a fraction of lightness (0.0-1.0, e.g. 0.05). If tolerance &gt; 1.0 it is scaled automatically.</label>
+    </page>
+
+    <page name="palette_page" gui-text="3. Palette Options">
+      <param name="palette_source" type="optiongroup" appearance="combo" gui-text="Palette Source:">
+        <option value="current">Current Inkscape Palette</option>
+        <option value="gpl">GPL Palette File Path</option>
+      </param>
+      <param name="gpl_file" type="string" gui-text="GPL File Path (or filename):"></param>
+      <label>Provide the absolute path or filename of a .gpl palette file saved in your Inkscape palettes folder.</label>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Colour"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="extensions" interpreter="python">quilttools_colour_random.py</command>
+  </script>
+</inkscape-extension>

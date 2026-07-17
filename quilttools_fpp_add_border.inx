@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>08. Add Plain Border</name>
+  <name>09. Add Plain Border</name>
   <id>org.quilttoolsplugin.quilttools_fpp_add_border</id>
   <dependency type="executable" location="extensions">quilttools_fpp_add_border.py</dependency>
 
@@ -19,7 +19,7 @@
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script>

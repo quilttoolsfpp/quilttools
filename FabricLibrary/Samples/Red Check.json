@@ -1,0 +1,12 @@
+{
+  "name": "Red Check",
+  "width_in": 2.0,
+  "height_in": 2.0,
+  "px_w": 64,
+  "px_h": 64,
+  "tags": [
+    "sample",
+    "check"
+  ],
+  "source_file": "test_check.png"
+}

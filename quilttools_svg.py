@@ -63,16 +63,75 @@ def build_fpp_layer(block_data):
     return g
 
 
-def refresh_layer(g, block_data):
+def refresh_layer(g, block_data, scrape=True):
+    tree, prefs = block_data.tree, block_data.prefs
+    color_mode = prefs.get("color_mode", "piece")
+    custom_colors = prefs.setdefault("custom_colors", {})
+    
+    # Check if we should scrape: either custom_colors is not empty,
+    # or at least one canvas path has a color different from its default color.
+    should_scrape = scrape and len(custom_colors) > 0
+    if scrape and not should_scrape:
+        leafs = sorted(tree.leaf_regions(), key=lambda r: r.label)
+        for idx, region in enumerate(leafs):
+            path = g.find(f".//{{{SVG_NS}}}path[@id='region-{region.label}']")
+            if path is not None:
+                color = resolve_element_fill(path)
+                if color:
+                    default_color = get_color_for_label(region.label, color_mode, idx)
+                    if color.strip().lower() != default_color.strip().lower():
+                        should_scrape = True
+                        break
+                        
+    if should_scrape and not prefs.get("bypass_custom_colors", False):
+        for path in g.findall(f".//{{{SVG_NS}}}path"):
+            rid = path.get(FPP_REGION_ATTR)
+            if rid:
+                color = resolve_element_fill(path)
+                if color:
+                    custom_colors[str(rid)] = color
+        # Scrape background color for applique blocks
+        bg_el = g.find(f".//{{{SVG_NS}}}path[@id='qt-block-bg']")
+        if bg_el is not None:
+            bg_color = resolve_element_fill(bg_el)
+            if bg_color:
+                custom_colors["bg"] = bg_color
+                prefs["bg_color"] = bg_color
+
     for child in list(g):
         g.remove(child)
-    tree, prefs = block_data.tree, block_data.prefs
+        
     sa_px = (
         prefs.get("sa_in", 0.25) * PX_PER_INCH if prefs.get("show_sa", False) else 0.0
     )
     color_mode = prefs.get("color_mode", "piece")
     custom_colors = prefs.get("custom_colors", {}) if not prefs.get("bypass_custom_colors", False) else {}
     group_by_color = prefs.get("group_by_color", False)
+    
+    # Render background for applique blocks
+    block_kind = prefs.get("block_kind", "fpp")
+    if block_kind == "applique":
+        bg_color = prefs.get("bg_color", "#ffffff")
+        if not prefs.get("bypass_custom_colors", False):
+            bg_color = custom_colors.get("bg", bg_color)
+        
+        outline = tree.regions[tree.root_id].polygon
+        if outline:
+            bg_d = (
+                "M {:.4f},{:.4f} ".format(*outline[0])
+                + " ".join("L {:.4f},{:.4f}".format(*p) for p in outline[1:])
+                + " Z"
+            )
+            etree.SubElement(
+                g,
+                "{%s}path" % SVG_NS,
+                d=bg_d,
+                id="qt-block-bg",
+                style=f"fill:{bg_color};stroke:#333333;stroke-width:1.0;stroke-linejoin:round;stroke-dasharray:none;",
+                **{
+                    "data-fpp-ignore": "true"
+                }
+            )
 
     color_groups = {}
 
@@ -133,6 +192,9 @@ def refresh_layer(g, block_data):
             x=f"{cx:.2f}",
             y=f"{cy:.2f}",
             style="font-size:11px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#333333;pointer-events:none",
+            # Locked (Inkscape object lock) so click/rubber-band selection
+            # only ever grabs the pieces, never their labels.
+            **{f"{{{SODIPODI_NS}}}insensitive": "true"},
         )
         txt.text = region.label
 
@@ -177,15 +239,18 @@ def parse_svg_dim(val, default):
 def resolve_element_fill(el):
     current = el
     while current is not None:
+        if current.get("id") == "fpp-quilttools-layer" or current.get(f"{{{INKSCAPE_NS}}}groupmode") == "layer":
+            break
+            
         style = current.get("style", "")
         m = re.search(r"fill:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)", style)
         if m:
             fill_val = m.group(1)
-            if fill_val not in ["none", "currentColor"]:
+            if fill_val not in ["none", "currentColor", "inherit"]:
                 return fill_val
         
         fill_attr = current.get("fill")
-        if fill_attr and fill_attr not in ["none", "currentColor"]:
+        if fill_attr and fill_attr not in ["none", "currentColor", "inherit"]:
             return fill_attr
             
         current = current.getparent()
@@ -609,41 +674,116 @@ def quantize_block_colors(block_data, N, locked_hex_list):
             custom_colors[str(rid)] = rgb_to_hex(rgb)
         return
 
+    # Helper functions for CIELAB color theory based distance
+    def rgb_to_lab(rgb):
+        r, g, b = [val / 255.0 for val in rgb]
+        def to_linear(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        r_l, g_l, b_l = to_linear(r), to_linear(g), to_linear(b)
+        x = r_l * 0.4124564 + g_l * 0.3575761 + b_l * 0.1804375
+        y = r_l * 0.2126729 + g_l * 0.7151522 + b_l * 0.0721750
+        z = r_l * 0.0193339 + g_l * 0.1191920 + b_l * 0.9503041
+        xn, yn, zn = 0.950489, 1.000000, 1.088840
+        xr, yr, zr = x / xn, y / yn, z / zn
+        def f(t):
+            return t ** (1/3) if t > 0.008856 else 7.787 * t + 16/116
+        fx, fy, fz = f(xr), f(yr), f(zr)
+        l_star = 116 * fy - 16
+        a_star = 500 * (fx - fy)
+        b_star = 200 * (fy - fz)
+        return (l_star, a_star, b_star)
+
+    lab_cache = {}
+    def get_lab(rgb):
+        if rgb not in lab_cache:
+            lab_cache[rgb] = rgb_to_lab(rgb)
+        return lab_cache[rgb]
+
+    def dist_lab(c1, c2):
+        l1, a1, b1 = get_lab(c1)
+        l2, a2, b2 = get_lab(c2)
+        return math.hypot(l1-l2, a1-a2, b1-b2)
+
     L = len(locked_rgbs)
     if L >= N:
         centroids = locked_rgbs[:N]
         for rid, rgb in region_colors.items():
-            best_c = min(centroids, key=lambda c: math.hypot(rgb[0]-c[0], rgb[1]-c[1], rgb[2]-c[2]))
+            best_c = min(centroids, key=lambda c: dist_lab(rgb, c))
             custom_colors[str(rid)] = rgb_to_hex(best_c)
         return
 
-    centroids = list(locked_rgbs)
-    remaining_colors = [c for c in unique_colors if c not in locked_rgbs]
-    freqs = {}
-    for rgb in region_colors.values():
-        if rgb not in locked_rgbs:
-            freqs[rgb] = freqs.get(rgb, 0) + 1
-    sorted_rem = sorted(remaining_colors, key=lambda c: freqs.get(c, 0), reverse=True)
-    centroids.extend(sorted_rem[:N-L])
-    while len(centroids) < N and unique_colors:
-        centroids.append(unique_colors[0])
+    # Agglomerative clustering based on perceptual CIELAB distances
+    clusters = []
+    for rgb in unique_colors:
+        is_locked = rgb in locked_rgbs
+        count = sum(1 for c in region_colors.values() if c == rgb)
+        clusters.append({
+            'color': rgb,
+            'count': count,
+            'locked': is_locked,
+            'original_colors': {rgb}
+        })
 
-    for _ in range(20):
-        clusters = [[] for _ in range(N)]
-        for rid, rgb in region_colors.items():
-            best_idx = min(range(N), key=lambda idx: math.hypot(rgb[0]-centroids[idx][0], rgb[1]-centroids[idx][1], rgb[2]-centroids[idx][2]))
-            clusters[best_idx].append(rgb)
+    # Add any locked colors not present in the block as their own clusters
+    for rgb in locked_rgbs:
+        if rgb not in unique_colors:
+            clusters.append({
+                'color': rgb,
+                'count': 0,
+                'locked': True,
+                'original_colors': {rgb}
+            })
 
-        for i in range(L, N):
-            if clusters[i]:
-                avg_r = int(sum(c[0] for c in clusters[i]) / len(clusters[i]))
-                avg_g = int(sum(c[1] for c in clusters[i]) / len(clusters[i]))
-                avg_b = int(sum(c[2] for c in clusters[i]) / len(clusters[i]))
-                centroids[i] = (avg_r, avg_g, avg_b)
+    while len(clusters) > N:
+        min_d = float('inf')
+        best_pair = None
+        for i in range(len(clusters)):
+            for j in range(i+1, len(clusters)):
+                if clusters[i]['locked'] and clusters[j]['locked']:
+                    continue
+                d = dist_lab(clusters[i]['color'], clusters[j]['color'])
+                if d < min_d:
+                    min_d = d
+                    best_pair = (i, j)
 
+        if best_pair is None:
+            break
+
+        i, j = best_pair
+        c1, c2 = clusters[i], clusters[j]
+
+        # Merge c2 into c1
+        if c1['locked']:
+            new_color = c1['color']
+        elif c2['locked']:
+            new_color = c2['color']
+        else:
+            total_count = c1['count'] + c2['count']
+            if total_count > 0:
+                new_r = int((c1['color'][0]*c1['count'] + c2['color'][0]*c2['count']) / total_count)
+                new_g = int((c1['color'][1]*c1['count'] + c2['color'][1]*c2['count']) / total_count)
+                new_b = int((c1['color'][2]*c1['count'] + c2['color'][2]*c2['count']) / total_count)
+                new_color = (new_r, new_g, new_b)
+            else:
+                new_color = c1['color']
+
+        c1['color'] = new_color
+        c1['count'] = c1['count'] + c2['count']
+        c1['locked'] = c1['locked'] or c2['locked']
+        c1['original_colors'].update(c2['original_colors'])
+
+        clusters.pop(j)
+
+    # Build mapping from original color to quantized color
+    color_map = {}
+    for c in clusters:
+        for orig in c['original_colors']:
+            color_map[orig] = c['color']
+
+    # Assign new colors to regions
     for rid, rgb in region_colors.items():
-        best_c = min(centroids, key=lambda c: math.hypot(rgb[0]-c[0], rgb[1]-c[1], rgb[2]-c[2]))
-        custom_colors[str(rid)] = rgb_to_hex(best_c)
+        quantized_rgb = color_map.get(rgb, rgb)
+        custom_colors[str(rid)] = rgb_to_hex(quantized_rgb)
 
 
 def mirror_block_geometry(block_data):

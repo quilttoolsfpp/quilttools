@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>01. Theme Manager</name>
+    <name>x. Theme Manager (pattern PDF styling)</name>
     <id>org.quilttools.pattern.theme_manager</id>
     <dependency type="executable" location="extensions">quilttools_theme_manager.py</dependency>
 
@@ -36,7 +36,7 @@
     <effect>
         <object-type>all</object-type>
         <effects-menu>
-            <submenu name="Quilt Tools Pattern"/>
+            <submenu name="Quilt Tools Colour"/>
         </effects-menu>
     </effect>
     <script>

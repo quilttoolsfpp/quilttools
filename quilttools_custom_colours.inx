@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>03. Custom Block Colours (Blocks only)</name>
+  <id>org.quilttoolsplugin.quilttools_custom_colours</id>
+  <dependency type="executable" location="extensions">quilttools_custom_colours.py</dependency>
+
+  <label appearance="header">Permanent colour memory of a BLOCK</label>
+  <label>BLOCKS ONLY: these actions edit the block's saved colours. On a quilt layout, use 00. Fabric Palette or 02. Colour Randomiser (they recolour placed cells directly), or open the source block from the Block Library.</label>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="save_colors">Save Canvas Colors to Block Memory</option>
+    <option value="sample_image">Sample Fabric Colors from Traced Image</option>
+    <option value="quantize">Quantize Colors to N Fabrics</option>
+    <option value="export_palette">Export Block Colors as Inkscape Palette</option>
+    <option value="clear_colors">Clear Custom Colors (Permanently delete all saved colors, revert to default)</option>
+  </param>
+
+  <separator/>
+  <label appearance="header">Quantize / Palette Settings</label>
+  <param name="quantize_n" type="int" min="1" max="24" gui-text="Target Number of Fabrics (N)">6</param>
+  <param name="locked_colors" type="string" gui-text="Locked Fabric Colors (Comma-separated hex; selection is also locked)"></param>
+  <param name="color_code_overrides" type="string" gui-text="Custom Color Codes (e.g. #678967:FAB1, #ffffff:BG)"></param>
+
+  <label>Tip: fill pieces with the Inkscape paint tool then 'Save Canvas Colors'; the temporary bypass/palette VIEW switches live in Quilt Tools Block &gt; 05. FPP Display Toggle.</label>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Colour"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_custom_colours.py</command></script>
+</inkscape-extension>

@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="576.0" height="498.831" viewBox="0 0 576.0 498.831" data-quilttools-block="1" data-quilttools-name="Triangle">
+  <title>Regular Triangle</title>
+  <g id="fpp-quilttools-layer" inkscape:label="Quilt Tools FPP Regions" inkscape:groupmode="layer">
+    <path d="M 0.0000,498.8310 L 576.0000,498.8310 L 288.0000,0.0000 Z" id="region-A1" style="fill:#d6eaf8;fill-opacity:0.80;stroke:#222222;stroke-width:1.0;stroke-linejoin:round" data-fpp-region-id="1"/>
+    <text x="288.00" y="332.55" style="font-size:11px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#333333;pointer-events:none">A1</text>
+    <desc id="fpp-tree-data-quilttools">{"tree": {"root_id": 1, "regions": {"1": {"id": 1, "label": "A1", "polygon": [[0.0, 498.831], [576.0, 498.831], [288.0, 0.0]], "parent_id": null, "children": [], "split_boundary": false}}}, "prefs": {"show_sa": false, "sa_in": 0.25, "color_mode": "piece", "custom_colors": {}}}</desc>
+  </g>
+</svg>

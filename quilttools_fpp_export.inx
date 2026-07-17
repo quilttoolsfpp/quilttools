@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>10. Block Pattern Export</name>
+  <name>13. Block Pattern Export</name>
   <id>org.quilttoolsplugin.quilttools_fpp_export</id>
   <dependency type="executable" location="extensions">quilttools_fpp_export.py</dependency>
 
@@ -9,67 +9,50 @@
     <option value="step2">Step 2: Render PDF Patterns (Smart Pack or Finalize Manual Layout)</option>
   </param>
 
-  <label>Please configure the options in all tabs below before running your selected step.</label>
+  <label>Choose your export workflow tab below. Margins, metadata credits, and page setups will appear in a separate setup dialog when you click Apply.</label>
 
   <param name="notebook" type="notebook">
-    <page name="options_tab" gui-text="1. Options &amp; Page Features">
-      <param name="include_preview" type="bool" gui-text="Include Cover Page (Page 1 Title/Summary &amp; Hero)">true</param>
-      <param name="separate_section_alignment_image" type="bool" gui-text="Include Section Map Page (Page 2)">false</param>
-      <param name="include_fabric_estimation" type="bool" gui-text="Include Fabric Requirements Page">true</param>
-      <param name="wof_in" type="float" min="20.0" max="60.0" precision="1" gui-text="Width of Fabric (WOF) (inches)">40.0</param>
-      <param name="visualize_fabric_layout" type="bool" gui-text="Draw Fabric Cutting Layout Map on Canvas">false</param>
-      <param name="include_colouring_page" type="bool" gui-text="Include Blank Colouring Outline Page at end">true</param>
-      <param name="show_section_labels" type="bool" gui-text="Show section header labels (e.g., 'Section A')">false</param>
-      <separator/>
-      <label>IMPORTANT: Ensure you click through and review all tabs before running Step 2.</label>
+    <page name="fpp_tab" gui-text="1. FPP Export">
+      <label appearance="header">Foundation Paper Piecing (FPP) Settings</label>
+      <label>Export this block as an FPP pattern. Pieces will be grouped by section (A, B, etc.) and printed together.</label>
+      <param name="finished_size_in_fpp" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized]">0.0</param>
+      <param name="finished_sizes_fpp" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, e.g. 6,10)"></param>
+      <param name="template_copies_fpp" type="int" min="1" max="50" gui-text="Template Copies (Sets per size)">1</param>
     </page>
 
-    <page name="metadata_tab" gui-text="2. Block Metadata &amp; Credits">
-      <param name="block_name" type="string" gui-text="Block/Pattern Name">My Quilt Block</param>
-      <param name="designer_name" type="string" gui-text="Designer Name/Credit"></param>
-      <param name="copyright_notice" type="string" gui-text="Copyright/Terms Notice">For personal use only.</param>
+    <page name="template_tab" gui-text="2. Pattern Template Export">
+      <label appearance="header">Individual Template Settings</label>
+      <label>Export this block as individual paper templates. Every fabric piece is printed as an individual template shape.</label>
+      <param name="finished_size_in_temp" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized]">0.0</param>
+      <param name="finished_sizes_temp" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, e.g. 6,10)"></param>
+      <param name="template_copies_temp" type="int" min="1" max="50" gui-text="Template Copies (Sets per size)">1</param>
+      <param name="template_dedupe_temp" type="optiongroup" appearance="combo" gui-text="Duplicate Templates">
+        <option value="all">Print a template for every piece</option>
+        <option value="unique">Print one template per unique shape (marked 'cut N')</option>
+      </param>
+      <param name="squares_cutting_list_only_temp" type="bool" gui-text="Squares/rectangles: cutting list only, no printed template">false</param>
     </page>
 
-    <page name="templates_tab" gui-text="3. Templates &amp; Block Sizing">
-      <label appearance="header">Sizing Settings (Required for Steps 1 &amp; 2)</label>
-      <param name="export_type" type="optiongroup" appearance="combo" gui-text="Export Pattern Type">
-        <option value="fpp">FPP Foundation (by section)</option>
-        <option value="template">Template (individual pieces with edge lengths)</option>
+    <page name="mixed_tab" gui-text="3. Mixed Technique Export">
+      <label appearance="header">Mixed Technique &amp; Template Settings</label>
+      <label>Export this block using mixed techniques. Pieces marked for batch techniques (like HSTs or stitch-and-flip) are cut using math guides (no paper templates printed), while other pieces print normally.</label>
+      <param name="finished_size_in_mixed" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized]">0.0</param>
+      <param name="finished_sizes_mixed" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, e.g. 6,10)"></param>
+      <param name="template_copies_mixed" type="int" min="1" max="50" gui-text="Template Copies (Sets per size)">1</param>
+      <param name="template_dedupe_mixed" type="optiongroup" appearance="combo" gui-text="Duplicate Templates">
+        <option value="all">Print a template for every piece</option>
+        <option value="unique">Print one template per unique shape (marked 'cut N')</option>
       </param>
-      <param name="finished_size_in" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized on Canvas]">0.0</param>
-      <param name="finished_sizes" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, comma-separated e.g. 6,10)"></param>
-      <param name="template_copies" type="int" min="1" max="50" gui-text="Template Copies (Step 2 Smart Pack only, sets of templates per size)">1</param>
-      <label>Note: Set 'Finished Block Size' to 0.0 to export the block exactly at its current Inkscape canvas size.</label>
-      <separator/>
-
-      <label appearance="header">Page &amp; Margin Settings</label>
-      <param name="page_size" type="optiongroup" appearance="combo" gui-text="Paper Size">
-        <option value="letter">US Letter (8.5 x 11 in)</option>
-        <option value="a4">A4 (8.27 x 11.69 in)</option>
-        <option value="a3">A3 (11.69 x 16.54 in)</option>
-      </param>
-      <param name="orientation" type="optiongroup" appearance="combo" gui-text="Orientation">
-        <option value="portrait">Portrait</option>
-        <option value="landscape">Landscape</option>
-      </param>
-      <param name="margin_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Page Margin (inches)">0.5</param>
-      <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
-      <param name="spacing_in" type="float" min="0.0" max="2.0" precision="2" gui-text="Minimum Spacing Between Pieces (inches)">0.2</param>
-      <param name="template_color_mode" type="optiongroup" appearance="combo" gui-text="Template Fabric Color Fill">
-        <option value="none">White (Line-Art only)</option>
-        <option value="tag">Color Swatch (Minimal ink, auto fallback for small pieces)</option>
-        <option value="full">Full Color Fill (Clearest, ink-heavy)</option>
-      </param>
-      <param name="mirror_templates" type="bool" gui-text="Mirror templates on Pages 2+ (Recommended for FPP)">true</param>
-      <param name="mirror_preview" type="bool" gui-text="Mirror Page 1 Block Preview (Usually false)">false</param>
-      <param name="theme_override" type="string" gui-text="Theme override (leave blank for saved default)"></param>
+      <param name="squares_cutting_list_only_mixed" type="bool" gui-text="Squares/rectangles: cutting list only, no printed template">false</param>
+      <param name="oversize_batch" type="bool" gui-text="Oversize batch units for trimming (HSTs +1&#8221;, geese +&#188;&#8221;)">true</param>
+      <param name="hst_templates" type="bool" gui-text="Include HST sewing-line templates">true</param>
     </page>
   </param>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
   <script><command location="extensions" interpreter="python">quilttools_fpp_export.py</command></script>

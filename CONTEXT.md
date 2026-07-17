@@ -40,6 +40,37 @@ This document tracks the current state of the repository, completed phases, and 
   - `02. New Quilt` (`quilttools_new_quilt.py` / `.inx`): Dialog-tabbed interface under the `Quilt Tools Pattern` menu. Allows creating straight grid quilt layouts with configurable blocks, sashing, cornerstones, nested borders, binding, and page resizing.
   - `test_quilt_system.py`: Unit tests validating polygon maths, layer structure, and cell registry counts.
 
+### Phase E: Technique-Aware Fabric Cutting (Completed — July 2026)
+* **Goal**: Template-mode exports produce real cutting instructions (strips/subcuts,
+  paired triangles, stitch-and-flip, batch HSTs/geese) instead of padded bounding boxes;
+  FPP mode unchanged. Full design in `DESIGN_fabric_cutplan.md`.
+* **Deliverables**:
+  - `quilttools_cutplan.py` + `test_cutplan.py`: pure planner (classification, grain
+    policy, snowball guillotine extension, batch maths, 50% strip rule, pieced strips for
+    over-WOF pieces, `binding_plan`, NFP panel fallback via `quilttools_nesting`).
+  - `quilttools_fpp_fabric.py`: dead-code cleanup; `pieces_from_block`,
+    `calculate_template_requirements`, `draw_cutting_plan_map`.
+  - `quilttools_fpp_export.py/.inx`: Cutting Instructions page in template mode; new
+    options `cutting_math` (techniques/templates_only) and `oversize_batch`.
+  - `12. Mark Cutting Technique` (`quilttools_fpp_mark_technique.py/.inx`): tagging,
+    S&F auto-base detection + autodetect pass, batch grouping, review card; tags stored
+    in `BlockData.prefs["piece_meta"]` (backwards compatible; `piece_meta()` /
+    `set_piece_meta()` accessors in core).
+* **Still open for the quilt-export phase**: aggregate CutPieces across block instances ×
+  counts, surface binding + border pieced-strips on the quilt fabric page.
+
+### Phase F: Quilt Tools Colour menu (Completed — July 2026)
+* **Goal**: Consolidate the growing colour toolset (Fabric Palette, Palette
+  Generator, Colour Randomiser/Reroll, custom-colour actions, quick save) into
+  a top-level `Quilt Tools Colour` menu serving both block and quilt contexts,
+  with explicit context tags and shared canvas-context detection.
+* **Deliverables**: menu taxonomy Block/Colour/Pattern (drafting menu renamed
+  `Quilt Tools Block`); `quilttools_custom_colours.py/.inx` split from FPP
+  Display (which is now display-assist only, keeping the one-click bypass
+  toggle); `quilttools_colour.detect_context` + CONTEXT_HELP guidance strings
+  used by all block-only colour tools; Pattern menu renumbered 03–07;
+  context tests in `test_colour_system.py`.
+
 ---
 
 ## Next Steps

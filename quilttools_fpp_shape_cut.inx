@@ -10,12 +10,13 @@
 
   <separator/>
   <param name="subdivisions" type="int" min="4" max="128" gui-text="Circle subdivisions (smoothness)">32</param>
+  <param name="allow_y_seams" type="boolean" gui-text="Allow Y-seams / partial seams (adds warning to block)">false</param>
   <param name="min_piece_area" type="float" min="0.0" max="10.0" precision="2" gui-text="Warn if piece is smaller than (sq inches)">0.25</param>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Quilt Tools"/>
+      <submenu name="Quilt Tools Block"/>
     </effects-menu>
   </effect>
 

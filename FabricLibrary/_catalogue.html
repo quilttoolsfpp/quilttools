@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quilt Tools - Fabric Library</title>
+<style>
+  :root { --ink:#1F3A5F; --accent:#7A9AB8; --muted:#7A7268; --paper:#FAF6EE; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--paper); color:var(--ink); }
+  header { padding:18px 24px 14px; border-bottom:2px solid var(--ink);
+            position:sticky; top:0; background:var(--paper); z-index:5; }
+  header h1 { margin:0 0 4px; font-size:20px; }
+  header p { margin:0 0 10px; color:var(--muted); font-size:13px; }
+  #q { width:100%; max-width:420px; padding:9px 12px; font-size:14px;
+        border:1px solid var(--accent); border-radius:8px; }
+  .grid { display:grid; gap:16px; padding:24px;
+           grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .card { margin:0; background:#fff; border:1px solid #e3ddd0; border-radius:10px;
+           overflow:hidden; cursor:pointer; transition:transform .08s, box-shadow .08s; }
+  .card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(31,58,95,.14);
+                 border-color:var(--accent); }
+  .thumb { display:flex; align-items:center; justify-content:center;
+            height:170px; background:#fcfaf5; overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  figcaption { padding:10px 12px; border-top:1px solid #efeae0; }
+  .nm { display:block; font-weight:600; font-size:14px; }
+  .mt { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .tag { font-size:10px; background:#e1e9f5; color:#1F3A5F; padding:2px 6px; border-radius:4px; font-weight:bold; }
+  #none { padding:0 24px 24px; color:var(--muted); display:none; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+            background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
+            font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style></head>
+<body>
+<header>
+  <h1>Quilt Tools - Fabric Library</h1>
+  <p>3 fabric(s). Click a fabric to copy its name, then paste it
+     into the Fabric Palette tool (Extensions &rarr; Quilt Tools Pattern &rarr;
+     03. Fabric Palette).</p>
+  <input id="q" type="search" placeholder="Search by name, category, or tag..." oninput="flt()" autofocus>
+</header>
+<div class="grid" id="grid">
+<figure class="card" data-name="mystic-bunnies-G1ENQ4RARS-01-1600x1600" data-tags="" onclick="pick('mystic-bunnies-G1ENQ4RARS-01-1600x1600')" title="Click to copy the name"><div class="thumb"><img src="mystic-bunnies-G1ENQ4RARS-01-1600x1600.jpg" alt="mystic-bunnies-G1ENQ4RARS-01-1600x1600" loading="lazy"></div><figcaption><span class="nm">mystic-bunnies-G1ENQ4RARS-01-1600x1600</span><span class="mt">4.00&quot; x 4.00&quot; per repeat</span></figcaption></figure>
+<figure class="card" data-name="RubyStar/MysticFable/Mystic Bunnies" data-tags="" onclick="pick('RubyStar/MysticFable/Mystic Bunnies')" title="Click to copy the name"><div class="thumb"><img src="RubyStar/MysticFable/Mystic%20Bunnies.jpg" alt="RubyStar/MysticFable/Mystic Bunnies" loading="lazy"></div><figcaption><span class="nm">RubyStar/MysticFable/Mystic Bunnies</span><span class="mt">4.00&quot; x 3.71&quot; per repeat</span></figcaption></figure>
+<figure class="card" data-name="Samples/Red Check" data-tags="sample,check" onclick="pick('Samples/Red Check')" title="Click to copy the name"><div class="thumb"><img src="Samples/Red%20Check.png" alt="Samples/Red Check" loading="lazy"></div><figcaption><span class="nm">Samples/Red Check</span><span class="mt">2.00&quot; x 2.00&quot; per repeat</span><div class="tags"><span class="tag">sample</span><span class="tag">check</span></div></figcaption></figure>
+</div>
+<p id="none">No fabrics match your search.</p>
+<div id="toast"></div>
+<script>
+function flt(){
+  var q=document.getElementById('q').value.trim().toLowerCase(), shown=0;
+  document.querySelectorAll('.card').forEach(function(c){
+    var n=c.getAttribute('data-name').toLowerCase();
+    var t=c.getAttribute('data-tags').toLowerCase();
+    var ok=(!q || n.indexOf(q)>=0 || t.indexOf(q)>=0);
+    c.style.display=ok?'':'none'; if(ok) shown++;
+  });
+  document.getElementById('none').style.display=shown?'none':'block';
+}
+function pick(n){
+  if (navigator.clipboard) navigator.clipboard.writeText(n).catch(function(){});
+  var t=document.getElementById('toast');
+  t.textContent='Copied: '+n; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 1400);
+}
+</script>
+</body></html>

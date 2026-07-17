@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>06. Fabric Requirements Table</name>
+    <name>04. Fabric Requirements Table</name>
     <id>org.quilttools.fpp.fabric_calculator</id>
     
     <param name="calc_mode" type="optiongroup" appearance="combo" gui-text="Mode:">
-        <option value="fpp">FPP Mode (Read current block)</option>
+        <option value="fpp">FPP Mode (Read current block/quilt)</option>
         <option value="manual">Manual Mode</option>
     </param>
+    
+    <param name="cutting_math" type="optiongroup" appearance="combo" gui-text="Cutting Method:">
+        <option value="techniques">Mixed Technique (HSTs/batching)</option>
+        <option value="templates_only">Templates Only (Exact Shapes)</option>
+        <option value="fpp">FPP Only (Padded Blocks)</option>
+    </param>
+    
+    <param name="share_techniques" type="bool" gui-text="Share/batch techniques between blocks">true</param>
     
     <param name="manual_input" type="string" gui-text="Manual Mode Input (w,h; w,h):">2.5,4.0; 2.5,4.0</param>
     
