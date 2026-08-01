@@ -188,16 +188,21 @@ class BlockLibraryPlugin(inkex.Effect):
             gi.require_version("Gtk", "3.0")
             from gi.repository import Gtk, GdkPixbuf
         except Exception:
-            # No GTK: fall back to a specified file, else the browser catalogue.
+            # No GTK (e.g. macOS): use native Tkinter visual picker
             f = (self.options.svg_file or "").strip()
             if f and os.path.isfile(f):
                 return self._load_path(f)
-            return self._catalogue(
-                note="(The in-Inkscape thumbnail picker needs GTK, which isn't "
-                "available in this build. Opened the browser catalogue instead "
-                "- or set the 'SVG file to import' field to load a specific "
-                "block.)"
-            )
+            try:
+                import quilttools_blockpicker as qpick
+                path = qpick.pick_block_tk("Quilt Tools - Block Library", blocks)
+                if path:
+                    return self._load_path(path)
+                return inkex.utils.debug("No block selected.")
+            except Exception:
+                return self._catalogue(
+                    note="(Opened the browser catalogue instead - or set the "
+                    "'SVG file to import' field to load a specific block.)"
+                )
 
         chosen = {"path": None}
         try:
@@ -256,10 +261,17 @@ class BlockLibraryPlugin(inkex.Effect):
             while Gtk.events_pending():
                 Gtk.main_iteration()
         except Exception as e:
-            return self._catalogue(
-                note=f"(Thumbnail window error: {e}. Opened the browser "
-                "catalogue instead.)"
-            )
+            try:
+                import quilttools_blockpicker as qpick
+                path = qpick.pick_block_tk("Quilt Tools - Block Library", blocks)
+                if path:
+                    return self._load_path(path)
+                return inkex.utils.debug("No block selected.")
+            except Exception:
+                return self._catalogue(
+                    note=f"(Thumbnail window error: {e}. Opened the browser "
+                    "catalogue instead.)"
+                )
 
         if not chosen["path"]:
             return inkex.utils.debug("No block selected.")

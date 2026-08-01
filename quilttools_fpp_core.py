@@ -67,6 +67,13 @@ class Region:
         self.parent_id = parent_id
         self.children = []
         self.split_boundary = False
+        # Manual-work markers (stamped by the Labels tool, preserved by
+        # Fully Auto-Label's preserve toggle): manual_tag groups pieces of
+        # a user-Defined Section, manual_first marks the user's chosen #1
+        # piece, manual_label protects a hand-typed label outright.
+        self.manual_tag = None
+        self.manual_first = False
+        self.manual_label = False
 
     def is_leaf(self):
         return len(self.children) == 0
@@ -84,7 +91,7 @@ class Region:
         )
 
     def to_dict(self):
-        return {
+        d = {
             "id": self.id,
             "label": self.label,
             "polygon": self.polygon,
@@ -92,6 +99,14 @@ class Region:
             "children": self.children,
             "split_boundary": self.split_boundary,
         }
+        # Only serialize manual markers when set (keeps old-file diffs small)
+        if self.manual_tag is not None:
+            d["manual_tag"] = self.manual_tag
+        if self.manual_first:
+            d["manual_first"] = True
+        if self.manual_label:
+            d["manual_label"] = True
+        return d
 
     @staticmethod
     def from_dict(d):
@@ -100,6 +115,9 @@ class Region:
         r.polygon = [tuple(p) for p in d["polygon"]]
         r.children = d.get("children", [])
         r.split_boundary = d.get("split_boundary", False)
+        r.manual_tag = d.get("manual_tag")
+        r.manual_first = d.get("manual_first", False)
+        r.manual_label = d.get("manual_label", False)
         return r
 
 
@@ -142,12 +160,123 @@ class RegionTree:
                     if survivor_id in self.regions:
                         survivor = self.regions[survivor_id]
                         node.polygon = survivor.polygon
+                        # The node now IS the survivor: take its label and
+                        # manual markers too, or a collapsed-onto real piece
+                        # is silently renamed / loses its Defined Section.
+                        node.label = survivor.label
+                        node.manual_tag = survivor.manual_tag
+                        node.manual_first = survivor.manual_first
+                        node.manual_label = survivor.manual_label
                         node.children = survivor.children
                         for grandchild_id in survivor.children:
                             if grandchild_id in self.regions:
                                 self.regions[grandchild_id].parent_id = node.id
                         del self.regions[survivor_id]
                         changed = True
+
+    def _adopt_orphan_leaves(self):
+        """Re-attach leaves unreachable from the root. Heal operations can
+        leave a region parentless; such leaves are invisible to the
+        structural-group walk, so they would never be partitioned, merged
+        or relabelled (and their stale labels can collide with fresh ones).
+        Chain them onto the root with non-boundary internals so they join
+        the top structural group and the tree is well-formed again."""
+        if self.root_id is None:
+            return
+        reachable = set()
+        stack = [self.root_id]
+        while stack:
+            nid = stack.pop()
+            if nid in reachable or nid not in self.regions:
+                continue
+            reachable.add(nid)
+            stack.extend(self.regions[nid].children)
+        orphans = [r.id for r in self.leaf_regions() if r.id not in reachable]
+        for oid in orphans:
+            old_root_id = self.root_id
+            new_root = Region(list(self.regions[old_root_id].polygon))
+            new_root.children = [old_root_id, oid]
+            new_root.split_boundary = False
+            self.regions[new_root.id] = new_root
+            self.regions[old_root_id].parent_id = new_root.id
+            self.regions[oid].parent_id = new_root.id
+            self.root_id = new_root.id
+
+    def prune_stale_curves(self):
+        """Drop recorded curve boundaries that no longer lie between any
+        current leaf edges. Heals and undos delete the regions a curve cut
+        created; without pruning the stale records grow forever (they are
+        serialized into the SVG) and can falsely refuse future heals."""
+        if not getattr(self, "curves", None):
+            return
+        leaf_polys = [r.polygon for r in self.leaf_regions()]
+        kept = []
+        for curve in self.curves:
+            alive = False
+            for poly in leaf_polys:
+                n = len(poly)
+                for i in range(n):
+                    p1, p2 = poly[i], poly[(i + 1) % n]
+                    for idx in range(len(curve) - 1):
+                        c1, c2 = curve[idx], curve[idx + 1]
+                        if (pt_dist(p1, c1) < 1.5 and pt_dist(p2, c2) < 1.5) or \
+                           (pt_dist(p1, c2) < 1.5 and pt_dist(p2, c1) < 1.5):
+                            alive = True
+                            break
+                    if alive:
+                        break
+                if alive:
+                    break
+            if alive:
+                kept.append(curve)
+        self.curves = kept
+
+    def _descendant_leaves(self, node_id):
+        out = []
+        stack = [node_id]
+        while stack:
+            nid = stack.pop()
+            node = self.regions.get(nid)
+            if node is None:
+                continue
+            if node.is_leaf():
+                out.append(nid)
+            else:
+                stack.extend(node.children)
+        return out
+
+    def _merge_boundary_violation(self, id_set):
+        """Error message if merging the given leaves would cross a
+        structural boundary without consuming it whole, else None.
+
+        A split_boundary node's cut line may only be healed over when
+        every leaf on both of its sides is part of the merge. An enclave
+        (imported sub-block) may merge internally or be consumed whole,
+        but must not be partially mixed with outside pieces."""
+        for node in list(self.regions.values()):
+            if not node.split_boundary or node.is_leaf():
+                continue
+            d_leaves = set(self._descendant_leaves(node.id))
+            if not (id_set & d_leaves):
+                continue
+            if self._is_enclave(node):
+                if not (id_set <= d_leaves or d_leaves <= id_set):
+                    return (
+                        "Cannot merge across an imported block's border "
+                        "unless the whole imported block is included."
+                    )
+                continue
+            sides_hit = sum(
+                1
+                for cid in node.children
+                if id_set & set(self._descendant_leaves(cid))
+            )
+            if sides_hit > 1 and not d_leaves <= id_set:
+                return (
+                    "Cannot merge across a structural boundary unless all "
+                    "pieces on both sides of the boundary are included."
+                )
+        return None
 
     def find_path(self, current_id, target_id, path=None):
         if path is None:
@@ -318,6 +447,8 @@ class RegionTree:
 
             child_a = Region(poly_a, label=region.label + "a", parent_id=region.id)
             child_b = Region(poly_b, label=region.label + "b", parent_id=region.id)
+            # Pieces cut inside a user-Defined Section stay in that section
+            child_a.manual_tag = child_b.manual_tag = region.manual_tag
             self.regions[child_a.id], self.regions[child_b.id] = child_a, child_b
             region.children = [child_a.id, child_b.id]
             region.split_boundary = is_boundary
@@ -438,6 +569,8 @@ class RegionTree:
             # Create child regions
             child_a = Region(poly_a, label=region.label + "a", parent_id=region.id)
             child_b = Region(poly_b, label=region.label + "b", parent_id=region.id)
+            # Pieces cut inside a user-Defined Section stay in that section
+            child_a.manual_tag = child_b.manual_tag = region.manual_tag
             
             self.regions[child_a.id] = child_a
             self.regions[child_b.id] = child_b
@@ -596,6 +729,8 @@ class RegionTree:
 
             child_a = Region(poly_a, label=region.label + "a", parent_id=region.id)
             child_b = Region(poly_b, label=region.label + "b", parent_id=region.id)
+            # Pieces cut inside a user-Defined Section stay in that section
+            child_a.manual_tag = child_b.manual_tag = region.manual_tag
 
             self.regions[child_a.id] = child_a
             self.regions[child_b.id] = child_b
@@ -621,72 +756,245 @@ class RegionTree:
         return actual_cuts
 
 
-    def heal_regions(self, id1, id2):
-        if id1 not in self.regions or id2 not in self.regions:
-            return False, "One or both pieces could not be found."
+    def _pair_shares_curve(self, poly_a, poly_b):
+        """True when a recorded curve boundary runs between the two
+        polygons (a coincident segment on both boundaries)."""
+        if not getattr(self, "curves", None):
+            return False
 
-        r1, r2 = self.regions[id1], self.regions[id2]
-        p1, p2 = r1.polygon, r2.polygon
+        def on_poly(poly, c1, c2):
+            n = len(poly)
+            for i in range(n):
+                p1, p2 = poly[i], poly[(i + 1) % n]
+                if (pt_dist(p1, c1) < 1.5 and pt_dist(p2, c2) < 1.5) or \
+                   (pt_dist(p1, c2) < 1.5 and pt_dist(p2, c1) < 1.5):
+                    return True
+            return False
 
-        match = exact_edge_match(p1, p2, tol=1.5)
-        if not match:
+        for curve in self.curves:
+            for idx in range(len(curve) - 1):
+                c1, c2 = curve[idx], curve[idx + 1]
+                if on_poly(poly_a, c1, c2) and on_poly(poly_b, c1, c2):
+                    return True
+        return False
+
+    def merge_leaf_set(self, leaf_ids, absorb=False):
+        """Merge the given leaf pieces into ONE region by iterative
+        pairwise polygon merges (partial/T-junction shared edges merge
+        too). Unlike the tree-collapse smart heal this never destroys
+        unselected pieces - unless absorb=True, which may pull in a
+        bridging or enclosed unselected piece when the selection alone
+        cannot form one simple polygon.
+
+        Refuses curved seams, structural-boundary crossings that do not
+        consume the whole boundary, and geometry that does not conserve
+        area. Returns (ok, msg, guide_polys) where guide_polys are the
+        consumed pieces' outlines for seam-guide rendering."""
+        ids = {int(i) for i in leaf_ids}
+        ids = {i for i in ids if i in self.regions}
+        if len(ids) < 2:
+            return False, "Select at least two different pieces to merge.", []
+        for i in ids:
+            if not self.regions[i].is_leaf():
+                return False, "Only leaf pieces can be merged.", []
+
+        violation = self._merge_boundary_violation(ids)
+        if violation:
+            return False, violation, []
+
+        working = set(ids)
+        blobs = [[{i}, list(self.regions[i].polygon)] for i in sorted(working)]
+
+        def try_round():
+            for bi in range(len(blobs)):
+                for bj in range(bi + 1, len(blobs)):
+                    pa, pb = blobs[bi][1], blobs[bj][1]
+                    if self._pair_shares_curve(pa, pb):
+                        continue
+                    merged = merge_adjacent_polygons(pa, pb)
+                    if merged is not None:
+                        blobs[bi][0] |= blobs[bj][0]
+                        blobs[bi][1] = merged
+                        blobs.pop(bj)
+                        return True
+            return False
+
+        while len(blobs) > 1:
+            if try_round():
+                continue
+            if not absorb:
+                break
+            # A bridge or enclosed piece: an unselected leaf touching two
+            # separate merge blobs. Absorb the smallest candidate that
+            # keeps the structural-boundary rules satisfied.
+            candidate = None
+            for r in sorted(
+                self.leaf_regions(), key=lambda r: (r.area_sq_in(), r.id)
+            ):
+                if r.id in working:
+                    continue
+                touching = sum(
+                    1 for b in blobs if polygons_share_edge(r.polygon, b[1])
+                )
+                if touching >= 2 and self._merge_boundary_violation(
+                    working | {r.id}
+                ) is None:
+                    candidate = r
+                    break
+            if candidate is None:
+                break
+            working.add(candidate.id)
+            blobs.append([{candidate.id}, list(candidate.polygon)])
+
+        if len(blobs) > 1:
+            for bi in range(len(blobs)):
+                for bj in range(bi + 1, len(blobs)):
+                    if self._pair_shares_curve(blobs[bi][1], blobs[bj][1]):
+                        return (
+                            False,
+                            "Selected pieces share a curved boundary and "
+                            "cannot be merged.",
+                            [],
+                        )
+            hint = (
+                ""
+                if absorb
+                else " If an unselected piece sits between them, enable "
+                "'absorb other pieces'."
+            )
             return (
                 False,
-                "Selected pieces do not share an exact straight edge boundary.",
+                "Selected pieces cannot be merged into a single piece - "
+                "they must form one connected area." + hint,
+                [],
             )
 
-        if hasattr(self, "curves") and self.curves:
-            i, j, _ = match
-            sa, sb = p1[i], p1[(i + 1) % len(p1)]
-            for curve in self.curves:
-                n_c = len(curve)
-                for idx_c in range(n_c - 1):
-                    c1, c2 = curve[idx_c], curve[idx_c + 1]
-                    if (pt_dist(sa, c1) < 1.5 and pt_dist(sb, c2) < 1.5) or \
-                       (pt_dist(sa, c2) < 1.5 and pt_dist(sb, c1) < 1.5):
-                        return False, "Selected pieces share a curved boundary and cannot be healed."
+        merged_ids, merged_poly = blobs[0]
+        consumed = [self.regions[i] for i in sorted(merged_ids)]
+        guide_polys = [list(r.polygon) for r in consumed]
+        label = min(r.label for r in consumed)
 
-        merged_poly = merge_polygons(p1, p2, match[0], match[1], match[2])
-        new_region = Region(merged_poly, label=r1.label)
+        total = sum(polygon_area(r.polygon) for r in consumed)
+        if abs(polygon_area(merged_poly) - total) > max(0.01 * total, 1.0):
+            return (
+                False,
+                "Merge failed a geometry sanity check (areas do not add up).",
+                [],
+            )
 
-        parents_to_check = set()
-        if r1.parent_id in self.regions:
-            parents_to_check.add(r1.parent_id)
-        if r2.parent_id in self.regions:
-            parents_to_check.add(r2.parent_id)
+        # Which ancestors will this merge empty? Fixpoint over the ORIGINAL
+        # child lists: an internal node empties when its whole subtree is
+        # being consumed. Left in place such nodes resurface as phantom
+        # leaves with stale geometry (e.g. legacy TEMP_HEAL chain nodes).
+        consumed_ids = {r.id for r in consumed}
+        pre_internal = {
+            nid for nid, node in self.regions.items() if node.children
+        }
+        emptied = set()
+        changed = True
+        while changed:
+            changed = False
+            for nid in pre_internal:
+                if nid in emptied:
+                    continue
+                kids = self.regions[nid].children
+                if kids and all(
+                    cid in consumed_ids or cid in emptied for cid in kids
+                ):
+                    emptied.add(nid)
+                    changed = True
 
-        for old_r in [r1, r2]:
-            if old_r.parent_id and old_r.parent_id in self.regions:
-                parent = self.regions[old_r.parent_id]
-                if old_r.id in parent.children:
-                    parent.children.remove(old_r.id)
-            del self.regions[old_r.id]
+        for r in consumed:
+            if r.parent_id and r.parent_id in self.regions:
+                parent = self.regions[r.parent_id]
+                if r.id in parent.children:
+                    parent.children.remove(r.id)
+            del self.regions[r.id]
 
-        self.regions[new_region.id] = new_region
-
-        duplicate_parent_id = None
-        for pid in parents_to_check:
-            parent = self.regions[pid]
-            if len(parent.children) == 0:
-                area_diff = abs(parent.area_sq_in() - new_region.area_sq_in())
-                cx_p, cy_p = polygon_centroid(parent.polygon)
-                cx_n, cy_n = polygon_centroid(new_region.polygon)
-                dist = math.hypot(cx_p - cx_n, cy_p - cy_n)
-                if area_diff < 0.01 and dist < 1.0:
-                    duplicate_parent_id = pid
+        # Reuse the emptied ancestor whose geometry equals the merged piece
+        # (e.g. both children of one cut merged back, or the whole block
+        # merged: the root): keeps the history tree intact and avoids an
+        # orphan. Its cut - boundary or not - has been healed away, so
+        # clear the flag. Root is preferred so merging everything never
+        # deletes the tree's anchor.
+        cx_n, cy_n = polygon_centroid(merged_poly)
+        area_n = polygon_area(merged_poly) / (PX_PER_INCH ** 2)
+        reused = None
+        scan_order = sorted(
+            emptied, key=lambda nid: (nid != self.root_id, nid)
+        )
+        for nid in scan_order:
+            node = self.regions.get(nid)
+            if node is None:
+                continue
+            if abs(node.area_sq_in() - area_n) < 0.01:
+                cx_p, cy_p = polygon_centroid(node.polygon)
+                if math.hypot(cx_p - cx_n, cy_p - cy_n) < 1.0:
+                    reused = node
                     break
 
-        if duplicate_parent_id:
-            parent = self.regions[duplicate_parent_id]
-            parent.label = r1.label
-            parent.polygon = new_region.polygon
-            del self.regions[new_region.id]
-            msg = "Heal Successful. Redundant duplicate prevented."
+        for nid in emptied:
+            node = self.regions.get(nid)
+            if node is None:
+                continue
+            if reused is not None and nid == reused.id:
+                continue
+            if nid == self.root_id:
+                continue
+            if node.parent_id and node.parent_id in self.regions:
+                p = self.regions[node.parent_id]
+                if nid in p.children:
+                    p.children.remove(nid)
+            del self.regions[nid]
+        if reused is not None:
+            reused.children = []
+
+        # The merged piece inherits manual markers: it stays in a Defined
+        # Section when every constituent belonged to the same one, and it
+        # keeps start/hand-label status from its constituents.
+        tags = {r.manual_tag for r in consumed}
+        inherit_tag = tags.pop() if len(tags) == 1 else None
+        inherit_first = any(r.manual_first for r in consumed)
+        label_donor = min(consumed, key=lambda r: r.label)
+        inherit_label = label_donor.manual_label
+
+        absorbed = len(working) - len(ids)
+        if reused is not None:
+            reused.label = label
+            reused.polygon = simplify_polygon(list(merged_poly))
+            reused.split_boundary = False
+            reused.manual_tag = inherit_tag
+            reused.manual_first = inherit_first
+            reused.manual_label = inherit_label
         else:
-            msg = "Heal Successful. Orphan node generated."
+            new_region = Region(merged_poly, label=label)
+            new_region.manual_tag = inherit_tag
+            new_region.manual_first = inherit_first
+            new_region.manual_label = inherit_label
+            self.regions[new_region.id] = new_region
+            self._adopt_orphan_leaves()
 
         self.sanitize_tree()
-        return True, msg
+        self._adopt_orphan_leaves()
+        self.prune_stale_curves()
+
+        msg = f"Merged {len(consumed)} pieces into one ({label})."
+        if absorbed > 0:
+            msg += f" Absorbed {absorbed} unselected piece(s) to bridge the selection."
+        return True, msg, guide_polys
+
+    def heal_regions(self, id1, id2):
+        """Two-piece heal (compatibility wrapper over merge_leaf_set)."""
+        if id1 not in self.regions or id2 not in self.regions:
+            return False, "One or both pieces could not be found."
+        if id1 == id2:
+            return (
+                False,
+                "Please select two DIFFERENT pieces (the same piece was "
+                "selected twice).",
+            )
+        ok, msg, _guides = self.merge_leaf_set({id1, id2})
+        return ok, msg
 
     def smart_heal_regions(self, selected_leaf_ids):
         if not selected_leaf_ids or len(selected_leaf_ids) < 2:
@@ -759,10 +1067,20 @@ class RegionTree:
             n.children = []
 
         delete_descendants(lca_id)
-        lca_node.label = "TEMP_HEAL"
+        # Keep a real section label (lowest consumed label's letter) so the
+        # healed piece never renders as a TEMP_* placeholder; the caller's
+        # rebuild_alphabet renumbers within the letter group.
+        keep = min((leaf.label for leaf in consumed_leaves), default="A1")
+        m = re.match(r"^([A-Za-z]+)", keep)
+        lca_node.label = (m.group(1) if m else "A") + "1"
         lca_node.split_boundary = False
+        tags = {leaf.manual_tag for leaf in consumed_leaves}
+        lca_node.manual_tag = tags.pop() if len(tags) == 1 else None
+        lca_node.manual_first = any(l.manual_first for l in consumed_leaves)
+        lca_node.manual_label = False
 
         self.sanitize_tree()
+        self.prune_stale_curves()
         return (
             True,
             f"Smart Heal activated: Collapsed {len(consumed_leaves)} pieces into their original parent block.",
@@ -789,51 +1107,18 @@ class RegionTree:
         return False
 
     def virtual_sewing_validator(self, selected_leaf_ids, force_start_id=None):
-        """Guillotine Convex Separability Check - Normalized absolute pixel tolerance"""
+        """Physical piecing-order check via the SEAM-THROUGH rule.
+
+        A piece may be sewn onto the assembled unit only when its contact
+        with the unit is ONE contiguous seam, straight or smoothly curved,
+        whose ends both reach the unit's outline. This genuinely verifies
+        curved FPP seams (no more blanket curve bypass) and rejects
+        partial-edge contacts, U-shape closures and seams that die
+        mid-unit (Y-seams)."""
         if not selected_leaf_ids:
             return False, []
         if len(selected_leaf_ids) == 1:
             return True, list(selected_leaf_ids)
-
-        if self._selection_contains_curve(selected_leaf_ids):
-            if force_start_id:
-                # We are setting a piece as first; preserve the existing label sequence and rotate/reverse it to find the most sewable contiguous order
-                def get_label_num(nid):
-                    label = self.regions[nid].label
-                    if not label or not isinstance(label, str):
-                        return 999999
-                    m = re.search(r"\d+", label)
-                    return int(m.group()) if m else 999999
-
-                seq = sorted(list(selected_leaf_ids), key=get_label_num)
-                if force_start_id in seq:
-                    # Candidate 1: Rotated forward
-                    idx = seq.index(force_start_id)
-                    seq_rot = seq[idx:] + seq[:idx]
-
-                    # Candidate 2: Reversed and rotated
-                    seq_rev = seq[::-1]
-                    idx_rev = seq_rev.index(force_start_id)
-                    seq_rev_rot = seq_rev[idx_rev:] + seq_rev[:idx_rev]
-
-                    # Calculate physical path cost (sum of adjacent centroid distances) to avoid unsewable jumps
-                    centroids = {}
-                    for nid in selected_leaf_ids:
-                        centroids[nid] = polygon_centroid(self.regions[nid].polygon)
-
-                    def get_cost(s):
-                        return sum(pt_dist(centroids[s[i]], centroids[s[i+1]]) for i in range(len(s)-1))
-
-                    cost_rot = get_cost(seq_rot)
-                    cost_rev = get_cost(seq_rev_rot)
-
-                    seq = seq_rot if cost_rot < cost_rev else seq_rev_rot
-
-                return True, seq
-            else:
-                # Fully Auto-Labeling; return in ID-sorted creation order (original behavior)
-                return True, sorted(list(selected_leaf_ids))
-
 
         polygons = {nid: self.regions[nid].polygon for nid in selected_leaf_ids}
 
@@ -850,100 +1135,62 @@ class RegionTree:
                     adjacency[a_id].add(b_id)
                     adjacency[b_id].add(a_id)
 
-        sequence = []
-        remaining_ids = set(selected_leaf_ids)
+        # Backtracking search over removal orders. A greedy peel (always
+        # remove the first piece that can be "last sewn") is order-dependent:
+        # removing a valid-looking piece can strand a neighbour that only
+        # touched the removed piece, wrongly reporting a Y-seam for a
+        # perfectly sewable section. Dead-end states are memoised and the
+        # search is budgeted so worst-case blocks stay fast.
+        failed_states = set()
+        budget = [20000]
 
-        while remaining_ids:
-            removed_id = None
-
-            for test_id in list(remaining_ids):
-                if (
-                    force_start_id
-                    and len(remaining_ids) > 1
-                    and test_id == force_start_id
-                ):
+        def solve(remaining):
+            if len(remaining) == 1:
+                return [next(iter(remaining))]
+            if remaining in failed_states or budget[0] <= 0:
+                return None
+            budget[0] -= 1
+            for test_id in sorted(remaining):
+                if force_start_id and test_id == force_start_id:
+                    # The start piece must be the last one standing.
                     continue
 
-                p_test = polygons[test_id]
-                rest_ids = remaining_ids - {test_id}
-                if not rest_ids:
-                    removed_id = test_id
-                    break
-
+                rest_ids = remaining - {test_id}
                 # The piece must touch the unit it will be sewn onto.
                 if not (adjacency[test_id] & rest_ids):
                     continue
 
-                is_separable = False
-                n = len(p_test)
-                for i in range(n):
-                    p1 = p_test[i]
-                    p2 = p_test[(i + 1) % n]
-                    d = vec_sub(p2, p1)
-                    l_d = vec_len(d)
-                    if l_d < EPSILON:
-                        continue
+                # SEAM-THROUGH rule: X was the last piece sewn on only if
+                # its contact with the rest is one contiguous seam
+                # (straight or smoothly curved) whose two ends both reach
+                # the unit's outline.
+                rest_polys = [polygons[r] for r in rest_ids]
+                ok, _why = valid_seam_contact(
+                    polygons[test_id], rest_polys, rest_polys + [polygons[test_id]])
+                if ok:
+                    sub = solve(frozenset(rest_ids))
+                    if sub is not None:
+                        return [test_id] + sub
+            failed_states.add(remaining)
+            return None
 
-                    # NORMALIZE the direction vector to prevent floating point explosions on long lines
-                    nd = (d[0] / l_d, d[1] / l_d)
-
-                    crosses = False
-                    rest_side = 0
-
-                    for r_id in rest_ids:
-                        for pt in polygons[r_id]:
-                            v = vec_sub(pt, p1)
-                            # Absolute pixel distance from the cut line
-                            dist = nd[0] * v[1] - nd[1] * v[0]
-
-                            if dist > 1.5:
-                                if rest_side == -1:
-                                    crosses = True
-                                    break
-                                rest_side = 1
-                            elif dist < -1.5:
-                                if rest_side == 1:
-                                    crosses = True
-                                    break
-                                rest_side = -1
-                        if crosses:
-                            break
-
-                    if not crosses:
-                        test_side = 0
-                        for pt in p_test:
-                            v = vec_sub(pt, p1)
-                            dist = nd[0] * v[1] - nd[1] * v[0]
-
-                            if dist > 1.5:
-                                if test_side == -1:
-                                    crosses = True
-                                    break
-                                test_side = 1
-                            elif dist < -1.5:
-                                if test_side == 1:
-                                    crosses = True
-                                    break
-                                test_side = -1
-
-                        if not crosses and (
-                            rest_side == 0 or test_side == 0 or rest_side != test_side
-                        ):
-                            is_separable = True
-                            break
-
-                if is_separable:
-                    removed_id = test_id
-                    break
-
-            if removed_id is not None:
-                sequence.append(removed_id)
-                remaining_ids.remove(removed_id)
-            else:
-                return False, []
-
+        sequence = solve(frozenset(selected_leaf_ids))
+        if sequence is None:
+            return False, []
         sequence.reverse()
         if force_start_id and sequence[0] != force_start_id:
+            return False, []
+
+        # Final gate: the pieces must union into sound geometry. A section
+        # whose pieces only meet along partial-edge "necks" (e.g. a
+        # borderline-U piece grabbing a neighbour by a sliver of its edge)
+        # cannot be verified - and physically forces inset seams - so it
+        # is refused, matching the merge pass's sound-geometry principle.
+        polys = [polygons[nid] for nid in sequence]
+        union = get_polygon_union([list(p) for p in polys])
+        total = sum(polygon_area(p) for p in polys)
+        ua = polygon_area(union) if union else 0.0
+        if total > 0 and abs(ua - total) > max(0.01 * total, 1.0):
             return False, []
         return True, sequence
 
@@ -976,43 +1223,98 @@ class RegionTree:
             groups.append(top_leaves)
         return groups
 
+    def purge_ghost_leaves(self):
+        """Remove GHOST leaves: stale regions from earlier edit states
+        whose interior is (almost) entirely covered by other leaves. In a
+        valid tree, leaves partition the block and never overlap - a
+        fully-overlapped leaf draws underneath the real pieces, aligns
+        with no current cut line, and resurrects on every redraw because
+        deleting its canvas path cannot remove it from the tree.
+
+        Removes one ghost at a time and re-checks (so a mutually-stacked
+        pair loses only the redundant copy). Returns the removed labels."""
+        removed = []
+        while True:
+            leaves = self.leaf_regions()
+            ghost = None
+            for r in leaves:
+                others = [o.polygon for o in leaves if o.id != r.id]
+                if not others:
+                    break
+                xs = [p[0] for p in r.polygon]
+                ys = [p[1] for p in r.polygon]
+                pts = []
+                steps = 7
+                for gi in range(1, steps):
+                    for gj in range(1, steps):
+                        q = (min(xs) + (max(xs) - min(xs)) * gi / steps,
+                             min(ys) + (max(ys) - min(ys)) * gj / steps)
+                        if point_in_polygon(q, r.polygon):
+                            pts.append(q)
+                if len(pts) < 5:
+                    cx, cy = polygon_centroid(r.polygon)
+                    pts.append((cx, cy))
+                covered = sum(
+                    1 for q in pts
+                    if any(point_in_polygon(q, o) for o in others))
+                if covered >= max(1, int(len(pts) * 0.98)) and \
+                        covered == len(pts):
+                    ghost = r
+                    break
+            if ghost is None:
+                break
+            removed.append(ghost.label)
+            parent = self.regions.get(ghost.parent_id)
+            if parent is not None and ghost.id in parent.children:
+                parent.children.remove(ghost.id)
+            del self.regions[ghost.id]
+            self.sanitize_tree()
+        return removed
+
     def auto_partition_and_label(self, preserve_manual=False):
         self.sanitize_tree()
 
-        # Adopt orphan leaves. Heal operations can leave a region parentless
-        # and unreachable from the root; such leaves are invisible to the
-        # structural-group walk, so they would never be partitioned, merged
-        # or relabelled (and their stale labels can collide with fresh ones).
-        # Chain them onto the root with non-boundary internals so they join
-        # the top structural group and the tree is well-formed again.
-        if self.root_id is not None:
-            reachable = set()
-            stack = [self.root_id]
-            while stack:
-                nid = stack.pop()
-                if nid in reachable or nid not in self.regions:
-                    continue
-                reachable.add(nid)
-                stack.extend(self.regions[nid].children)
-            orphans = [r.id for r in self.leaf_regions() if r.id not in reachable]
-            for oid in orphans:
-                old_root_id = self.root_id
-                new_root = Region(list(self.regions[old_root_id].polygon))
-                new_root.children = [old_root_id, oid]
-                new_root.split_boundary = False
-                self.regions[new_root.id] = new_root
-                self.regions[old_root_id].parent_id = new_root.id
-                self.regions[oid].parent_id = new_root.id
-                self.root_id = new_root.id
+        ghosts = self.purge_ghost_leaves()
+        if ghosts:
+            inkex.utils.debug(
+                "Removed %d ghost piece(s) that were fully covered by "
+                "other pieces (stale geometry from earlier edits): %s"
+                % (len(ghosts), ", ".join(sorted(ghosts))))
+
+        self._adopt_orphan_leaves()
 
         remaining_ids = set(r.id for r in self.leaf_regions())
 
+        # Manual work to preserve: pinned_groups are user-Defined Sections
+        # (kept whole and lettered as-is, unless full-auto would use
+        # strictly FEWER sections for that area); hard_pinned are pieces
+        # with hand-typed labels, never touched at all.
+        pinned_groups = []
+        hard_pinned = set()
         if preserve_manual:
+            by_tag = {}
             for r in self.leaf_regions():
-                if not r.label.startswith("P") and not r.label.startswith("A"):
-                    if re.match(r"^[A-Za-z]+\d+$", r.label):
-                        if r.id in remaining_ids:
-                            remaining_ids.remove(r.id)
+                if r.manual_tag is not None:
+                    by_tag.setdefault(r.manual_tag, []).append(r.id)
+                elif r.manual_label:
+                    hard_pinned.add(r.id)
+            pinned_groups = list(by_tag.values())
+            if not by_tag and not hard_pinned:
+                # Legacy documents without manual stamps: fall back to the
+                # old heuristic - letter sections other than the A/P
+                # defaults are assumed manual.
+                by_pref = {}
+                for r in self.leaf_regions():
+                    if not r.label.startswith("P") and not r.label.startswith("A"):
+                        if re.match(r"^[A-Za-z]+\d+$", r.label):
+                            m = re.match(r"^([A-Za-z]+)", r.label)
+                            by_pref.setdefault(m.group(1), []).append(r.id)
+                pinned_groups = list(by_pref.values())
+            for g in pinned_groups:
+                for nid in g:
+                    remaining_ids.discard(nid)
+            for nid in hard_pinned:
+                remaining_ids.discard(nid)
 
         def greedy_fallback(rem_ids):
             local_secs = []
@@ -1090,16 +1392,37 @@ class RegionTree:
             return greedy_fallback(region_ids)
 
         sections = []
+        pinned_sections = []
         groups = self.get_structural_groups()
 
         for grp_ids in groups:
+            grp_set = set(grp_ids)
+            # Manual sections belonging to this structural group (clipped
+            # defensively - a Defined Section should never span groups).
+            grp_pinned = []
+            for g in pinned_groups:
+                clipped = [nid for nid in g if nid in grp_set]
+                if clipped:
+                    grp_pinned.append(clipped)
+            pinned_ids = {nid for g in grp_pinned for nid in g}
+
             grp_rem = [nid for nid in grp_ids if nid in remaining_ids]
-            if not grp_rem:
+            if not grp_rem and not grp_pinned:
                 continue
 
-            secs = partition_into_sections(grp_rem)
-            sections.extend(secs)
-            for sec in secs:
+            rest_secs = partition_into_sections(grp_rem) if grp_rem else []
+
+            if grp_pinned:
+                # The user's rule: manual sections stay UNLESS full-auto
+                # would partition this area into strictly fewer sections.
+                auto_all = partition_into_sections(grp_rem + sorted(pinned_ids))
+                if len(auto_all) < len(grp_pinned) + len(rest_secs):
+                    rest_secs = auto_all
+                    grp_pinned = []
+
+            pinned_sections.extend(grp_pinned)
+            sections.extend(rest_secs)
+            for sec in rest_secs:
                 for nid in sec:
                     remaining_ids.discard(nid)
 
@@ -1213,24 +1536,32 @@ class RegionTree:
             """The section-assembly solver works on get_polygon_union of each
             section's pieces — a union that silently drops pieces (no exact
             shared edge found) makes that check meaningless. A merge may only
-            be trusted when every section's union truly covers its pieces."""
+            be trusted when every section's union truly covers its pieces.
+
+            get_polygon_union is ORDER-SENSITIVE: it merges reliably when
+            pieces arrive in sewing order (each addition shares a full
+            seam with the unit so far). Union in the validator's order —
+            which doubles as the physical check that every seam is a full
+            shared edge."""
             key = frozenset(sec_ids)
             if key not in _union_cache:
-                polys = [self.regions[nid].polygon for nid in sec_ids]
+                ok, seq = self.virtual_sewing_validator(set(sec_ids))
+                ordered = seq if ok else list(sec_ids)
+                polys = [self.regions[nid].polygon for nid in ordered]
                 total = sum(polygon_area(p) for p in polys)
-                union = get_polygon_union(polys)
+                union = get_polygon_union([list(p) for p in polys])
                 ua = polygon_area(union) if union else 0.0
                 _union_cache[key] = total <= 0 or abs(ua - total) < max(
                     0.01 * total, 1.0
                 )
             return _union_cache[key]
 
-        def _assembly_clean(trial_sections):
-            # No verification without sound geometry: if any section union
-            # is unreliable the solver is blind, so refuse the merge.
+        def _assembly_warn(trial_sections):
+            """Block-level assembly verdict for a trial partition: False =
+            clean, True = warns, None = unverifiable (unsound union)."""
             for sec in trial_sections:
                 if not _union_sound(sec):
-                    return False
+                    return None
             taken = set()
             for r in self.leaf_regions():
                 if r.id not in auto_ids:
@@ -1242,7 +1573,7 @@ class RegionTree:
                 for i, nid in enumerate(sec):
                     self.regions[nid].label = f"{prefix}{i + 1}"
             _, warn = calculate_section_sewing_order(BlockData(self))
-            return not warn
+            return bool(warn)
 
         def _mergeable_sequence(s1, s2):
             if group_of.get(s1[0]) != group_of.get(s2[0]):
@@ -1254,14 +1585,19 @@ class RegionTree:
             ):
                 return None
             union_ids = s1 + s2
-            if self._selection_contains_curve(union_ids):
-                return None
+            # (Curved selections are no longer excluded: the validator's
+            # seam-through rule genuinely verifies curved seams now, so
+            # smooth curve runs may merge back into one section.)
             ok, seq = self.virtual_sewing_validator(union_ids)
             return seq if ok else None
 
         merged = True
         while merged:
             merged = False
+            # A merge must leave block assembly NO WORSE than the current
+            # partition: curve-heavy blocks may warn either way, and that
+            # must not freeze their fragments apart forever.
+            baseline_warn = _assembly_warn(sections)
             order = sorted(
                 range(len(sections)),
                 key=lambda k: (
@@ -1286,7 +1622,10 @@ class RegionTree:
                         s for k, s in enumerate(sections) if k not in (oi, oj)
                     ]
                     trial.append(seq)
-                    if _assembly_clean(trial):
+                    trial_warn = _assembly_warn(trial)
+                    if trial_warn is None:
+                        continue
+                    if trial_warn is False or baseline_warn is True:
                         sections = trial
                         merged = True
                         break
@@ -1309,12 +1648,19 @@ class RegionTree:
 
         sections.sort(key=lambda s: (sec_centroid(s)[1], sec_centroid(s)[0]))
 
+        # Only pieces that KEEP their labels reserve their letters; letters
+        # of pieces about to be relabeled are recycled (else auto sections
+        # drift to ever-later letters on every preserve-mode rerun).
         used_letters = set()
         if preserve_manual:
+            protected = set(hard_pinned)
+            for g in pinned_sections:
+                protected.update(g)
             for r in self.leaf_regions():
-                match = re.match(r"^([A-Za-z]+)", r.label)
-                if match:
-                    used_letters.add(match.group(1).upper())
+                if r.id in protected:
+                    match = re.match(r"^([A-Za-z]+)", r.label)
+                    if match:
+                        used_letters.add(match.group(1).upper())
 
         def get_available_letter():
             for idx in range(26):
@@ -1324,9 +1670,41 @@ class RegionTree:
                     return letter
             return "Z"
 
+        def order_with_manual_first(sec_ids):
+            """Sewing order for a section, honoring a manual_first piece."""
+            first_id = next(
+                (nid for nid in sec_ids if self.regions[nid].manual_first),
+                None,
+            )
+            if len(sec_ids) > 1:
+                if first_id is not None:
+                    ok_f, seq_f = self.virtual_sewing_validator(
+                        set(sec_ids), force_start_id=first_id
+                    )
+                    if ok_f:
+                        return seq_f
+                ok_f, seq_f = self.virtual_sewing_validator(set(sec_ids))
+                if ok_f:
+                    return seq_f
+            return list(sec_ids)
+
+        # Pinned manual sections: keep their letter, renumber in sewing
+        # order (cuts inside a Defined Section leave labels like E2a that
+        # need compacting), user's #1 piece stays #1.
+        for sec_ids in pinned_sections:
+            prefixes = [
+                re.match(r"^([A-Za-z]+)", self.regions[nid].label)
+                for nid in sec_ids
+            ]
+            prefixes = [m.group(1).upper() for m in prefixes if m]
+            letter = prefixes[0] if prefixes else get_available_letter()
+            used_letters.add(letter)
+            for i, nid in enumerate(order_with_manual_first(sec_ids)):
+                self.regions[nid].label = f"{letter}{i + 1}"
+
         for sec_ids in sections:
             letter = get_available_letter()
-            for i, nid in enumerate(sec_ids):
+            for i, nid in enumerate(order_with_manual_first(sec_ids)):
                 self.regions[nid].label = f"{letter}{i + 1}"
 
     def rebuild_alphabet(self):
@@ -1341,14 +1719,16 @@ class RegionTree:
 
         for prefix, grp in groups.items():
             grp_ids = [n.id for n in grp]
-            current_first = min(
-                grp,
-                key=lambda n: (
-                    int(re.search(r"\d+", n.label).group())
-                    if re.search(r"\d+", n.label)
-                    else 999
-                ),
-            )
+            current_first = next((n for n in grp if n.manual_first), None)
+            if current_first is None:
+                current_first = min(
+                    grp,
+                    key=lambda n: (
+                        int(re.search(r"\d+", n.label).group())
+                        if re.search(r"\d+", n.label)
+                        else 999
+                    ),
+                )
 
             is_valid, sequence = self.virtual_sewing_validator(
                 grp_ids, force_start_id=current_first.id
@@ -1378,6 +1758,7 @@ class RegionTree:
             del self.regions[cid]
         parent.children = []
         self.sanitize_tree()
+        self.prune_stale_curves()
         return parent
 
     # ------------------------------------------------------------------

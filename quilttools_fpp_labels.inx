@@ -15,7 +15,7 @@
   <separator/>
   <label appearance="header">Label Settings</label>
   <param name="new_label" type="string" gui-text="Manual override label (for Relabel action)">A1</param>
-  <param name="preserve_manual" type="bool" gui-text="Preserve manual labels during Fully Auto-Label">false</param>
+  <param name="preserve_manual" type="bool" gui-text="Preserve manual work during Fully Auto-Label (Defined Sections, start pieces, hand-typed labels; a manual section only yields if full-auto needs FEWER sections)">false</param>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>

@@ -107,6 +107,7 @@ def refresh_layer(g, block_data, scrape=True):
     color_mode = prefs.get("color_mode", "piece")
     custom_colors = prefs.get("custom_colors", {}) if not prefs.get("bypass_custom_colors", False) else {}
     group_by_color = prefs.get("group_by_color", False)
+    fill_opacity = prefs.get("fill_opacity", 0.80)
     
     # Render background for applique blocks
     block_kind = prefs.get("block_kind", "fpp")
@@ -181,7 +182,7 @@ def refresh_layer(g, block_data, scrape=True):
             "{%s}path" % SVG_NS,
             d=region.path_d(),
             id=f"region-{region.label}",
-            style=f"fill:{path_fill};fill-opacity:0.80;stroke:#222222;stroke-width:1.0;stroke-linejoin:round",
+            style=f"fill:{path_fill};fill-opacity:{fill_opacity:.2f};stroke:#222222;stroke-width:1.0;stroke-linejoin:round",
         )
         path_el.set(FPP_REGION_ATTR, str(region.id))
 

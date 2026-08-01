@@ -307,7 +307,7 @@ class NewQuiltPlugin(inkex.Effect):
             gi.require_version("Gtk", "3.0")
             from gi.repository import Gtk, Gdk
         except Exception:
-            return None
+            return self._pick_layout_tk()
 
         chosen = {"layout": None, "block_path": None}
 
@@ -508,9 +508,115 @@ class NewQuiltPlugin(inkex.Effect):
             if response == Gtk.ResponseType.OK:
                 return chosen
         except Exception as e:
-            inkex.utils.debug(f"Layout Picker Dialog error: {e}")
+            try:
+                return self._pick_layout_tk()
+            except Exception:
+                inkex.utils.debug(f"Layout Picker Dialog error: {e}")
             
         return None
+
+    def _pick_layout_tk(self):
+        import tkinter as tk
+        from tkinter import ttk, filedialog
+
+        layouts = _discover_layouts()
+        chosen = {"layout": None, "block_path": None}
+
+        root = tk.Tk()
+        root.title("Quilt Tools - Select Quilt Layout")
+        root.geometry("680x520")
+        root.minsize(540, 420)
+        root.attributes("-topmost", True)
+
+        style = ttk.Style(root)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        hdr_frame = ttk.Frame(root, padding=10)
+        hdr_frame.pack(fill="x")
+        ttk.Label(hdr_frame, text="Choose Quilt Layout", font=("sans-serif", 13, "bold")).pack()
+        ttk.Label(hdr_frame, text="Select a standard layout or load a custom layout", foreground="#666666").pack()
+
+        notebook = ttk.Notebook(root, padding=5)
+        notebook.pack(fill="both", expand=True, padx=10, pady=5)
+
+        selected_item = {"val": None}
+
+        for cat, items in layouts.items():
+            frame = ttk.Frame(notebook, padding=10)
+            notebook.add(frame, text=cat)
+
+            tree_scroller = ttk.Scrollbar(frame, orient="vertical")
+            tree_view = ttk.Treeview(frame, columns=("dimensions", "description"), selectmode="browse", yscrollcommand=tree_scroller.set)
+            tree_scroller.config(command=tree_view.yview)
+
+            tree_view.heading("#0", text="Layout Name")
+            tree_view.heading("dimensions", text="Block & Grid Size")
+            tree_view.heading("description", text="Description")
+
+            tree_view.column("#0", width=180)
+            tree_view.column("dimensions", width=160)
+            tree_view.column("description", width=240)
+
+            tree_scroller.pack(side="right", fill="y")
+            tree_view.pack(fill="both", expand=True)
+
+            for item in items:
+                name = item["name"]
+                dims = f"{item['grid_rows']}x{item['grid_cols']} @ {item['cell_w_in']}x{item['cell_h_in']}\""
+                desc = item.get("description", "")
+                node_id = tree_view.insert("", "end", text=name, values=(dims, desc))
+                tree_view.item(node_id, tags=(name,))
+
+            def make_select_handler(tv, itms):
+                def on_select(evt):
+                    sel = tv.selection()
+                    if sel:
+                        item_text = tv.item(sel[0], "text")
+                        for itm in itms:
+                            if itm["name"] == item_text:
+                                selected_item["val"] = itm
+                                btn_ok.config(state="normal")
+                                break
+                return on_select
+
+            tree_view.bind("<<TreeviewSelect>>", make_select_handler(tree_view, items))
+            tree_view.bind("<Double-1>", lambda e: on_ok())
+
+        btn_frame = ttk.Frame(root, padding=10)
+        btn_frame.pack(fill="x", side="bottom")
+
+        def on_ok():
+            if selected_item["val"]:
+                chosen["layout"] = selected_item["val"]
+                root.destroy()
+
+        def on_cancel():
+            chosen["layout"] = None
+            root.destroy()
+
+        def on_override():
+            fpath = filedialog.askopenfilename(title="Choose a Block SVG", filetypes=[("SVG Files", "*.svg")])
+            if fpath:
+                chosen["block_path"] = fpath
+                if selected_item["val"]:
+                    chosen["layout"] = selected_item["val"]
+                root.destroy()
+
+        btn_cancel = ttk.Button(btn_frame, text="Cancel", command=on_cancel)
+        btn_cancel.pack(side="right", padx=5)
+
+        btn_ok = ttk.Button(btn_frame, text="Select Layout", command=on_ok, state="disabled")
+        btn_ok.pack(side="right", padx=5)
+
+        btn_ov = ttk.Button(btn_frame, text="Override with Block...", command=on_override)
+        btn_ov.pack(side="left", padx=5)
+
+        root.protocol("WM_DELETE_WINDOW", on_cancel)
+        root.mainloop()
+        return chosen if chosen["layout"] or chosen["block_path"] else None
 
     def add_arguments(self, pars):
         pars.add_argument("--notebook", type=str, default="grid_page")

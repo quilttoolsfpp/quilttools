@@ -122,5 +122,137 @@ class TestFPPLabelling(unittest.TestCase):
         # We expect 4 distinct sections, meaning each disconnected piece got its own section letter!
         self.assertEqual(len(letters), 4)
 
+class TestEnclaveBoundaries(unittest.TestCase):
+    """An imported sub-block (Import into Region / Fill Blocks) marks its
+    host node split_boundary while its children are a _chain_leaves chain
+    whose internal nodes reuse the host polygon. That flag means "the whole
+    subtree is one sealed unit" (an enclave), NOT "my first child piece is
+    its own structural group" — the misreading stranded one un-mergeable
+    piece per imported block (error.svg regression, July 2026)."""
+
+    def _make_enclave_tree(self):
+        tree = core.RegionTree.__new__(core.RegionTree)
+        tree.curves = []
+        quad = [(0, 0), (100, 0), (100, 100), (0, 100)]
+        host = core.Region(quad, label="H")
+        p1 = core.Region([(0, 0), (40, 0), (0, 40)], label="P1")
+        p2 = core.Region([(40, 0), (100, 0), (100, 100), (0, 100), (0, 40)],
+                         label="P2")
+        p3 = core.Region([(100, 60), (100, 100), (60, 100)], label="P3")
+        chain = core.Region(list(quad), label="chain")  # bookkeeping node
+        tree.regions = {r.id: r for r in (host, p1, p2, p3, chain)}
+        host.children = [p1.id, chain.id]
+        chain.children = [p2.id, p3.id]
+        chain.split_boundary = False
+        host.split_boundary = True  # legacy flag written by the importer
+        for r in (p1, chain):
+            r.parent_id = host.id
+        for r in (p2, p3):
+            r.parent_id = chain.id
+        tree.root_id = host.id
+        return tree, host, p1, p2, p3
+
+    def test_legacy_true_flag_on_chain_is_one_group(self):
+        tree, host, p1, p2, p3 = self._make_enclave_tree()
+        groups = tree.get_structural_groups()
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(set(groups[0]), {p1.id, p2.id, p3.id})
+
+    def test_explicit_enclave_flag_is_one_group(self):
+        tree, host, p1, p2, p3 = self._make_enclave_tree()
+        host.split_boundary = "enclave"
+        groups = tree.get_structural_groups()
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(set(groups[0]), {p1.id, p2.id, p3.id})
+
+    def test_real_cut_boundary_still_separates(self):
+        tree, host, p1, p2, p3 = self._make_enclave_tree()
+        # Make the host's split a REAL geometric cut: children partition it.
+        tree.regions[host.children[1]].polygon = [
+            (40, 0), (100, 0), (100, 100), (0, 100), (0, 40)]
+        groups = tree.get_structural_groups()
+        self.assertEqual(len(groups), 2)
+
+    def test_no_boundary_between_enclave_members(self):
+        tree, host, p1, p2, p3 = self._make_enclave_tree()
+        self.assertFalse(tree.separated_by_boundary(p1.id, p2.id))
+        self.assertFalse(tree.separated_by_boundary(p1.id, p3.id))
+
+
+class TestSeamThroughRule(unittest.TestCase):
+    """virtual_sewing_validator's physical rules (antarctica regression,
+    July 2026): partial-edge necks and Y-junctions reject; smooth curved
+    seam chains validate genuinely (no more blanket curve bypass)."""
+
+    def _tree_with(self, polys):
+        tree = core.RegionTree([(0, 0), (1000, 0), (1000, 1000), (0, 1000)])
+        root = tree.regions[tree.root_id]
+        ids = []
+        for k, poly in enumerate(polys):
+            r = core.Region(poly, label=f"T{k+1}", parent_id=root.id)
+            tree.regions[r.id] = r
+            root.children.append(r.id)
+            ids.append(r.id)
+        return tree, ids
+
+    def test_partial_edge_neck_rejected(self):
+        # A small piece grabbing a big piece by a fraction of its edge
+        # (the E3/E4 failure): seams must be full shared edges.
+        big = [(0, 0), (200, 0), (200, 100), (0, 100)]
+        neck = [(0, 100), (50, 100), (50, 150), (0, 150)]
+        tree, ids = self._tree_with([big, neck])
+        ok, _ = tree.virtual_sewing_validator(set(ids))
+        self.assertFalse(ok)
+
+    def test_y_junction_rejected(self):
+        # Three pieces meeting at an interior point = Y-seam.
+        r1 = [(0, 0), (100, 0), (50, 50)]
+        r2 = [(0, 0), (50, 50), (50, 100), (0, 100)]
+        r3 = [(100, 0), (100, 100), (50, 100), (50, 50)]
+        tree, ids = self._tree_with([r1, r2, r3])
+        ok, _ = tree.virtual_sewing_validator(set(ids))
+        self.assertFalse(ok)
+
+    def test_smooth_curve_chain_accepted(self):
+        # Three concentric arc strips: curved seams between rings, each a
+        # smooth polyline running outline-to-outline (rotational FPP).
+        import math as m
+
+        def arc(r, a0=0.0, a1=90.0, steps=8):
+            return [(500 + r * m.cos(m.radians(a0 + (a1 - a0) * i / steps)),
+                     500 - r * m.sin(m.radians(a0 + (a1 - a0) * i / steps)))
+                    for i in range(steps + 1)]
+
+        def ring(r_in, r_out):
+            return arc(r_in) + list(reversed(arc(r_out)))
+
+        tree, ids = self._tree_with(
+            [ring(100, 150), ring(150, 200), ring(200, 250)])
+        ok, seq = tree.virtual_sewing_validator(set(ids))
+        self.assertTrue(ok)
+        self.assertEqual(len(seq), 3)
+
+    def test_straight_two_piece_still_fine(self):
+        a = [(0, 0), (100, 0), (100, 100), (0, 100)]
+        b = [(100, 0), (200, 0), (200, 100), (100, 100)]
+        tree, ids = self._tree_with([a, b])
+        ok, _ = tree.virtual_sewing_validator(set(ids))
+        self.assertTrue(ok)
+
+    def test_ghost_leaf_purged(self):
+        # A stale leaf fully covered by the real tiling (antarctica's
+        # phantom 'A1') must be purged by auto-label, not resurrected.
+        a = [(0, 0), (100, 0), (100, 100), (0, 100)]
+        b = [(100, 0), (200, 0), (200, 100), (100, 100)]
+        ghost = [(40, 20), (160, 20), (100, 80)]  # overlaps both
+        tree, ids = self._tree_with([a, b, ghost])
+        removed = tree.purge_ghost_leaves()
+        self.assertEqual(removed, [f'T3'])
+        self.assertEqual(len(tree.leaf_regions()), 2)
+        # And the survivors are untouched.
+        polys = sorted(tuple(r.polygon) for r in tree.leaf_regions())
+        self.assertEqual(len(polys), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

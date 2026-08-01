@@ -75,8 +75,18 @@ class LabelsPlugin(inkex.Effect):
                 break
 
         # 3. Apply the clean letter sequence immediately (No rebuild_alphabet needed!)
+        # Stamp the group as a MANUAL section so Fully Auto-Label's
+        # preserve toggle keeps it together on later reruns.
+        tag = 1 + max(
+            (r.manual_tag for r in tree.regions.values()
+             if r.manual_tag is not None),
+            default=0,
+        )
         for i, nid in enumerate(sequence_ids):
-            tree.regions[nid].label = f"{target_letter}{i + 1}"
+            region = tree.regions[nid]
+            region.label = f"{target_letter}{i + 1}"
+            region.manual_tag = tag
+            region.manual_first = i == 0
 
         core.refresh_layer(g, block_data)
         inkex.utils.debug(
@@ -124,7 +134,10 @@ class LabelsPlugin(inkex.Effect):
             )
 
         for i, nid in enumerate(sequence_ids):
-            tree.regions[nid].label = f"{prefix}{i + 1}"
+            region = tree.regions[nid]
+            region.label = f"{prefix}{i + 1}"
+            # Stamp the user's chosen start so auto relabeling keeps it #1
+            region.manual_first = nid == target_id
 
         core.refresh_layer(g, block_data)
         inkex.utils.debug(
@@ -145,6 +158,8 @@ class LabelsPlugin(inkex.Effect):
         r = block_data.tree.regions.get(int(sel.get(core.FPP_REGION_ATTR)))
         if r:
             r.label = self.options.new_label.strip()
+            # Hand-typed labels are never touched by preserve-mode reruns
+            r.manual_label = True
             core.refresh_layer(g, block_data)
 
     def _fix_letters(self):

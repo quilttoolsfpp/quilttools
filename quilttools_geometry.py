@@ -97,6 +97,11 @@ def merge_polygons(poly1, poly2, e1_idx, e2_idx, is_anti):
     return simplify_polygon(res)
 
 def get_polygon_union(polygons):
+    """Union of a set of polygons that tile an area, by repeated pairwise
+    merging. Built on merge_adjacent_polygons, so partial shared edges
+    (T-junctions) merge too; only genuinely unsound layouts (rings around
+    holes, disconnected or overlapping pieces) are left unmerged, which
+    callers detect via the area-sum check."""
     if not polygons:
         return []
     if len(polygons) == 1:
@@ -107,11 +112,8 @@ def get_polygon_union(polygons):
         changed = False
         for i in range(len(poly_list)):
             for j in range(i + 1, len(poly_list)):
-                match = exact_edge_match(poly_list[i], poly_list[j], tol=1.5)
-                if match:
-                    merged = merge_polygons(
-                        poly_list[i], poly_list[j], match[0], match[1], match[2]
-                    )
+                merged = merge_adjacent_polygons(poly_list[i], poly_list[j])
+                if merged is not None:
                     poly_list.pop(j)
                     poly_list.pop(i)
                     poly_list.append(merged)
@@ -473,6 +475,307 @@ def polygons_share_edge(poly_a, poly_b, tol=1.5):
             if hi - lo >= tol:
                 return True
     return False
+
+
+def _perimeter_params(poly):
+    """Perimeter parameterisation: (edge_start, edge_len, total)."""
+    n = len(poly)
+    edge_len = []
+    edge_start = []
+    total = 0.0
+    for i in range(n):
+        p1, p2 = poly[i], poly[(i + 1) % n]
+        edge_start.append(total)
+        ln = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        edge_len.append(ln)
+        total += ln
+    return edge_start, edge_len, total
+
+
+def _perimeter_point(poly, edge_start, edge_len, total, s):
+    """Point at perimeter position s (wrapping)."""
+    n = len(poly)
+    s = s % total
+    for i in range(n):
+        if s <= edge_start[i] + edge_len[i] + 1e-9:
+            p1, p2 = poly[i], poly[(i + 1) % n]
+            ln = edge_len[i]
+            f = 0.0 if ln < EPSILON else (s - edge_start[i]) / ln
+            return (p1[0] + (p2[0] - p1[0]) * f,
+                    p1[1] + (p2[1] - p1[1]) * f)
+    return poly[0]
+
+
+def _contact_intervals(poly_a, other_polys, tol=1.5):
+    """Merged perimeter intervals of poly_a's boundary that coincide with
+    the boundary of any polygon in other_polys.
+
+    Returns (intervals, closed, edge_start, edge_len, total). A wrap-merged
+    first interval may have a negative lo. closed is True when the contact
+    wraps poly_a's entire perimeter (fully enclosed piece)."""
+    n = len(poly_a)
+    edge_start, edge_len, total = _perimeter_params(poly_a)
+    if total < EPSILON:
+        return [], False, edge_start, edge_len, total
+
+    intervals = []
+    for i in range(n):
+        p1, p2 = poly_a[i], poly_a[(i + 1) % n]
+        ln = edge_len[i]
+        if ln < tol:
+            continue
+        ux, uy = (p2[0] - p1[0]) / ln, (p2[1] - p1[1]) / ln
+        for poly_b in other_polys:
+            m = len(poly_b)
+            for j in range(m):
+                q1, q2 = poly_b[j], poly_b[(j + 1) % m]
+                d1 = ux * (q1[1] - p1[1]) - uy * (q1[0] - p1[0])
+                if abs(d1) > tol:
+                    continue
+                d2 = ux * (q2[1] - p1[1]) - uy * (q2[0] - p1[0])
+                if abs(d2) > tol:
+                    continue
+                t1 = (q1[0] - p1[0]) * ux + (q1[1] - p1[1]) * uy
+                t2 = (q2[0] - p1[0]) * ux + (q2[1] - p1[1]) * uy
+                lo = max(0.0, min(t1, t2))
+                hi = min(ln, max(t1, t2))
+                if hi - lo >= tol:
+                    intervals.append((edge_start[i] + lo,
+                                      edge_start[i] + hi))
+    if not intervals:
+        return [], False, edge_start, edge_len, total
+
+    # Merge overlapping/adjacent intervals along the perimeter (allowing a
+    # small gap so vertex wobble cannot split one seam into two).
+    intervals.sort()
+    merged = [list(intervals[0])]
+    for lo, hi in intervals[1:]:
+        if lo <= merged[-1][1] + tol:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    # Wrap-around: last interval reaching the perimeter end joins the first.
+    if len(merged) > 1 and merged[0][0] <= tol and \
+            merged[-1][1] >= total - tol:
+        merged[0][0] = merged[-1][0] - total
+        merged.pop()
+    if len(merged) == 1 and merged[0][1] - merged[0][0] >= total - 2 * tol:
+        return merged, True, edge_start, edge_len, total  # fully enclosed
+    return merged, False, edge_start, edge_len, total
+
+
+def shared_boundary_chains(poly_a, other_polys, tol=1.5):
+    """The contact between poly_a and a set of polygons, expressed as arcs
+    of poly_a's boundary.
+
+    Returns (chains, closed) where chains is a list of point-lists (each a
+    contiguous run of poly_a's boundary that touches the others) and
+    closed is True when the contact wraps poly_a's entire perimeter
+    (fully enclosed piece).
+    """
+    n = len(poly_a)
+    merged, closed, edge_start, edge_len, total = _contact_intervals(
+        poly_a, other_polys, tol)
+    if closed:
+        return [], True
+    if not merged:
+        return [], False
+
+    chains = []
+    for lo, hi in merged:
+        # poly_a vertices lying strictly inside the arc keep the chain's
+        # true shape (needed for the smoothness test on curved seams).
+        inner = []
+        for i in range(n):
+            for base in (-total, 0.0, total):
+                s_v = edge_start[i] + base
+                if lo + tol < s_v < hi - tol:
+                    inner.append((s_v, poly_a[i]))
+        inner.sort(key=lambda t: t[0])
+        chain = (
+            [_perimeter_point(poly_a, edge_start, edge_len, total, lo)]
+            + [p for _s, p in inner]
+            + [_perimeter_point(poly_a, edge_start, edge_len, total, hi)]
+        )
+        chains.append(chain)
+    return chains, False
+
+
+def _arc_points(poly, edge_start, edge_len, total, s_from, s_to, tol=1.5):
+    """Points along poly's perimeter walking forward from s_from to s_to
+    (wrapping), both endpoints included, vertices strictly between kept."""
+    n = len(poly)
+    if s_to <= s_from:
+        s_to += total
+    inner = []
+    for i in range(n):
+        for base in (0.0, total, 2.0 * total):
+            s_v = edge_start[i] + base
+            if s_from + tol < s_v < s_to - tol:
+                inner.append((s_v, poly[i]))
+    inner.sort(key=lambda t: t[0])
+    return (
+        [_perimeter_point(poly, edge_start, edge_len, total, s_from)]
+        + [p for _s, p in inner]
+        + [_perimeter_point(poly, edge_start, edge_len, total, s_to)]
+    )
+
+
+def merge_adjacent_polygons(poly_a, poly_b, tol=1.5):
+    """General union of two adjacent simple polygons.
+
+    Unlike exact_edge_match/merge_polygons this handles PARTIAL shared
+    edges (T-junctions) and multi-segment shared runs: the polygons merge
+    whenever their contact is one contiguous boundary chain. Refuses (None)
+    when there is no contact, when the contact is split into separate
+    chains (merging would pinch the result or close a ring around a hole),
+    when one piece is enclosed by the other, or when the merged area does
+    not conserve the input areas (overlapping/garbage input)."""
+    if len(poly_a) < 3 or len(poly_b) < 3:
+        return None
+    sa, sb = polygon_area_signed(poly_a), polygon_area_signed(poly_b)
+    if abs(sa) < EPSILON or abs(sb) < EPSILON:
+        return None
+    if sa * sb < 0:
+        poly_b = poly_b[::-1]
+
+    ints_a, closed_a, es_a, el_a, tot_a = _contact_intervals(
+        poly_a, [poly_b], tol)
+    ints_b, closed_b, es_b, el_b, tot_b = _contact_intervals(
+        poly_b, [poly_a], tol)
+    if closed_a or closed_b:
+        return None
+    if len(ints_a) != 1 or len(ints_b) != 1:
+        return None
+    lo_a, hi_a = ints_a[0]
+    lo_b, hi_b = ints_b[0]
+
+    # Non-shared arc of a (chain end -> around -> chain start), then the
+    # non-shared arc of b. Same winding makes the two chains antiparallel,
+    # so b's outside arc continues seamlessly from a's chain start back to
+    # a's chain end; b's arc endpoints duplicate a's and are dropped.
+    arc_a = _arc_points(poly_a, es_a, el_a, tot_a, hi_a, lo_a + tot_a, tol)
+    arc_b = _arc_points(poly_b, es_b, el_b, tot_b, hi_b, lo_b + tot_b, tol)
+    merged = simplify_polygon(arc_a + arc_b[1:-1])
+    if len(merged) < 3:
+        return None
+
+    expected = polygon_area(poly_a) + polygon_area(poly_b)
+    if abs(polygon_area(merged) - expected) > max(0.01 * expected, 1.0):
+        return None
+    return merged
+
+
+def _point_in_poly(pt, poly):
+    """Standard ray-cast point-in-polygon (boundary treated loosely)."""
+    x, y = pt
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if (yi > y) != (yj > y):
+            x_cross = (xj - xi) * (y - yi) / (yj - yi) + xi
+            if x < x_cross:
+                inside = not inside
+        j = i
+    return inside
+
+
+# Public alias (underscore names don't survive star-imports).
+def point_in_polygon(pt, poly):
+    return _point_in_poly(pt, poly)
+
+
+def point_on_group_outline(polys, pt, eps=2.5, samples=16):
+    """True when pt lies on the OUTLINE of the polygon group: at least one
+    direction from pt immediately leaves every polygon. An interior
+    junction (fully surrounded by fabric) has no such direction."""
+    for k in range(samples):
+        ang = 2.0 * math.pi * k / samples
+        q = (pt[0] + eps * math.cos(ang), pt[1] + eps * math.sin(ang))
+        if not any(_point_in_poly(q, poly) for poly in polys):
+            return True
+    return False
+
+
+def _seam_continues_into_fabric_edge(endpoint, outward, polys, tol=1.5):
+    """True when the seam endpoint lies STRICTLY INSIDE a single fabric
+    edge that runs parallel to the seam: the seam dies partway along that
+    edge (a partial seam / neck grab). A vertex at the endpoint means the
+    edge was fully consumed by the seam — T-junction vertices (healed
+    sections) are fine. Transverse edges are never parallel and never
+    trigger."""
+    cos_lim = math.cos(math.radians(15.0))
+    for poly in polys:
+        n = len(poly)
+        for i in range(n):
+            a, b = poly[i], poly[(i + 1) % n]
+            d = (b[0] - a[0], b[1] - a[1])
+            ln = math.hypot(*d)
+            if ln < tol:
+                continue
+            ud = (d[0] / ln, d[1] / ln)
+            dot = ud[0] * outward[0] + ud[1] * outward[1]
+            if abs(dot) < cos_lim:
+                continue
+            ve = (endpoint[0] - a[0], endpoint[1] - a[1])
+            if abs(ud[0] * ve[1] - ud[1] * ve[0]) > tol:
+                continue
+            t_e = ve[0] * ud[0] + ve[1] * ud[1]
+            if t_e >= 2.0 * tol and ln - t_e >= 2.0 * tol:
+                return True
+    return False
+
+
+def valid_seam_contact(x_poly, rest_polys, all_polys, tol=1.5,
+                       max_turn_deg=30.0):
+    """Physical sewability of attaching piece x to the assembled rest:
+    the SEAM-THROUGH rule. The contact must be ONE contiguous run of
+    x's boundary, not a closed loop, straight or smoothly curved, and
+    both ends must reach the outline of the whole unit (a seam that dies
+    inside the unit is a Y-seam / partial seam). Additionally a seam may
+    not end partway along a fabric edge: T-junction VERTICES are fine
+    (each participating edge fully consumed, as in healed sections), but
+    a seam whose end continues collinearly into un-seamed fabric (a
+    "neck" grab) is a partial seam and rejects.
+
+    Returns (ok, reason)."""
+    chains, closed = shared_boundary_chains(x_poly, rest_polys, tol)
+    if closed:
+        return False, "piece is fully enclosed"
+    if not chains:
+        return False, "no shared seam"
+    if len(chains) > 1:
+        return False, "touches in separate places (inset/Y-seam)"
+    chain = chains[0]
+    # Smoothness: straight seams have ~0 turns; curved FPP seams turn
+    # gently. Sharp corners are inset seams.
+    for k in range(1, len(chain) - 1):
+        v1 = (chain[k][0] - chain[k - 1][0], chain[k][1] - chain[k - 1][1])
+        v2 = (chain[k + 1][0] - chain[k][0], chain[k + 1][1] - chain[k][1])
+        l1, l2 = math.hypot(*v1), math.hypot(*v2)
+        if l1 < EPSILON or l2 < EPSILON:
+            continue
+        cosang = max(-1.0, min(1.0,
+                     (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)))
+        if math.degrees(math.acos(cosang)) > max_turn_deg:
+            return False, "seam bends sharply (inset corner)"
+    for endpoint in (chain[0], chain[-1]):
+        if not point_on_group_outline(all_polys, endpoint, eps=max(2.5, tol)):
+            return False, "seam ends inside the unit (Y-seam)"
+    if len(chain) >= 2:
+        for endpoint, prev in ((chain[0], chain[1]), (chain[-1], chain[-2])):
+            v = (endpoint[0] - prev[0], endpoint[1] - prev[1])
+            lv = math.hypot(*v)
+            if lv < EPSILON:
+                continue
+            outward = (v[0] / lv, v[1] / lv)
+            if _seam_continues_into_fabric_edge(endpoint, outward,
+                                               all_polys, tol):
+                return False, "seam ends partway along a fabric edge (partial seam)"
+    return True, ""
 
 
 def convex_hull(points):

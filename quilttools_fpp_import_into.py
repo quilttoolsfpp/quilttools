@@ -327,8 +327,13 @@ class ImportIntoPlugin(inkex.Effect):
                 while Gtk.events_pending():
                     Gtk.main_iteration()
             except Exception as e:
-                # No GTK or GTK error: use fallback options
-                inkex.utils.debug(f"GTK visual picker disabled or failed: {e}")
+                # No GTK or GTK error (e.g. macOS): use Tkinter fallback
+                try:
+                    import quilttools_blockpicker as qpick
+                    blocks = _scan_library()
+                    chosen["path"] = qpick.pick_block_tk("Quilt Tools Pattern - Import into Region", blocks)
+                except Exception as tk_err:
+                    inkex.utils.debug(f"GTK/Tkinter visual picker disabled or failed: {e} / {tk_err}")
                 
         # 4. Perform Import Subdivision
         import_path = chosen["path"]

@@ -6,7 +6,6 @@
 
   <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
     <option value="cut">Guillotine Cut</option>
-    <option value="heal">Two-Piece Merge (Adjacent Only)</option>
     <option value="undo">Undo last cut</option>
   </param>
 

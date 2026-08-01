@@ -1215,6 +1215,17 @@ def binding_plan(quilt_w_in, quilt_h_in, strip_width_in=2.5,
 def format_ops_text(plan):
     """Human-readable instruction lines for one fabric's plan."""
     lines = []
+    
+    precut_name = plan.get("precut_name")
+    wof_val = plan.get("wof_in", 40.0)
+    if precut_name:
+        clean_name = precut_name.replace("1 x ", "")
+        width_label = f"{clean_name} width ({fmt_in(wof_val)})"
+    elif abs(wof_val - 21.0) < 1e-3:
+        width_label = "FQ width (21\")"
+    else:
+        width_label = "WOF"
+
     for op in plan["ops"]:
         if op["op"] == "strip":
             subs = []
@@ -1234,17 +1245,17 @@ def format_ops_text(plan):
                     txt += " (%s)" % sc["secondary"]
                 txt += " [%s]" % ", ".join(sc["labels"][:6])
                 subs.append(txt)
-            lines.append("Cut 1 strip %s x WOF (uses %s); subcut %s."
-                         % (fmt_in(op["height"]), fmt_in(op["consumed"]),
+            lines.append("Cut 1 strip %s x %s (uses %s); subcut %s."
+                         % (fmt_in(op["height"]), width_label, fmt_in(op["consumed"]),
                             "; ".join(subs)))
         elif op["op"] == "pieced_strip":
             cuts = "; ".join(
                 "%d x %s" % (c["qty"], fmt_in(c["length"]))
                 if c["qty"] > 1 else fmt_in(c["length"])
                 for c in op["cuts"])
-            lines.append("Cut %d strips %s x WOF; join end-to-end with %s "
+            lines.append("Cut %d strips %s x %s; join end-to-end with %s "
                          "seams; subcut %s. [%s]"
-                         % (op["strips"], fmt_in(op["width"]), op["join"],
+                         % (op["strips"], fmt_in(op["width"]), width_label, op["join"],
                             cuts, ", ".join(op["labels"][:8])))
         elif op["op"] == "panel":
             lines.append("From a %s length of full-width fabric, cut the "

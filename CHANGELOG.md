@@ -16,13 +16,82 @@ are listed first.
 
 ## Changes in v2.1 (Traditional Piecing, Colour Suite, Y-Seam Separability, SVG Importer) - July 2026
 
-### 🎨 Traditional Pieced Block Kind
+### 🧵 Seam-through validation & curve-aware labelling (antarctica regression)
+
+* **The Y-seam detector had a serious hole:** the piecing validator only
+  required a shared edge plus straight-line separability, so sections whose
+  pieces grab each other by a FRACTION of an edge (e.g. a borderline-U piece
+  attached by a 13px sliver of a 159px edge) passed validation — both in
+  auto-labelling and when manually defined. Replaced the peel criterion with
+  the SEAM-THROUGH rule: a piece may be sewn on only when its contact with
+  the assembled unit is ONE contiguous seam, straight or smoothly curved
+  (per-vertex turns ≤ 30°), whose two ends both reach the unit's outline;
+  plus a final gate that the pieces union soundly IN SEWING ORDER (each seam
+  a full shared edge — get_polygon_union is order-sensitive, and sew order
+  is exactly the order in which it works).
+* **Curved seams are now genuinely validated** — the blanket "selection
+  contains a curve → auto-pass" bypass is gone. Smooth rotational curve runs
+  (polyline arcs) validate as sequential chains, Define Section accepts them
+  as one section, and the merge pass may reunite curve fragments (its
+  curve-exclusion guard removed, and its no-worse assembly comparison lets
+  fragments merge on blocks whose baseline assembly already warns).
+* **Result on the reported block:** the invalid E/F sections are refused
+  everywhere (auto-label, Define Section), the 6-piece rotational curve run
+  groups as ONE section, and fully-auto labelling drops from 17 fragments to
+  9 sections with several groups matching the hand-corrected reference
+  exactly. Regression fixtures in test_labels.py (partial-edge neck,
+  Y-junction, smooth curve chain).
+
+### 👻 Ghost piece purge
+* **Phantom pieces that kept coming back:** stale regions from earlier edit
+  states can survive in the block tree with their interior fully covered by
+  the real pieces - they draw UNDERNEATH the block, align with no current cut
+  line, and deleting their canvas path cannot kill them because every tool
+  redraws from the tree. `purge_ghost_leaves` now removes any leaf whose
+  sampled interior is entirely covered by other leaves (one at a time, so a
+  mutually-stacked pair keeps one copy); it runs at the start of Fully
+  Auto-Label, reports what it removed, and works with 'preserve manual
+  sections' so a hand-labelled block can be cleaned without relabelling.
+
+### 🎨 Traditional Pieced Block Kind & Canvas Display
 * **Block Kind Selector**: Added option in the Display Toggle dialog (`quilttools_fpp_display.py`) to classify blocks as Traditional Pieced (Templates) rather than FPP.
+* **Block Fill Opacity Control**: Added a Block Fill Opacity slider (0.0 to 1.0, defaulting to 1.0 / opaque) to the Display Toggle dialog to let users customize transparency (e.g. for tracing background sketch layers) and prevent automatic resets to the legacy hardcoded `0.80` opacity.
 * **Differentiated Seam Allowance Padding**: Traditionally pieced templates are estimated using exact $0.25″$ (24px) seam-allowance margins instead of the larger $0.75″$ (72px) FPP foundation padding.
 * **Calculator Normalization**: Single-block fabric calculations refactored to use `pieces_from_block`, bringing template-mode block kinds support to both single-block and whole-quilt calculations.
 
+### 💻 Cross-Platform & macOS GUI Support
+* **Universal Tkinter UI Fallbacks**: Added native Python Tkinter modal dialog fallbacks across all extensions (`quilttools_fpp_export.py`, `quilttools_fpp_block_library.py`, `quilttools_quilt_library.py`, `quilttools_fpp_import_into.py`, `quilttools_new_quilt.py`, and `quilttools_blockpicker.py`). On macOS (where Inkscape Python lacks PyGObject/GTK 3), the tools now open native macOS Tkinter windows for Export Setup, Block Library Picker, Quilt Library Picker, and Layout Selector—eliminating silent dialog skips and browser catalogue redirects.
+
+### 📄 PDF Pattern Export & Sticky Settings
+* **Sticky PDF Export Settings**: The Finalize Export dialog (`quilttools_fpp_export.py`) now remembers and defaults to the user's last selected page setups (such as paper size, orientation, margin, seam allowance, and drawing scale) across sessions by saving preferences to a local JSON file.
+* **Precuts Optimization**: Added a "Fabric & Precuts" tab to the export dialog, enabling users to toggle a custom set of precuts (Mini Charm, Charm, Layer Cake, Jelly Roll, Fat 16th, Fat 8th, Fat Quarter). The fabric estimator automatically optimizes suggestions for the smallest fitting precut and displays cutting measurements relative to that precut (rather than hardcoding WOF). When disabled, it optimizes strictly for WOF strip length.
+* **Australian Spelling & Swatch Default**: Updated "Template Fabric Color Fill" to "Template Fabric Colour Fill" (and swatches to "Colour Swatch") in the GTK setup dialog, and changed the fallback default to "Colour Swatch (Minimal ink)".
+* **Small-Piece Fabric Codes**: Ensured that template export always includes the fabric code (e.g. `[FAB1]`) on small pieces (which are fully colored in colour swatch mode), adjusting coordinates and font sizes dynamically to prevent label overlap. Incremented the font size for small piece labels by one size up (from `caption` / $10\text{px}$ to `body` / $12\text{px}$) to increase legibility.
+* **Large-Piece Swatch & Text Scaling**: Scaled up both the color swatch rects (by 50% to $36 \times 24$) and the labeling text fonts (by 50% to $18\text{px}$ for labels and $15\text{px}$ for codes) on large pieces to improve readability on exported pages. Increased vertical text coordinates (code to `y + 36`, label to `y - 22`) to clear the bottom of the scaled swatch box, and raised the `is_too_small` threshold boundaries (to $60\text{px} \times 60\text{px}$ or $7200\text{px}^2$) so smaller pieces are colored in full instead of getting swatches.
+* **Horizontal Labeling for Wide Pieces**: Added an aspect-ratio detector (`pw_r > 1.8 * ph_r`) to identify wide, short pieces. On these shapes, the label, swatch box, fabric code, and secondary duplicates notes are aligned side-by-side on a single horizontal axis (`y = r_cy`) rather than stacked vertically, preventing height overflow.
+* **Smart Packed Test Square Option**: Added a checkbox `Include 2nd test square on pattern pages (smart packed)` to the Page Setup & Styling dialog. This packs a second $1″ \times 1″$ scale calibration square dynamically onto the template sheets, allowing users to verify print scaling even if they skip printing the front cover sheet.
+* **Page Boundaries Toggle**: Added a checkbox `Show printable page boundaries (blue dashed line & page labels)` to the Page Setup & Styling dialog. Toggling this off hides the blue dashed printable margins and blue page number text labels, producing clean, print-ready pages for distribution/shops.
+* **Cover Page Spacing & Preview Scaling**: Scaled down the block preview on Page 1 from $65\%$ to $42\%$ of page height when the Section Map page is disabled, and dynamically calculated the height of the assembly sequence and legend to place the fabric color key grid exactly below them. This prevents any vertical clashing and avoids overflow.
+* **Section Map Layout Center & Deconfliction**: Centered the Section Map block at the top of Page 2 ($42\%$ page height) when the Section Map page is enabled. The Recommended Assembly Sequence and Pattern Legend are drawn side-by-side underneath the map, and the fabric color key grid is drawn below them, ensuring perfect alignment and fit on both A4 and Letter pages.
+* **Long Assembly Separate Page Fallback**: Added auto-detection that automatically forces the Section Map page to be enabled if the Recommended Assembly Sequence has more than 20 steps, or if the calculated heights of the sequence, legend, test square, and color keys exceed the available vertical space below the scaled preview on Page 1. This prevents printing issues and clipping.
+
+### 🗂 Quilt Library (00. in Quilt Tools Pattern)
+* **Save and re-open whole quilts** (`quilttools_quilt_library.py/.inx`): a
+  QuiltLibrary folder beside the extensions stores full standalone-SVG
+  snapshots, filed as Category/Name and browsed with the shared folder-view
+  picker (thumbnails, search, [template] badges).
+* **Two save kinds:** COMPLETE keeps placed blocks, custom colours and fabric
+  pattern fills (referenced pattern defs are gathered into the file, following
+  href chains, so fabrics travel with it); TEMPLATE strips placed content and
+  resets every cell's registry to empty - a reusable layout for
+  'Fill Blocks from Library'.
+* **Loading** restores the saved page size, refuses to clobber an existing
+  quilt layout unless 'Replace' is ticked, skips defs already present (same
+  fabric embedded once), and tells you the next step for templates. Distinct
+  from New Quilt's layout PRESETS, which store dialog settings only.
+
 ### 🌈 Quilt Tools Colour Suite
-* **Unified Colour Menu**: Consolidated all color tools under the dedicated `Quilt Tools Colour` submenu.
+* **Unified Colour Menu & Keybind Actions**: Consolidated the fabric styling and randomizer tools under the dedicated `Quilt Tools Colour` submenu. The frequently used `Quick Save Colours` hotkey action was moved back to the `Quilt Tools Block` drafting menu as `05b. Quick Save Colours (bind to a key)` for design convenience.
 * **Interactive Palette Generator**: Generate harmonious palettes using OKLCh color space calculations with interactive anchor color picking directly from Inkscape's color wheel, and export as GPL palettes.
 * **Colour Randomiser & Reroll**: Instantly randomize block or quilt layout colors, featuring a streamlined Reroll action bindable to a hotkey for quick design iteration.
 * **Smart Context Detection**: Integrated a standard-library canvas context detector (`quilttools_colour.py`) that classifies the canvas (block / quilt / both / none) without Inkex dependencies, protecting placed cells from accidental edits.

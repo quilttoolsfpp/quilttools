@@ -15,8 +15,6 @@ class CutPlugin(inkex.Effect):
     def effect(self):
         if self.options.action == "undo":
             self._undo()
-        elif self.options.action == "heal":
-            self._heal()
         elif self.options.action == "quick_cut":
             self.options.angle_snap = 0.0
             self._cut()
@@ -134,28 +132,6 @@ class CutPlugin(inkex.Effect):
                 warning_msg += f"\nWARNING: Piece {region.label} is only {region.area_sq_in():.2f} sq in!"
 
         inkex.utils.debug(f"Success! {total_cuts} region(s) were split.{warning_msg}")
-
-    def _heal(self):
-        g, block_data = core.find_fpp_group(self.svg)
-        if g is None:
-            return inkex.errormsg("No Quilt Tools FPP block found.")
-
-        selected_els = [
-            el for el in self.svg.selection.values() if el.get(core.FPP_REGION_ATTR)
-        ]
-        if len(selected_els) != 2:
-            return inkex.errormsg("Please select EXACTLY TWO pieces to heal together.")
-
-        id1 = int(selected_els[0].get(core.FPP_REGION_ATTR))
-        id2 = int(selected_els[1].get(core.FPP_REGION_ATTR))
-
-        success, msg = block_data.tree.heal_regions(id1, id2)
-        if not success:
-            return inkex.errormsg(f"Heal failed: {msg}")
-
-        block_data.tree.rebuild_alphabet()
-        core.refresh_layer(g, block_data)
-        inkex.utils.debug("Pieces successfully healed into a single region.")
 
     def _undo(self):
         g, block_data = core.find_fpp_group(self.svg)

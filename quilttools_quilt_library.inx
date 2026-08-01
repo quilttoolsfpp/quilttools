@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>00. Quilt Library</name>
+  <id>org.quilttoolsplugin.quilttools_quilt_library</id>
+  <dependency type="executable" location="extensions">quilttools_quilt_library.py</dependency>
+
+  <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
+    <option value="load">Load a quilt from the library (browse)</option>
+    <option value="save">Save the quilt on this canvas into the library</option>
+  </param>
+
+  <param name="notebook" type="notebook">
+    <page name="load_page" gui-text="1. Load">
+      <label appearance="header">Open a saved quilt or template</label>
+      <label>Leave the path empty and click Apply to browse the library visually (folders, search, thumbnails). Templates are marked [template] - load one and fill it with '02. Fill Blocks from Library'. Complete quilts load with their blocks, colours and fabrics intact.</label>
+      <param name="svg_file" type="string" gui-text="Quilt file to load (blank = browse):"></param>
+      <param name="replace_existing" type="bool" gui-text="Replace the quilt already on this canvas (discards it)">false</param>
+      <label>TIP: loading into a fresh empty document is safest - the page is resized to match the saved quilt automatically.</label>
+    </page>
+
+    <page name="save_page" gui-text="2. Save">
+      <label appearance="header">Save the current quilt</label>
+      <param name="save_name" type="string" gui-text="Save as (quilt name, use Category/Name for folders):"></param>
+      <param name="save_kind" type="optiongroup" appearance="combo" gui-text="Save as">
+        <option value="complete">COMPLETE quilt (blocks, colours and fabrics included)</option>
+        <option value="template">TEMPLATE (layout only - placed blocks stripped, cells reset to empty)</option>
+      </param>
+      <param name="overwrite" type="bool" gui-text="Overwrite if it already exists">false</param>
+      <label>Saved quilts are standalone SVGs under a QuiltLibrary folder next to the extensions - they open directly in Inkscape too. Save a COMPLETE copy as your working snapshot, and a TEMPLATE copy when the layout is worth reusing with different blocks.</label>
+    </page>
+  </param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools Pattern"/>
+    </effects-menu>
+  </effect>
+  <script><command location="extensions" interpreter="python">quilttools_quilt_library.py</command></script>
+</inkscape-extension>

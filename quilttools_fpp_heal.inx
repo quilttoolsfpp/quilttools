@@ -5,7 +5,10 @@
   <dependency type="executable" location="extensions">quilttools_fpp_heal.py</dependency>
 
   <param name="action" type="optiongroup" appearance="combo" gui-text="Action">
-    <option value="smart_heal">Smart Heal (Auto-Collapse Sections)</option>
+    <option value="merge_two">Two-Piece Merge (Adjacent Only)</option>
+    <option value="merge_selected">Merge All Selected Pieces</option>
+    <option value="merge_section">Merge Whole Section(s)</option>
+    <option value="smart_heal">Smart Heal (Auto-Collapse to Original Block)</option>
     <option value="to_guides">Convert Whole Block to Guides</option>
     <option value="clear_guides">Clear All Guides</option>
     <option value="strip_metadata">Strip Block Metadata (Convert to Plain Paths)</option>
@@ -14,6 +17,7 @@
   <separator/>
   <label appearance="header">Heal Settings</label>
   <param name="preserve_guides" type="bool" gui-text="Preserve healed seams as reference guides">true</param>
+  <param name="absorb_pieces" type="bool" gui-text="Merge All Selected: absorb unselected pieces that sit between selected ones">false</param>
 
   <separator/>
   <label appearance="header">Convert Block Settings</label>

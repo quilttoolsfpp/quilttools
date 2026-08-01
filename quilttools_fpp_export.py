@@ -170,7 +170,7 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--margin_in", type=float, default=0.5)
         pars.add_argument("--sa_in", type=float, default=0.25)
         pars.add_argument("--spacing_in", type=float, default=0.2)
-        pars.add_argument("--template_color_mode", type=str, default="none")
+        pars.add_argument("--template_color_mode", type=str, default="tag")
         pars.add_argument("--mirror_templates", type=inkex.Boolean, default=True)
         pars.add_argument("--mirror_preview", type=inkex.Boolean, default=False)
         pars.add_argument("--block_name", type=str, default="My Quilt Block")
@@ -186,6 +186,18 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--copyright_notice", type=str, default="For personal use only.")
         pars.add_argument("--notebook", type=str, default="")
         pars.add_argument("--theme_override", type=str, default="")
+        pars.add_argument("--include_pattern_test_square", type=inkex.Boolean, default=False)
+        pars.add_argument("--show_page_boundaries", type=inkex.Boolean, default=True)
+        
+        # Precut options
+        pars.add_argument("--use_precuts", type=inkex.Boolean, default=False)
+        pars.add_argument("--precut_mini_charm", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_charm", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_layer_cake", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_jelly_roll", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_fat_16th", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_fat_8th", type=inkex.Boolean, default=True)
+        pars.add_argument("--precut_fat_quarter", type=inkex.Boolean, default=True)
 
         # Unique page-specific parameters to avoid collisions
         pars.add_argument("--finished_size_in_fpp", type=float, default=0.0)
@@ -211,7 +223,56 @@ class ExportPlugin(inkex.Effect):
             gi.require_version("Gtk", "3.0")
             from gi.repository import Gtk
         except Exception:
-            return True
+            return self._show_tk_setup_dialog(block_data)
+
+        import os
+        import json
+        
+        prefs_path = os.path.join(os.path.dirname(__file__), "quilttools_fpp_export_prefs.json")
+        if os.path.exists(prefs_path):
+            try:
+                with open(prefs_path, "r", encoding="utf-8") as f:
+                    saved_prefs = json.load(f)
+                    if "page_size" in saved_prefs:
+                        self.options.page_size = saved_prefs["page_size"]
+                    if "orientation" in saved_prefs:
+                        self.options.orientation = saved_prefs["orientation"]
+                    if "margin_in" in saved_prefs:
+                        self.options.margin_in = float(saved_prefs["margin_in"])
+                    if "sa_in" in saved_prefs:
+                        self.options.sa_in = float(saved_prefs["sa_in"])
+                    if "spacing_in" in saved_prefs:
+                        self.options.spacing_in = float(saved_prefs["spacing_in"])
+                    if "template_color_mode" in saved_prefs:
+                        self.options.template_color_mode = saved_prefs["template_color_mode"]
+                    if "mirror_templates" in saved_prefs:
+                        self.options.mirror_templates = bool(saved_prefs["mirror_templates"])
+                    if "mirror_preview" in saved_prefs:
+                        self.options.mirror_preview = bool(saved_prefs["mirror_preview"])
+                    if "wof_draw_scale_pct" in saved_prefs:
+                        self.options.wof_draw_scale_pct = int(saved_prefs["wof_draw_scale_pct"])
+                    if "use_precuts" in saved_prefs:
+                        self.options.use_precuts = bool(saved_prefs["use_precuts"])
+                    if "precut_mini_charm" in saved_prefs:
+                        self.options.precut_mini_charm = bool(saved_prefs["precut_mini_charm"])
+                    if "precut_charm" in saved_prefs:
+                        self.options.precut_charm = bool(saved_prefs["precut_charm"])
+                    if "precut_layer_cake" in saved_prefs:
+                        self.options.precut_layer_cake = bool(saved_prefs["precut_layer_cake"])
+                    if "precut_jelly_roll" in saved_prefs:
+                        self.options.precut_jelly_roll = bool(saved_prefs["precut_jelly_roll"])
+                    if "precut_fat_16th" in saved_prefs:
+                        self.options.precut_fat_16th = bool(saved_prefs["precut_fat_16th"])
+                    if "precut_fat_8th" in saved_prefs:
+                        self.options.precut_fat_8th = bool(saved_prefs["precut_fat_8th"])
+                    if "precut_fat_quarter" in saved_prefs:
+                        self.options.precut_fat_quarter = bool(saved_prefs["precut_fat_quarter"])
+                    if "include_pattern_test_square" in saved_prefs:
+                        self.options.include_pattern_test_square = bool(saved_prefs["include_pattern_test_square"])
+                    if "show_page_boundaries" in saved_prefs:
+                        self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
+            except Exception:
+                pass
 
         dialog = Gtk.Dialog(title="Quilt Tools - Export Setup", transient_for=None)
         dialog.set_default_size(520, 520)
@@ -357,15 +418,15 @@ class ExportPlugin(inkex.Effect):
         spin_spacing = Gtk.SpinButton(adjustment=adj_spacing, climb_rate=0.05, digits=2)
         grid2.attach(spin_spacing, 1, 4, 1, 1)
 
-        # Color Fill Mode
-        lbl_cm = Gtk.Label(label="Template Fabric Color Fill:")
+        # Colour Fill Mode
+        lbl_cm = Gtk.Label(label="Template Fabric Colour Fill:")
         lbl_cm.set_halign(Gtk.Align.START)
         grid2.attach(lbl_cm, 0, 5, 1, 1)
         combo_color_mode = Gtk.ComboBoxText()
         combo_color_mode.append("none", "White (Line-Art only)")
-        combo_color_mode.append("tag", "Color Swatch (Minimal ink)")
-        combo_color_mode.append("full", "Full Color Fill (Ink-heavy)")
-        combo_color_mode.set_active_id(self.options.template_color_mode or "none")
+        combo_color_mode.append("tag", "Colour Swatch (Minimal ink)")
+        combo_color_mode.append("full", "Full Colour Fill (Ink-heavy)")
+        combo_color_mode.set_active_id(self.options.template_color_mode or "tag")
         grid2.attach(combo_color_mode, 1, 5, 1, 1)
 
         # Mirror Templates
@@ -389,7 +450,64 @@ class ExportPlugin(inkex.Effect):
         combo_wof_scale.set_active_id(str(self.options.wof_draw_scale_pct or "75"))
         grid2.attach(combo_wof_scale, 1, 8, 1, 1)
 
+        # Pattern Page Test Square
+        chk_pattern_cal = Gtk.CheckButton(label="Include 2nd test square on pattern pages (smart packed)")
+        chk_pattern_cal.set_active(self.options.include_pattern_test_square)
+        grid2.attach(chk_pattern_cal, 0, 9, 2, 1)
+
+        # Show Page Boundaries
+        chk_boundaries = Gtk.CheckButton(label="Show printable page boundaries (blue dashed line & page labels)")
+        chk_boundaries.set_active(self.options.show_page_boundaries)
+        grid2.attach(chk_boundaries, 0, 10, 2, 1)
+
         notebook.append_page(grid2, Gtk.Label(label="Page Setup & Styling"))
+
+        # PAGE 3: Fabric & Precuts Setup
+        grid3 = Gtk.Grid()
+        grid3.set_column_spacing(10)
+        grid3.set_row_spacing(8)
+        grid3.set_margin_start(15)
+        grid3.set_margin_end(15)
+        grid3.set_margin_top(15)
+        grid3.set_margin_bottom(15)
+
+        chk_use_precuts = Gtk.CheckButton(label="Use Precuts (optimize suggested purchase for precut sizes)")
+        chk_use_precuts.set_active(self.options.use_precuts)
+        grid3.attach(chk_use_precuts, 0, 0, 2, 1)
+
+        lbl_options = Gtk.Label(label="Enabled Precut Options (used when 'Use Precuts' is checked):")
+        lbl_options.set_halign(Gtk.Align.START)
+        grid3.attach(lbl_options, 0, 1, 2, 1)
+
+        chk_mc = Gtk.CheckButton(label="Mini Charm (2.5\" square)")
+        chk_mc.set_active(self.options.precut_mini_charm)
+        grid3.attach(chk_mc, 0, 2, 2, 1)
+
+        chk_ch = Gtk.CheckButton(label="Charm (5\" square)")
+        chk_ch.set_active(self.options.precut_charm)
+        grid3.attach(chk_ch, 0, 3, 2, 1)
+
+        chk_lc = Gtk.CheckButton(label="Layer Cake (10\" square)")
+        chk_lc.set_active(self.options.precut_layer_cake)
+        grid3.attach(chk_lc, 0, 4, 2, 1)
+
+        chk_jr = Gtk.CheckButton(label="Jelly Roll (2.5\" x WOF strip)")
+        chk_jr.set_active(self.options.precut_jelly_roll)
+        grid3.attach(chk_jr, 0, 5, 2, 1)
+
+        chk_f16 = Gtk.CheckButton(label="Fat 16th (9\" x 11\")")
+        chk_f16.set_active(self.options.precut_fat_16th)
+        grid3.attach(chk_f16, 0, 6, 2, 1)
+
+        chk_f8 = Gtk.CheckButton(label="Fat 8th (9\" x 21\")")
+        chk_f8.set_active(self.options.precut_fat_8th)
+        grid3.attach(chk_f8, 0, 7, 2, 1)
+
+        chk_fq = Gtk.CheckButton(label="Fat Quarter (18\" x 21\")")
+        chk_fq.set_active(self.options.precut_fat_quarter)
+        grid3.attach(chk_fq, 0, 8, 2, 1)
+
+        notebook.append_page(grid3, Gtk.Label(label="Fabric & Precuts"))
 
         # Buttons
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
@@ -428,6 +546,46 @@ class ExportPlugin(inkex.Effect):
             
             scale_id = combo_wof_scale.get_active_id() or "75"
             self.options.wof_draw_scale_pct = int(scale_id)
+            
+            self.options.use_precuts = chk_use_precuts.get_active()
+            self.options.precut_mini_charm = chk_mc.get_active()
+            self.options.precut_charm = chk_ch.get_active()
+            self.options.precut_layer_cake = chk_lc.get_active()
+            self.options.precut_jelly_roll = chk_jr.get_active()
+            self.options.precut_fat_16th = chk_f16.get_active()
+            self.options.precut_fat_8th = chk_f8.get_active()
+            self.options.precut_fat_quarter = chk_fq.get_active()
+            self.options.include_pattern_test_square = chk_pattern_cal.get_active()
+            self.options.show_page_boundaries = chk_boundaries.get_active()
+            
+            # Save sticky preferences
+            prefs_to_save = {
+                "page_size": self.options.page_size,
+                "orientation": self.options.orientation,
+                "margin_in": self.options.margin_in,
+                "sa_in": self.options.sa_in,
+                "spacing_in": self.options.spacing_in,
+                "template_color_mode": self.options.template_color_mode,
+                "mirror_templates": self.options.mirror_templates,
+                "mirror_preview": self.options.mirror_preview,
+                "wof_draw_scale_pct": self.options.wof_draw_scale_pct,
+                "use_precuts": self.options.use_precuts,
+                "precut_mini_charm": self.options.precut_mini_charm,
+                "precut_charm": self.options.precut_charm,
+                "precut_layer_cake": self.options.precut_layer_cake,
+                "precut_jelly_roll": self.options.precut_jelly_roll,
+                "precut_fat_16th": self.options.precut_fat_16th,
+                "precut_fat_8th": self.options.precut_fat_8th,
+                "precut_fat_quarter": self.options.precut_fat_quarter,
+                "include_pattern_test_square": self.options.include_pattern_test_square,
+                "show_page_boundaries": self.options.show_page_boundaries,
+            }
+            try:
+                with open(prefs_path, "w", encoding="utf-8") as f:
+                    json.dump(prefs_to_save, f, indent=2)
+            except Exception:
+                pass
+                
             success = True
 
         dialog.destroy()
@@ -435,6 +593,291 @@ class ExportPlugin(inkex.Effect):
             Gtk.main_iteration()
 
         return success
+
+    def _show_tk_setup_dialog(self, block_data):
+        import os
+        import json
+        import tkinter as tk
+        from tkinter import ttk
+
+        prefs_path = os.path.join(os.path.dirname(__file__), "quilttools_fpp_export_prefs.json")
+        if os.path.exists(prefs_path):
+            try:
+                with open(prefs_path, "r", encoding="utf-8") as f:
+                    saved_prefs = json.load(f)
+                    if "page_size" in saved_prefs:
+                        self.options.page_size = saved_prefs["page_size"]
+                    if "orientation" in saved_prefs:
+                        self.options.orientation = saved_prefs["orientation"]
+                    if "margin_in" in saved_prefs:
+                        self.options.margin_in = float(saved_prefs["margin_in"])
+                    if "sa_in" in saved_prefs:
+                        self.options.sa_in = float(saved_prefs["sa_in"])
+                    if "spacing_in" in saved_prefs:
+                        self.options.spacing_in = float(saved_prefs["spacing_in"])
+                    if "template_color_mode" in saved_prefs:
+                        self.options.template_color_mode = saved_prefs["template_color_mode"]
+                    if "mirror_templates" in saved_prefs:
+                        self.options.mirror_templates = bool(saved_prefs["mirror_templates"])
+                    if "mirror_preview" in saved_prefs:
+                        self.options.mirror_preview = bool(saved_prefs["mirror_preview"])
+                    if "wof_draw_scale_pct" in saved_prefs:
+                        self.options.wof_draw_scale_pct = int(saved_prefs["wof_draw_scale_pct"])
+                    if "use_precuts" in saved_prefs:
+                        self.options.use_precuts = bool(saved_prefs["use_precuts"])
+                    if "precut_mini_charm" in saved_prefs:
+                        self.options.precut_mini_charm = bool(saved_prefs["precut_mini_charm"])
+                    if "precut_charm" in saved_prefs:
+                        self.options.precut_charm = bool(saved_prefs["precut_charm"])
+                    if "precut_layer_cake" in saved_prefs:
+                        self.options.precut_layer_cake = bool(saved_prefs["precut_layer_cake"])
+                    if "precut_jelly_roll" in saved_prefs:
+                        self.options.precut_jelly_roll = bool(saved_prefs["precut_jelly_roll"])
+                    if "precut_fat_16th" in saved_prefs:
+                        self.options.precut_fat_16th = bool(saved_prefs["precut_fat_16th"])
+                    if "precut_fat_8th" in saved_prefs:
+                        self.options.precut_fat_8th = bool(saved_prefs["precut_fat_8th"])
+                    if "precut_fat_quarter" in saved_prefs:
+                        self.options.precut_fat_quarter = bool(saved_prefs["precut_fat_quarter"])
+                    if "include_pattern_test_square" in saved_prefs:
+                        self.options.include_pattern_test_square = bool(saved_prefs["include_pattern_test_square"])
+                    if "show_page_boundaries" in saved_prefs:
+                        self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
+            except Exception:
+                pass
+
+        result = {"success": False}
+
+        root = tk.Tk()
+        root.title("Quilt Tools - Export Setup")
+        root.geometry("560x580")
+        root.minsize(520, 520)
+        root.attributes("-topmost", True)
+
+        style = ttk.Style(root)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        hdr_frame = ttk.Frame(root, padding=10)
+        hdr_frame.pack(fill="x")
+        hdr_label = ttk.Label(hdr_frame, text="Finalize Export Settings", font=("sans-serif", 13, "bold"))
+        hdr_label.pack()
+
+        notebook = ttk.Notebook(root, padding=5)
+        notebook.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # PAGE 1: Credits & Page Features
+        page1 = ttk.Frame(notebook, padding=15)
+        notebook.add(page1, text="Credits & Page Features")
+
+        ttk.Label(page1, text="Block / Pattern Name:").grid(row=0, column=0, sticky="w", pady=4)
+        entry_bn = ttk.Entry(page1, width=32)
+        entry_bn.insert(0, self.options.block_name or "")
+        entry_bn.grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(page1, text="Designer / Author Name:").grid(row=1, column=0, sticky="w", pady=4)
+        entry_dn = ttk.Entry(page1, width=32)
+        entry_dn.insert(0, self.options.designer_name or "")
+        entry_dn.grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(page1, text="Copyright Notice:").grid(row=2, column=0, sticky="w", pady=4)
+        entry_cr = ttk.Entry(page1, width=32)
+        entry_cr.insert(0, self.options.copyright_notice or "")
+        entry_cr.grid(row=2, column=1, sticky="w", pady=4)
+
+        var_preview = tk.BooleanVar(value=bool(self.options.include_preview))
+        ttk.Checkbutton(page1, text="Include Block Preview (Page 1)", variable=var_preview).grid(row=3, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_sec_map = tk.BooleanVar(value=bool(self.options.separate_section_alignment_image))
+        ttk.Checkbutton(page1, text="Include Section Map Page (Page 2)", variable=var_sec_map).grid(row=4, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_fabric_est = tk.BooleanVar(value=bool(self.options.include_fabric_estimation))
+        ttk.Checkbutton(page1, text="Include Fabric Requirements & Cutting List", variable=var_fabric_est).grid(row=5, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_vis_fab = tk.BooleanVar(value=bool(self.options.visualize_fabric_layout))
+        ttk.Checkbutton(page1, text="Visualize Fabric Layout Maps", variable=var_vis_fab).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_colouring = tk.BooleanVar(value=bool(self.options.include_colouring_page))
+        ttk.Checkbutton(page1, text="Include Colouring / Planning Page", variable=var_colouring).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_sec_labels = tk.BooleanVar(value=bool(self.options.show_section_labels))
+        ttk.Checkbutton(page1, text="Include Section Labels on Templates", variable=var_sec_labels).grid(row=8, column=0, columnspan=2, sticky="w", pady=3)
+
+        # PAGE 2: Page Setup & Styling
+        page2 = ttk.Frame(notebook, padding=15)
+        notebook.add(page2, text="Page Setup & Styling")
+
+        ttk.Label(page2, text="Page Size:").grid(row=0, column=0, sticky="w", pady=4)
+        combo_ps = ttk.Combobox(page2, values=["letter", "a4", "legal", "tabloid", "a3"], state="readonly", width=25)
+        combo_ps.set(self.options.page_size or "letter")
+        combo_ps.grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(page2, text="Orientation:").grid(row=1, column=0, sticky="w", pady=4)
+        combo_orient = ttk.Combobox(page2, values=["portrait", "landscape"], state="readonly", width=25)
+        combo_orient.set(self.options.orientation or "portrait")
+        combo_orient.grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(page2, text="Page Margin (in):").grid(row=2, column=0, sticky="w", pady=4)
+        spin_margin = ttk.Spinbox(page2, from_=0.1, to=2.0, increment=0.05, width=10)
+        spin_margin.set(str(self.options.margin_in or 0.5))
+        spin_margin.grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(page2, text="Seam Allowance (in):").grid(row=3, column=0, sticky="w", pady=4)
+        spin_sa = ttk.Spinbox(page2, from_=0.0, to=1.0, increment=0.05, width=10)
+        spin_sa.set(str(self.options.sa_in or 0.25))
+        spin_sa.grid(row=3, column=1, sticky="w", pady=4)
+
+        ttk.Label(page2, text="Piece Spacing (in):").grid(row=4, column=0, sticky="w", pady=4)
+        spin_spacing = ttk.Spinbox(page2, from_=0.0, to=1.0, increment=0.05, width=10)
+        spin_spacing.set(str(self.options.spacing_in or 0.2))
+        spin_spacing.grid(row=4, column=1, sticky="w", pady=4)
+
+        ttk.Label(page2, text="Template Colour Fill:").grid(row=5, column=0, sticky="w", pady=4)
+        mode_map = {"tag": "Colour Swatch (Minimal ink)", "full": "Full Colour Fill", "none": "None (Outlines only)"}
+        mode_reverse = {v: k for k, v in mode_map.items()}
+        combo_color = ttk.Combobox(page2, values=list(mode_map.values()), state="readonly", width=28)
+        combo_color.set(mode_map.get(self.options.template_color_mode, "Colour Swatch (Minimal ink)"))
+        combo_color.grid(row=5, column=1, sticky="w", pady=4)
+
+        var_mirror_temp = tk.BooleanVar(value=bool(self.options.mirror_templates))
+        ttk.Checkbutton(page2, text="Mirror templates on Pages 2+ (Recommended)", variable=var_mirror_temp).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_mirror_prev = tk.BooleanVar(value=bool(self.options.mirror_preview))
+        ttk.Checkbutton(page2, text="Mirror Page 1 Block Preview", variable=var_mirror_prev).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
+
+        ttk.Label(page2, text="WOF Map Width:").grid(row=8, column=0, sticky="w", pady=4)
+        combo_wof = ttk.Combobox(page2, values=["50%", "75%", "100%"], state="readonly", width=15)
+        combo_wof.set(f"{self.options.wof_draw_scale_pct or 75}%")
+        combo_wof.grid(row=8, column=1, sticky="w", pady=4)
+
+        var_test_sq = tk.BooleanVar(value=bool(self.options.include_pattern_test_square))
+        ttk.Checkbutton(page2, text="Include 2nd test square on pattern pages", variable=var_test_sq).grid(row=9, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_boundaries = tk.BooleanVar(value=bool(self.options.show_page_boundaries))
+        ttk.Checkbutton(page2, text="Show printable page boundaries", variable=var_boundaries).grid(row=10, column=0, columnspan=2, sticky="w", pady=3)
+
+        # PAGE 3: Fabric & Precuts
+        page3 = ttk.Frame(notebook, padding=15)
+        notebook.add(page3, text="Fabric & Precuts")
+
+        var_use_precuts = tk.BooleanVar(value=bool(self.options.use_precuts))
+        ttk.Checkbutton(page3, text="Use Precuts Optimization", variable=var_use_precuts).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
+
+        var_mc = tk.BooleanVar(value=bool(self.options.precut_mini_charm))
+        ttk.Checkbutton(page3, text="Mini Charm (2.5\" square)", variable=var_mc).grid(row=1, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_ch = tk.BooleanVar(value=bool(self.options.precut_charm))
+        ttk.Checkbutton(page3, text="Charm (5\" square)", variable=var_ch).grid(row=2, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_lc = tk.BooleanVar(value=bool(self.options.precut_layer_cake))
+        ttk.Checkbutton(page3, text="Layer Cake (10\" square)", variable=var_lc).grid(row=3, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_jr = tk.BooleanVar(value=bool(self.options.precut_jelly_roll))
+        ttk.Checkbutton(page3, text="Jelly Roll (2.5\" x WOF)", variable=var_jr).grid(row=4, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_f16 = tk.BooleanVar(value=bool(self.options.precut_fat_16th))
+        ttk.Checkbutton(page3, text="Fat 16th (9\" x 11\")", variable=var_f16).grid(row=5, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_f8 = tk.BooleanVar(value=bool(self.options.precut_fat_8th))
+        ttk.Checkbutton(page3, text="Fat 8th (9\" x 21\")", variable=var_f8).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_fq = tk.BooleanVar(value=bool(self.options.precut_fat_quarter))
+        ttk.Checkbutton(page3, text="Fat Quarter (18\" x 21\")", variable=var_fq).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
+
+        # Buttons Frame
+        btn_frame = ttk.Frame(root, padding=10)
+        btn_frame.pack(fill="x", side="bottom")
+
+        def on_ok():
+            self.options.block_name = entry_bn.get().strip()
+            self.options.designer_name = entry_dn.get().strip()
+            self.options.copyright_notice = entry_cr.get().strip()
+
+            self.options.include_preview = var_preview.get()
+            self.options.separate_section_alignment_image = var_sec_map.get()
+            self.options.include_fabric_estimation = var_fabric_est.get()
+            self.options.visualize_fabric_layout = var_vis_fab.get()
+            self.options.include_colouring_page = var_colouring.get()
+            self.options.show_section_labels = var_sec_labels.get()
+
+            self.options.page_size = combo_ps.get() or "letter"
+            self.options.orientation = combo_orient.get() or "portrait"
+            try:
+                self.options.margin_in = float(spin_margin.get())
+            except Exception:
+                pass
+            try:
+                self.options.sa_in = float(spin_sa.get())
+            except Exception:
+                pass
+            try:
+                self.options.spacing_in = float(spin_spacing.get())
+            except Exception:
+                pass
+            self.options.template_color_mode = mode_reverse.get(combo_color.get(), "tag")
+
+            self.options.mirror_templates = var_mirror_temp.get()
+            self.options.mirror_preview = var_mirror_prev.get()
+            wof_val = combo_wof.get().replace("%", "").strip()
+            try:
+                self.options.wof_draw_scale_pct = int(wof_val)
+            except Exception:
+                pass
+            self.options.include_pattern_test_square = var_test_sq.get()
+            self.options.show_page_boundaries = var_boundaries.get()
+
+            self.options.use_precuts = var_use_precuts.get()
+            self.options.precut_mini_charm = var_mc.get()
+            self.options.precut_charm = var_ch.get()
+            self.options.precut_layer_cake = var_lc.get()
+            self.options.precut_jelly_roll = var_jr.get()
+            self.options.precut_fat_16th = var_f16.get()
+            self.options.precut_fat_8th = var_f8.get()
+            self.options.precut_fat_quarter = var_fq.get()
+
+            # Save sticky preferences
+            prefs_to_save = {
+                "page_size": self.options.page_size,
+                "orientation": self.options.orientation,
+                "margin_in": self.options.margin_in,
+                "sa_in": self.options.sa_in,
+                "spacing_in": self.options.spacing_in,
+                "template_color_mode": self.options.template_color_mode,
+                "mirror_templates": self.options.mirror_templates,
+                "mirror_preview": self.options.mirror_preview,
+                "wof_draw_scale_pct": self.options.wof_draw_scale_pct,
+                "use_precuts": self.options.use_precuts,
+                "precut_mini_charm": self.options.precut_mini_charm,
+                "precut_charm": self.options.precut_charm,
+                "precut_layer_cake": self.options.precut_layer_cake,
+                "precut_jelly_roll": self.options.precut_jelly_roll,
+                "precut_fat_16th": self.options.precut_fat_16th,
+                "precut_fat_8th": self.options.precut_fat_8th,
+                "precut_fat_quarter": self.options.precut_fat_quarter,
+                "include_pattern_test_square": self.options.include_pattern_test_square,
+                "show_page_boundaries": self.options.show_page_boundaries,
+            }
+            try:
+                with open(prefs_path, "w", encoding="utf-8") as f:
+                    json.dump(prefs_to_save, f, indent=2)
+            except Exception:
+                pass
+
+            result["success"] = True
+            root.destroy()
+
+        def on_cancel():
+            result["success"] = False
+            root.destroy()
+
+        ttk.Button(btn_frame, text="Cancel", command=on_cancel).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="Export Pattern", command=on_ok).pack(side="right", padx=5)
+
+        root.protocol("WM_DELETE_WINDOW", on_cancel)
+        root.mainloop()
+        return result["success"]
 
     def _show_lint_report_gui(self, lint_report):
         has_warnings = any("[!]" in line or "WARNING" in line or "CRITICAL" in line for line in lint_report)
@@ -528,6 +971,35 @@ class ExportPlugin(inkex.Effect):
                 self._finalize_open_canvas()
             else:
                 self._generate_smart_pack()
+
+    def _deconflict_separate_section_map(self, block_data, unique_colors):
+        import math
+        steps, _ = core.calculate_section_sewing_order(block_data)
+        num_steps = len(steps)
+        
+        # Calculate fit on Page 1
+        pw_pg, ph_pg = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
+        if self.options.orientation == "landscape":
+            pw_pg, ph_pg = ph_pg, pw_pg
+        margin_px = self.options.margin_in * core.PX_PER_INCH
+        avail_w = pw_pg - (margin_px * 2)
+        avail_h = ph_pg - (margin_px * 2)
+        preview_side = min(int(avail_w * 0.90), int(avail_h * 0.42))
+        space_below = avail_h - 80 - preview_side
+        
+        # Estimated height for assembly + legend + color key + test square
+        color_rows = math.ceil(len(unique_colors) / 4) if len(unique_colors) <= 10 else 0
+        required_h = 20 + (num_steps * 18) + 120 + (color_rows * 24) + 96 + 30
+        
+        force_separate = False
+        if num_steps > 20:
+            force_separate = True
+        elif not self.options.separate_section_alignment_image:
+            if required_h > space_below:
+                force_separate = True
+                
+        if force_separate:
+            self.options.separate_section_alignment_image = True
 
     def _get_start_page(self):
         start_page = 0
@@ -1252,6 +1724,17 @@ class ExportPlugin(inkex.Effect):
         if not processed_sections:
             return
 
+        regions = block_data.tree.leaf_regions()
+        user_colors = block_data.prefs.get("custom_colors", {})
+        color_mode = block_data.prefs.get("color_mode", "piece")
+        unique_colors = set()
+        for idx, r in enumerate(sorted(regions, key=lambda x: x.label)):
+            color_hex = user_colors.get(str(r.id)) or user_colors.get(r.id)
+            if not color_hex:
+                color_hex = core.get_color_for_label(r.label, color_mode, idx)
+            unique_colors.add(color_hex)
+        self._deconflict_separate_section_map(block_data, unique_colors)
+
         layout_layer = self.svg.find(f".//{{{core.SVG_NS}}}g[@id='fpp-layout-layer']")
         if layout_layer is None:
             return inkex.errormsg(
@@ -1591,6 +2074,8 @@ class ExportPlugin(inkex.Effect):
             all_colors.append(color_hex)
         unique_colors = sorted(list(set(all_colors)))
 
+        self._deconflict_separate_section_map(block_data, unique_colors)
+
         pages_list = []
         if self.options.include_preview:
             pages_list.append({"type": "cover", "sizes": sizes})
@@ -1623,7 +2108,7 @@ class ExportPlugin(inkex.Effect):
             size_items = []
             global_tab_counter = 1
 
-            if sz != base_size:
+            if sz != base_size or bool(getattr(self.options, "include_pattern_test_square", False)):
                 size_items.append({
                     "prefix": "CAL",
                     "part_str": "",
@@ -2058,10 +2543,12 @@ class ExportPlugin(inkex.Effect):
             style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_light']};font-style:italic;",
         ).text = "Glue the shaded tab over the matching Align dashed line."
 
-    def _draw_color_key_grid(self, layout_layer, start_x, start_y, max_h, unique_colors, color_codes, all_colors):
+        return max(curr_y, curr_y_key + 35)
+
+    def _draw_color_key_grid(self, layout_layer, start_x, start_y, max_h, unique_colors, color_codes, all_colors, num_cols=4):
         for idx, c_hex in enumerate(unique_colors):
-            col = idx % 4
-            row = idx // 4
+            col = idx % num_cols
+            row = idx // num_cols
             item_x = start_x + col * 165
             item_y = start_y + row * 24
             
@@ -2291,8 +2778,19 @@ class ExportPlugin(inkex.Effect):
                 style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = fixed_str
             
-            free_yd = est['free_in'] / 36.0
-            free_str = f"{est['free_in']:.1f}\" ({free_yd:.2f} yd)"
+            suggested = est.get("suggested_purchase")
+            if not suggested:
+                free_yd = est['free_in'] / 36.0
+                eighths = math.ceil(free_yd * 8.0)
+                suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
+
+            precut_name = est.get("precut_name")
+            if precut_name:
+                free_str = f"{est['free_in']:.1f}\" x {est['fq_free_in']:.1f}\" width"
+            else:
+                free_yd = est['free_in'] / 36.0
+                free_str = f"{est['free_in']:.1f}\" ({free_yd:.2f} yd)"
+
             etree.SubElement(
                 layout_layer,
                 "{%s}text" % core.SVG_NS,
@@ -2301,15 +2799,6 @@ class ExportPlugin(inkex.Effect):
                 style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
             ).text = free_str
             
-            free_in_fq = est["fq_free_in"]
-            if free_in_fq <= 9.0:
-                suggested = "Fat Eighth (FE)"
-            elif free_in_fq <= 18.0:
-                suggested = "Fat Quarter (FQ)"
-            else:
-                eighths = math.ceil(free_yd * 8.0)
-                suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
-                
             etree.SubElement(
                 layout_layer,
                 "{%s}text" % core.SVG_NS,
@@ -2336,6 +2825,14 @@ class ExportPlugin(inkex.Effect):
             "sa_in": self.options.sa_in,
             "oversize_batch": bool(self.options.oversize_batch),
             "use_techniques": self.options.cutting_math != "templates_only",
+            "use_precuts": bool(self.options.use_precuts),
+            "precut_mini_charm": bool(self.options.precut_mini_charm),
+            "precut_charm": bool(self.options.precut_charm),
+            "precut_layer_cake": bool(self.options.precut_layer_cake),
+            "precut_jelly_roll": bool(self.options.precut_jelly_roll),
+            "precut_fat_16th": bool(self.options.precut_fat_16th),
+            "precut_fat_8th": bool(self.options.precut_fat_8th),
+            "precut_fat_quarter": bool(self.options.precut_fat_quarter),
         }
 
     def _template_req(self, block_data, sz):
@@ -2422,13 +2919,26 @@ class ExportPlugin(inkex.Effect):
         for fab_est in req["per_fabric"]:
             fab = fab_est["color"]
             code = color_codes.get(fab, "FAB")
-            suggested = quilttools_fpp_fabric.suggest_purchase(
-                fab_est["total_in"], fab_est["fq_total_in"])
+            suggested = fab_est.get("suggested_purchase")
+            if not suggested:
+                suggested = quilttools_fpp_fabric.suggest_purchase(
+                    fab_est["total_in"], fab_est["fq_total_in"])
+            
+            wof_val = fab_est.get("wof_in", 40.0)
+            precut_name = fab_est.get("precut_name")
+            if precut_name:
+                clean_name = precut_name.replace("1 x ", "")
+                width_label = f"{clean_name} width ({quilttools_cutplan.fmt_in(wof_val)})"
+            elif abs(wof_val - 21.0) < 1e-3:
+                width_label = "FQ width (21\")"
+            else:
+                width_label = "WOF"
+
             n_pc = fab_est["pieces_count"] + fab_est.get("fpp_pieces", 0)
             add("header",
                 f"        Fabric {code} ({fab}) - {n_pc} piece"
                 f"{'s' if n_pc != 1 else ''} - total "
-                f"{quilttools_cutplan.fmt_in(fab_est['total_in'])} x WOF - "
+                f"{quilttools_cutplan.fmt_in(fab_est['total_in'])} x {width_label} - "
                 f"suggested: {suggested}", fab=fab)
             for line in fab_est["lines"]:
                 add("line", line, indent=14.0)
@@ -2647,22 +3157,23 @@ class ExportPlugin(inkex.Effect):
                 height=str(ph),
                 style="fill:#ffffff;stroke:#dddddd;stroke-width:1.0;",
             )
-            etree.SubElement(
-                layout_layer,
-                "{%s}rect" % core.SVG_NS,
-                x=str(px + margin),
-                y=str(py + margin),
-                width=str(pw - 2 * margin),
-                height=str(ph - 2 * margin),
-                style="fill:none;stroke:#0000ff;stroke-width:1.5;stroke-dasharray:8,8;",
-            )
-            etree.SubElement(
-                layout_layer,
-                "{%s}text" % core.SVG_NS,
-                x=str(px + margin),
-                y=str(py + margin - 10),
-                style="font-size:16px;font-family:sans-serif;fill:#0000ff;",
-            ).text = f"Page {pi + 1}"
+            if bool(getattr(self.options, "show_page_boundaries", True)):
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}rect" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin),
+                    width=str(pw - 2 * margin),
+                    height=str(ph - 2 * margin),
+                    style="fill:none;stroke:#0000ff;stroke-width:1.5;stroke-dasharray:8,8;",
+                )
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin - 10),
+                    style="font-size:16px;font-family:sans-serif;fill:#0000ff;",
+                ).text = f"Page {pi + 1}"
 
         regions = block_data.tree.leaf_regions()
         user_colors = block_data.prefs.get("custom_colors", {})
@@ -2762,7 +3273,10 @@ class ExportPlugin(inkex.Effect):
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = f"{credit_str}  |  {size_str}  |  {self.options.copyright_notice}"
                 
-                preview_side = min(int(avail_w * 0.90), int(avail_h * 0.65))
+                if not self.options.separate_section_alignment_image:
+                    preview_side = min(int(avail_w * 0.90), int(avail_h * 0.42))
+                else:
+                    preview_side = min(int(avail_w * 0.90), int(avail_h * 0.65))
                 preview_w = preview_side
                 preview_h = preview_side
                 preview_x = px + margin + (avail_w - preview_w) / 2
@@ -2779,8 +3293,9 @@ class ExportPlugin(inkex.Effect):
                     user_colors,
                 )
                 
+                max_y = preview_y + preview_h
                 if not self.options.separate_section_alignment_image:
-                    self._draw_assembly_and_legend(
+                    max_y = self._draw_assembly_and_legend(
                         layout_layer,
                         px + margin,
                         preview_y + preview_h + 20,
@@ -2794,7 +3309,7 @@ class ExportPlugin(inkex.Effect):
                     if self.options.separate_section_alignment_image:
                         grid_y = preview_y + preview_h + 30
                     else:
-                        grid_y = preview_y + preview_h + 150
+                        grid_y = max_y + 20
                     self._draw_color_key_grid(
                         layout_layer,
                         px + margin,
@@ -2860,23 +3375,37 @@ class ExportPlugin(inkex.Effect):
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
                 ).text = "Use this map to assemble the printed sections in the correct sequence."
                 
-                preview_w = int(avail_w * 0.62)
-                preview_h = preview_w
+                # Center the preview map at the top of Page 2
+                preview_side = min(int(avail_w * 0.90), int(avail_h * 0.42))
+                preview_w = preview_side
+                preview_h = preview_side
+                preview_x = px + margin + (avail_w - preview_w) / 2
+                preview_y = py + margin + 80
+                
                 self._draw_section_map_block(
                     layout_layer,
-                    px + margin,
-                    py + margin + 80,
+                    preview_x,
+                    preview_y,
                     preview_w,
                     preview_h,
                     block_data,
                     user_colors,
                 )
                 
-                self._draw_assembly_and_legend(layout_layer, px + margin + preview_w + 25, py + margin + 100, block_data)
+                # Draw assembly sequence and legend side-by-side underneath the map
+                right_col_x = px + margin + avail_w / 2 + 10
+                max_y = self._draw_assembly_and_legend(
+                    layout_layer,
+                    px + margin,
+                    preview_y + preview_h + 20,
+                    block_data,
+                    side_by_side=True,
+                    right_col_x=right_col_x
+                )
                 
-                # Draw color key under the section map if there are more than 10 colors
+                # Draw color key below the assembly / legend block
                 if len(unique_colors) > 10:
-                    grid_y = py + margin + 80 + preview_h + 30
+                    grid_y = max_y + 20
                     self._draw_color_key_grid(
                         layout_layer,
                         px + margin,
@@ -2884,7 +3413,8 @@ class ExportPlugin(inkex.Effect):
                         avail_h - (grid_y - py),
                         unique_colors,
                         color_codes,
-                        all_colors
+                        all_colors,
+                        num_cols=4
                     )
                 
             elif p_type == "fabric_requirements":
@@ -2934,13 +3464,15 @@ class ExportPlugin(inkex.Effect):
                         map_inline=page_info.get("map_inline", False),
                         map_w=page_info.get("map_w"))
                 else:
-                    fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(block_data, sz, self.options.wof_in)
+                    fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(
+                        block_data, sz, self.options.wof_in, options=self._cutplan_options())
                     end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
 
                     if self.options.visualize_fabric_layout:
                         quilttools_fpp_fabric.draw_fabric_layout_map(
                             layout_layer, px + margin, end_table_y + 30, avail_w,
-                            block_data, sz, self.options.wof_in, color_codes
+                            block_data, sz, self.options.wof_in, color_codes,
+                            options=self._cutplan_options()
                         )
 
             elif p_type == "cutting_map":
@@ -3194,7 +3726,7 @@ class ExportPlugin(inkex.Effect):
                 pw_r = max(p[0] for p in poly) - min(p[0] for p in poly)
                 ph_r = max(p[1] for p in poly) - min(p[1] for p in poly)
                 area_r = core.polygon_area(poly)
-                is_too_small = (pw_r < 40.0 or ph_r < 40.0 or area_r < 3686.0)
+                is_too_small = (pw_r < 60.0 or ph_r < 60.0 or area_r < 7200.0)
                 
                 mode = self.options.template_color_mode
                 is_multicolor = r["label"] in getattr(
@@ -3243,75 +3775,200 @@ class ExportPlugin(inkex.Effect):
                     text_color = STYLE_CONFIG["color_white"]
                     subtext_color = "#dddddd"
 
-                if mode == "tag" and not is_too_small:
-                    etree.SubElement(
-                        shift_g,
-                        "{%s}text" % core.SVG_NS,
-                        x=f"{r_cx:.2f}",
-                        y=f"{r_cy - 12:.2f}",
-                        style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
-                    ).text = label_text
-                    etree.SubElement(
-                        shift_g,
-                        "{%s}rect" % core.SVG_NS,
-                        x=f"{r_cx - 12:.2f}",
-                        y=f"{r_cy - 4:.2f}",
-                        width="24",
-                        height="16",
-                        style=f"fill:{assigned_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:0.5;",
-                    )
+                is_wide_and_short = (pw_r > 1.8 * ph_r)
+                
+                if is_wide_and_short:
+                    elements = []
+                    
+                    # 1. Label
+                    elements.append({
+                        "kind": "label",
+                        "width": 35.0 if not is_too_small else 25.0
+                    })
+                    
+                    # 2. Swatch
+                    show_swatch = (mode == "tag" and not is_too_small)
+                    sw_w = 36.0 if not is_too_small else 24.0
+                    sw_h = 24.0 if not is_too_small else 16.0
+                    if show_swatch:
+                        elements.append({
+                            "kind": "swatch",
+                            "width": sw_w
+                        })
+                        
+                    # 3. Code
                     if code_text:
-                        etree.SubElement(
-                            shift_g,
-                            "{%s}text" % core.SVG_NS,
-                            x=f"{r_cx:.2f}",
-                            y=f"{r_cy + 18:.2f}",
-                            style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
-                        ).text = f"[{code_text}]"
-                else:
-                    if code_text and not is_too_small:
-                        etree.SubElement(
-                            shift_g,
-                            "{%s}text" % core.SVG_NS,
-                            x=f"{r_cx:.2f}",
-                            y=f"{r_cy - 7:.2f}",
-                            style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;fill:{text_color};",
-                        ).text = label_text
-                        etree.SubElement(
-                            shift_g,
-                            "{%s}text" % core.SVG_NS,
-                            x=f"{r_cx:.2f}",
-                            y=f"{r_cy + 7:.2f}",
-                            style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
-                        ).text = f"[{code_text}]"
-                    else:
-                        etree.SubElement(
-                            shift_g,
-                            "{%s}text" % core.SVG_NS,
-                            x=f"{r_cx:.2f}",
-                            y=f"{r_cy:.2f}",
-                            style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
-                        ).text = label_text
+                        elements.append({
+                            "kind": "code",
+                            "width": 45.0 if not is_too_small else 30.0
+                        })
+                        
+                    # 4. Dedupe
+                    show_dedupe = bool(dedupe_labels and not is_too_small)
+                    if show_dedupe:
+                        elements.append({
+                            "kind": "dedupe",
+                            "width": 60.0
+                        })
+                        
+                    # 5. Multicolor note
+                    if is_multicolor and not is_too_small:
+                        elements.append({
+                            "kind": "multicolor",
+                            "width": 120.0
+                        })
 
-                if dedupe_labels and not is_too_small:
-                    covered = ", ".join(dedupe_labels)
-                    if len(covered) > 30:
-                        covered = covered[:27] + "..."
-                    etree.SubElement(
-                        shift_g,
-                        "{%s}text" % core.SVG_NS,
-                        x=f"{r_cx:.2f}",
-                        y=f"{r_cy + 32:.2f}",
-                        style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
-                    ).text = f"for: {covered}"
-                if is_multicolor and not is_too_small:
-                    etree.SubElement(
-                        shift_g,
-                        "{%s}text" % core.SVG_NS,
-                        x=f"{r_cx:.2f}",
-                        y=f"{r_cy + 44:.2f}",
-                        style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};font-style:italic;text-anchor:middle;fill:{subtext_color};",
-                    ).text = "mixed fabrics - see layout page"
+                    gap = 8.0
+                    total_w = sum(el["width"] for el in elements) + gap * (len(elements) - 1)
+                    curr_x = r_cx - total_w / 2.0
+                    
+                    for el in elements:
+                        el_w = el["width"]
+                        cx = curr_x + el_w / 2.0
+                        
+                        if el["kind"] == "label":
+                            font_sz = "18px" if not is_too_small else STYLE_CONFIG['font_size_body']
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{cx:.2f}",
+                                y=f"{r_cy:.2f}",
+                                style=f"font-size:{font_sz};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
+                            ).text = label_text
+                        elif el["kind"] == "swatch":
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}rect" % core.SVG_NS,
+                                x=f"{cx - sw_w / 2.0:.2f}",
+                                y=f"{r_cy - sw_h / 2.0:.2f}",
+                                width=str(sw_w),
+                                height=str(sw_h),
+                                style=f"fill:{assigned_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:0.5;",
+                            )
+                        elif el["kind"] == "code":
+                            font_sz = "15px" if not is_too_small else STYLE_CONFIG['font_size_tiny']
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{cx:.2f}",
+                                y=f"{r_cy:.2f}",
+                                style=f"font-size:{font_sz};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;dominant-baseline:middle;fill:{subtext_color};",
+                            ).text = f"[{code_text}]"
+                        elif el["kind"] == "dedupe":
+                            covered = ", ".join(dedupe_labels)
+                            if len(covered) > 30:
+                                covered = covered[:27] + "..."
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{cx:.2f}",
+                                y=f"{r_cy:.2f}",
+                                style=f"font-size:13.5px;font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;dominant-baseline:middle;fill:{subtext_color};",
+                            ).text = f"for: {covered}"
+                        elif el["kind"] == "multicolor":
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{cx:.2f}",
+                                y=f"{r_cy:.2f}",
+                                style=f"font-size:13.5px;font-family:{STYLE_CONFIG['font_family']};font-style:italic;text-anchor:middle;dominant-baseline:middle;fill:{subtext_color};",
+                            ).text = "mixed fabrics - see layout page"
+                            
+                        curr_x += el_w + gap
+                else:
+                    if mode == "tag" and not is_too_small:
+                        # Big pieces: swatch scaled up 50% to 36x24, labels scaled up 50%
+                        etree.SubElement(
+                            shift_g,
+                            "{%s}text" % core.SVG_NS,
+                            x=f"{r_cx:.2f}",
+                            y=f"{r_cy - 22:.2f}",
+                            style=f"font-size:18px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
+                        ).text = label_text
+                        etree.SubElement(
+                            shift_g,
+                            "{%s}rect" % core.SVG_NS,
+                            x=f"{r_cx - 18:.2f}",
+                            y=f"{r_cy - 8:.2f}",
+                            width="36",
+                            height="24",
+                            style=f"fill:{assigned_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:0.5;",
+                        )
+                        if code_text:
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{r_cx:.2f}",
+                                y=f"{r_cy + 36:.2f}",
+                                style=f"font-size:15px;font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
+                            ).text = f"[{code_text}]"
+                    else:
+                        if code_text:
+                            if is_too_small:
+                                # Stacked layout with body/tiny fonts for small pieces
+                                etree.SubElement(
+                                    shift_g,
+                                    "{%s}text" % core.SVG_NS,
+                                    x=f"{r_cx:.2f}",
+                                    y=f"{r_cy - 5:.2f}",
+                                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;fill:{text_color};",
+                                ).text = label_text
+                                etree.SubElement(
+                                    shift_g,
+                                    "{%s}text" % core.SVG_NS,
+                                    x=f"{r_cx:.2f}",
+                                    y=f"{r_cy + 5:.2f}",
+                                    style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
+                                ).text = f"[{code_text}]"
+                            else:
+                                # Standard layout with body/caption fonts scaled up 50% for big pieces
+                                etree.SubElement(
+                                    shift_g,
+                                    "{%s}text" % core.SVG_NS,
+                                    x=f"{r_cx:.2f}",
+                                    y=f"{r_cy - 10:.2f}",
+                                    style=f"font-size:18px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;fill:{text_color};",
+                                ).text = label_text
+                                etree.SubElement(
+                                    shift_g,
+                                    "{%s}text" % core.SVG_NS,
+                                    x=f"{r_cx:.2f}",
+                                    y=f"{r_cy + 10:.2f}",
+                                    style=f"font-size:15px;font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
+                                ).text = f"[{code_text}]"
+                        else:
+                            # Centered single label (scaled up 50% to 18px on big pieces)
+                            font_sz = STYLE_CONFIG['font_size_body'] if is_too_small else "18px"
+                            etree.SubElement(
+                                shift_g,
+                                "{%s}text" % core.SVG_NS,
+                                x=f"{r_cx:.2f}",
+                                y=f"{r_cy:.2f}",
+                                style=f"font-size:{font_sz};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
+                            ).text = label_text
+
+                    if dedupe_labels and not is_too_small:
+                        covered = ", ".join(dedupe_labels)
+                        if len(covered) > 30:
+                            covered = covered[:27] + "..."
+                        
+                        y_off = r_cy + 52.0 if (mode == "tag" and code_text) else (r_cy + 22.0 if code_text else r_cy + 14.0)
+                        etree.SubElement(
+                            shift_g,
+                            "{%s}text" % core.SVG_NS,
+                            x=f"{r_cx:.2f}",
+                            y=f"{y_off:.2f}",
+                            style=f"font-size:13.5px;font-family:{STYLE_CONFIG['font_family']};font-weight:normal;text-anchor:middle;fill:{subtext_color};",
+                        ).text = f"for: {covered}"
+                    if is_multicolor and not is_too_small:
+                        y_off = r_cy + 64.0 if (mode == "tag" and code_text) else (r_cy + 34.0 if code_text else r_cy + 26.0)
+                        etree.SubElement(
+                            shift_g,
+                            "{%s}text" % core.SVG_NS,
+                            x=f"{r_cx:.2f}",
+                            y=f"{y_off:.2f}",
+                            style=f"font-size:13.5px;font-family:{STYLE_CONFIG['font_family']};font-style:italic;text-anchor:middle;fill:{subtext_color};",
+                        ).text = "mixed fabrics - see layout page"
 
             local_sa = [
                 inner_transform.apply_to_point((p[0], p[1])) for p in item["sa_poly"]

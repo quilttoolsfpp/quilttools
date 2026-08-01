@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Quick Cut (bind to a key)</name>
+  <id>org.quilttools.fpp.quick_cut</id>
+  <dependency type="executable" location="extensions">quilttools_fpp_cut.py</dependency>
+
+  <!--
+    Dialog-free variant of the Guillotine Cut tool.
+
+    Because every parameter below is gui-hidden, Inkscape runs this
+    extension IMMEDIATELY with no popup. Bind it to a keyboard shortcut
+    (Edit > Preferences > Interface > Keyboard > search "Quick Cut")
+    for a draw-line-press-key cutting workflow:
+
+        1. Draw a straight line with the Pencil (P) or Bezier (B) tool
+        2. Press your shortcut key
+        3. The line is consumed and the region under it is guillotine cut
+
+    Multiple drawn lines are all cut in one keypress.
+
+    To change the defaults (e.g. disable angle snapping), edit the
+    value attributes below and reload extensions.
+  -->
+
+  <param name="action"         type="string" gui-hidden="true">quick_cut</param>
+  <param name="mark_boundary"  type="bool"   gui-hidden="true">false</param>
+  <param name="auto_cut"       type="bool"   gui-hidden="true">true</param>
+  <param name="angle_snap"     type="float"  gui-hidden="true">0.0</param>
+  <param name="min_piece_area" type="float"  gui-hidden="true">0.25</param>
+
+  <effect needs-live-preview="false">
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Quilt Tools"/>
+    </effects-menu>
+  </effect>
+
+  <script>
+    <command location="extensions" interpreter="python">quilttools_fpp_cut.py</command>
+  </script>
+</inkscape-extension>

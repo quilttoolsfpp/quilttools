@@ -1,0 +1,567 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:xlink="http://www.w3.org/1999/xlink" width="4752.0px" height="4752.0px" viewBox="0 0 4752.0 4752.0" data-quilttools-quilt="1" data-quilttools-name="Lattice Layout" data-quilttools-quilt-kind="template"><title>Lattice Layout</title><g id="quilttools-quilt-layer" inkscape:label="Quilt Layout" inkscape:groupmode="layer" style="display:inline">
+    <defs id="defs23">
+      <clipPath id="clip-quilt-cell-0-0" clipPathUnits="userSpaceOnUse"><polygon points="648.0,648.0 2376.0,648.0 2376.0,2376.0 648.0,2376.0"/></clipPath><clipPath id="clip-quilt-cell-0-1" clipPathUnits="userSpaceOnUse"><polygon points="2376.0,648.0 4104.0,648.0 4104.0,2376.0 2376.0,2376.0"/></clipPath><clipPath id="clip-quilt-cell-1-0" clipPathUnits="userSpaceOnUse"><polygon points="648.0,2376.0 2376.0,2376.0 2376.0,4104.0 648.0,4104.0"/></clipPath><clipPath id="clip-quilt-cell-1-1" clipPathUnits="userSpaceOnUse"><polygon points="2376.0,2376.0 4104.0,2376.0 4104.0,4104.0 2376.0,4104.0"/></clipPath></defs>
+    <desc id="quilt-data-quilttools">{
+  "name": "My New Quilt",
+  "finished_width_in": 49.5,
+  "finished_height_in": 49.5,
+  "units": "in",
+  "setting": "straight",
+  "grid": {
+    "rows": 2,
+    "cols": 2,
+    "cell_w_in": 18.0,
+    "cell_h_in": 18.0
+  },
+  "sashing": {
+    "width_in": 0.0,
+    "cornerstones": false,
+    "color_ref": "sashing"
+  },
+  "borders": [
+    {
+      "width_in": 2.0,
+      "style": "long_h",
+      "color_ref": "border1"
+    },
+    {
+      "width_in": 4.5,
+      "style": "cornerstone",
+      "color_ref": "border2"
+    }
+  ],
+  "binding": {
+    "width_in": 0.25,
+    "color_ref": "binding"
+  },
+  "colours": {},
+  "cells": {
+    "quilt-cell-0-0": {
+      "role": "block",
+      "state": "empty",
+      "polygon": [
+        [
+          648.0,
+          648.0
+        ],
+        [
+          2376.0,
+          648.0
+        ],
+        [
+          2376.0,
+          2376.0
+        ],
+        [
+          648.0,
+          2376.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-0-1": {
+      "role": "block",
+      "state": "empty",
+      "polygon": [
+        [
+          2376.0,
+          648.0
+        ],
+        [
+          4104.0,
+          648.0
+        ],
+        [
+          4104.0,
+          2376.0
+        ],
+        [
+          2376.0,
+          2376.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-1-0": {
+      "role": "block",
+      "state": "empty",
+      "polygon": [
+        [
+          648.0,
+          2376.0
+        ],
+        [
+          2376.0,
+          2376.0
+        ],
+        [
+          2376.0,
+          4104.0
+        ],
+        [
+          648.0,
+          4104.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-1-1": {
+      "role": "block",
+      "state": "empty",
+      "polygon": [
+        [
+          2376.0,
+          2376.0
+        ],
+        [
+          4104.0,
+          2376.0
+        ],
+        [
+          4104.0,
+          4104.0
+        ],
+        [
+          2376.0,
+          4104.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-1-top": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          456.0,
+          456.0
+        ],
+        [
+          4296.0,
+          456.0
+        ],
+        [
+          4296.0,
+          648.0
+        ],
+        [
+          456.0,
+          648.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-1-bottom": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          456.0,
+          4104.0
+        ],
+        [
+          4296.0,
+          4104.0
+        ],
+        [
+          4296.0,
+          4296.0
+        ],
+        [
+          456.0,
+          4296.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-1-left": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          456.0,
+          648.0
+        ],
+        [
+          648.0,
+          648.0
+        ],
+        [
+          648.0,
+          4104.0
+        ],
+        [
+          456.0,
+          4104.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-1-right": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          4104.0,
+          648.0
+        ],
+        [
+          4296.0,
+          648.0
+        ],
+        [
+          4296.0,
+          4104.0
+        ],
+        [
+          4104.0,
+          4104.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-top": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          456.0,
+          24.0
+        ],
+        [
+          4296.0,
+          24.0
+        ],
+        [
+          4296.0,
+          456.0
+        ],
+        [
+          456.0,
+          456.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-bottom": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          456.0,
+          4296.0
+        ],
+        [
+          4296.0,
+          4296.0
+        ],
+        [
+          4296.0,
+          4728.0
+        ],
+        [
+          456.0,
+          4728.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-left": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          24.0,
+          456.0
+        ],
+        [
+          456.0,
+          456.0
+        ],
+        [
+          456.0,
+          4296.0
+        ],
+        [
+          24.0,
+          4296.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-right": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          4296.0,
+          456.0
+        ],
+        [
+          4728.0,
+          456.0
+        ],
+        [
+          4728.0,
+          4296.0
+        ],
+        [
+          4296.0,
+          4296.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-cornerstone-tl": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          24.0,
+          24.0
+        ],
+        [
+          456.0,
+          24.0
+        ],
+        [
+          456.0,
+          456.0
+        ],
+        [
+          24.0,
+          456.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-cornerstone-tr": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          4296.0,
+          24.0
+        ],
+        [
+          4728.0,
+          24.0
+        ],
+        [
+          4728.0,
+          456.0
+        ],
+        [
+          4296.0,
+          456.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-cornerstone-bl": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          24.0,
+          4296.0
+        ],
+        [
+          456.0,
+          4296.0
+        ],
+        [
+          456.0,
+          4728.0
+        ],
+        [
+          24.0,
+          4728.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-border-2-cornerstone-br": {
+      "role": "border",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          4296.0,
+          4296.0
+        ],
+        [
+          4728.0,
+          4296.0
+        ],
+        [
+          4728.0,
+          4728.0
+        ],
+        [
+          4296.0,
+          4728.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-binding-top": {
+      "role": "binding",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          4752.0,
+          0.0
+        ],
+        [
+          4752.0,
+          24.0
+        ],
+        [
+          0.0,
+          24.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-binding-bottom": {
+      "role": "binding",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          0.0,
+          4728.0
+        ],
+        [
+          4752.0,
+          4728.0
+        ],
+        [
+          4752.0,
+          4752.0
+        ],
+        [
+          0.0,
+          4752.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-binding-left": {
+      "role": "binding",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          0.0,
+          24.0
+        ],
+        [
+          24.0,
+          24.0
+        ],
+        [
+          24.0,
+          4728.0
+        ],
+        [
+          0.0,
+          4728.0
+        ]
+      ],
+      "placed_block": null
+    },
+    "quilt-cell-binding-right": {
+      "role": "binding",
+      "state": "plain_fabric",
+      "polygon": [
+        [
+          4728.0,
+          24.0
+        ],
+        [
+          4752.0,
+          24.0
+        ],
+        [
+          4752.0,
+          4728.0
+        ],
+        [
+          4728.0,
+          4728.0
+        ]
+      ],
+      "placed_block": null
+    }
+  }
+}</desc>
+    <g id="quilt-cell-0-0" data-quilt-role="block" data-quilt-state="empty">
+      <polygon points="648.00,648.00 2376.00,648.00 2376.00,2376.00 648.00,2376.00" style="fill:#FFF9F5;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon1"/>
+      <text x="1512.0" y="1512.0" style="font-size:12px;font-family:Nunito;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#3D3237" id="text1">1-1</text>
+      </g>
+    <g id="quilt-cell-0-1" data-quilt-role="block" data-quilt-state="empty">
+      <polygon points="2376.00,648.00 4104.00,648.00 4104.00,2376.00 2376.00,2376.00" style="fill:#FFF9F5;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon2"/>
+      <text x="3240.0" y="1512.0" style="font-size:12px;font-family:Nunito;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#3D3237" id="text2">1-2</text>
+      </g>
+    <g id="quilt-cell-1-0" data-quilt-role="block" data-quilt-state="empty">
+      <polygon points="648.00,2376.00 2376.00,2376.00 2376.00,4104.00 648.00,4104.00" style="fill:#FFF9F5;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon3"/>
+      <text x="1512.0" y="3240.0" style="font-size:12px;font-family:Nunito;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#3D3237" id="text3">2-1</text>
+      </g>
+    <g id="quilt-cell-1-1" data-quilt-role="block" data-quilt-state="empty">
+      <polygon points="2376.00,2376.00 4104.00,2376.00 4104.00,4104.00 2376.00,4104.00" style="fill:#FFF9F5;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon4"/>
+      <text x="3240.0" y="3240.0" style="font-size:12px;font-family:Nunito;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#3D3237" id="text4">2-2</text>
+      </g>
+    <g id="quilt-cell-border-1-top" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="456.00,456.00 4296.00,456.00 4296.00,648.00 456.00,648.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon5"/>
+    </g>
+    <g id="quilt-cell-border-1-bottom" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="456.00,4104.00 4296.00,4104.00 4296.00,4296.00 456.00,4296.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon6"/>
+    </g>
+    <g id="quilt-cell-border-1-left" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="456.00,648.00 648.00,648.00 648.00,4104.00 456.00,4104.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon7"/>
+    </g>
+    <g id="quilt-cell-border-1-right" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="4104.00,648.00 4296.00,648.00 4296.00,4104.00 4104.00,4104.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon8"/>
+    </g>
+    <g id="quilt-cell-border-2-top" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="456.00,24.00 4296.00,24.00 4296.00,456.00 456.00,456.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon9"/>
+    </g>
+    <g id="quilt-cell-border-2-bottom" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="456.00,4296.00 4296.00,4296.00 4296.00,4728.00 456.00,4728.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon10"/>
+    </g>
+    <g id="quilt-cell-border-2-left" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="24.00,456.00 456.00,456.00 456.00,4296.00 24.00,4296.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon11"/>
+    </g>
+    <g id="quilt-cell-border-2-right" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="4296.00,456.00 4728.00,456.00 4728.00,4296.00 4296.00,4296.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon12"/>
+    </g>
+    <g id="quilt-cell-border-2-cornerstone-tl" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="24.00,24.00 456.00,24.00 456.00,456.00 24.00,456.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon13"/>
+    </g>
+    <g id="quilt-cell-border-2-cornerstone-tr" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="4296.00,24.00 4728.00,24.00 4728.00,456.00 4296.00,456.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon14"/>
+    </g>
+    <g id="quilt-cell-border-2-cornerstone-bl" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="24.00,4296.00 456.00,4296.00 456.00,4728.00 24.00,4728.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon15"/>
+    </g>
+    <g id="quilt-cell-border-2-cornerstone-br" data-quilt-role="border" data-quilt-state="plain_fabric">
+      <polygon points="4296.00,4296.00 4728.00,4296.00 4728.00,4728.00 4296.00,4728.00" style="fill:#5E8C61;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon16"/>
+    </g>
+    <g id="quilt-cell-binding-top" data-quilt-role="binding" data-quilt-state="plain_fabric">
+      <polygon points="0.00,0.00 4752.00,0.00 4752.00,24.00 0.00,24.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon17"/>
+    </g>
+    <g id="quilt-cell-binding-bottom" data-quilt-role="binding" data-quilt-state="plain_fabric">
+      <polygon points="0.00,4728.00 4752.00,4728.00 4752.00,4752.00 0.00,4752.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon18"/>
+    </g>
+    <g id="quilt-cell-binding-left" data-quilt-role="binding" data-quilt-state="plain_fabric">
+      <polygon points="0.00,24.00 24.00,24.00 24.00,4728.00 0.00,4728.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon19"/>
+    </g>
+    <g id="quilt-cell-binding-right" data-quilt-role="binding" data-quilt-state="plain_fabric">
+      <polygon points="4728.00,24.00 4752.00,24.00 4752.00,4728.00 4728.00,4728.00" style="fill:#E8A0B4;stroke:#3D3237;stroke-width:1.0;stroke-linejoin:round" id="polygon104"/>
+    </g>
+  </g>
+</svg>

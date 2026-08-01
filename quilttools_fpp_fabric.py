@@ -202,7 +202,7 @@ def fabric_estimate(pieces, usable_wof=41.0):
 
 
 def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0,
-                                  only_prefixes=None):
+                                  only_prefixes=None, options=None):
     """FPP padded-box estimates. only_prefixes limits the calculation to
     regions whose section letter is in the set (hybrid exports: the
     Always-FPP sections)."""
@@ -275,26 +275,88 @@ def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0,
         fabric_groups[color_hex].append(r)
 
     wof_px = wof_in * core.PX_PER_INCH
-    fq_width_px = 21.0 * core.PX_PER_INCH
+    options = dict(options or {})
+    use_precuts = bool(options.get("use_precuts", False))
+
+    precut_defs = [
+        ("mini_charm", "Mini Charm", 2.5, 2.5, 6.25, False),
+        ("charm", "Charm", 5.0, 5.0, 25.0, False),
+        ("fat_16th", "Fat 16th", 9.0, 11.0, 99.0, False),
+        ("layer_cake", "Layer Cake", 10.0, 10.0, 100.0, False),
+        ("jelly_roll", "Jelly Roll", wof_in, 2.5, 2.5 * wof_in, True),
+        ("fat_8th", "Fat 8th", 9.0, 21.0, 189.0, False),
+        ("fat_quarter", "Fat Quarter", 18.0, 21.0, 378.0, False),
+    ]
+
+    enabled_precuts = []
+    if use_precuts:
+        for p_id, name, w, h, area, is_jr in precut_defs:
+            if bool(options.get(f"precut_{p_id}", True)):
+                enabled_precuts.append((p_id, name, w, h, area, is_jr))
 
     fabric_estimates = []
     for color_hex, grp in fabric_groups.items():
         fixed_boxes = [get_fixed_box(r.polygon) for r in grp]
         free_boxes = [get_free_box(r.polygon) for r in grp]
 
-        fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
-        free_height_px = pack_fabric_strip(free_boxes, wof_px)
+        suggested = None
+        chosen_precut = None
+        chosen_h_in = 0.0
+        chosen_w_in = wof_in
 
-        fq_fixed_height_px = pack_fabric_strip(fixed_boxes, fq_width_px)
-        fq_free_height_px = pack_fabric_strip(free_boxes, fq_width_px)
+        if use_precuts:
+            for p_id, name, w, h, area, is_jr in enabled_precuts:
+                w_px = w * core.PX_PER_INCH
+                h_px = h * core.PX_PER_INCH
+                
+                h1_px = pack_fabric_strip(free_boxes, w_px)
+                fit1 = h1_px <= h_px
+                
+                fit2 = False
+                h2_px = 0.0
+                if not is_jr and w != h:
+                    h2_px = pack_fabric_strip(free_boxes, h_px)
+                    fit2 = h2_px <= w_px
+                    
+                if fit1 and fit2:
+                    if (h1_px / w_px) <= (h2_px / h_px):
+                        chosen_precut = (name, w, h1_px / core.PX_PER_INCH)
+                    else:
+                        chosen_precut = (name, h, h2_px / core.PX_PER_INCH)
+                    break
+                elif fit1:
+                    chosen_precut = (name, w, h1_px / core.PX_PER_INCH)
+                    break
+                elif fit2:
+                    chosen_precut = (name, h, h2_px / core.PX_PER_INCH)
+                    break
+                    
+            if chosen_precut:
+                name, pw_in, ph_in = chosen_precut
+                suggested = f"1 x {name}"
+                chosen_h_in = ph_in
+                chosen_w_in = pw_in
+
+        if suggested is None:
+            free_height_px = pack_fabric_strip(free_boxes, wof_px)
+            free_in = free_height_px / core.PX_PER_INCH
+            free_yd = free_in / 36.0
+            eighths = math.ceil(free_yd * 8.0)
+            suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
+            chosen_h_in = free_in
+            chosen_w_in = wof_in
+
+        fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
 
         fabric_estimates.append({
             "color": color_hex,
             "pieces_count": len(grp),
             "fixed_in": fixed_height_px / core.PX_PER_INCH,
-            "free_in": free_height_px / core.PX_PER_INCH,
-            "fq_fixed_in": fq_fixed_height_px / core.PX_PER_INCH,
-            "fq_free_in": fq_free_height_px / core.PX_PER_INCH,
+            "free_in": chosen_h_in,
+            "fq_fixed_in": 0.0,
+            "fq_free_in": chosen_w_in,
+            "suggested_purchase": suggested,
+            "precut_name": suggested if use_precuts and chosen_precut else None,
             "regions": grp
         })
 
@@ -381,7 +443,7 @@ def calculate_template_requirements(block_data, finished_size_in, options=None,
     if fpp_prefixes:
         for est in calculate_fabric_requirements(
                 block_data, finished_size_in, wof_in,
-                only_prefixes=fpp_prefixes):
+                only_prefixes=fpp_prefixes, options=options):
             fpp_by_fab[est["color"]] = est
 
     if not pieces and not fpp_by_fab:
@@ -390,12 +452,57 @@ def calculate_template_requirements(block_data, finished_size_in, options=None,
     plan = cutplan.plan_cutting(pieces, options) if pieces else \
         {"fabrics": {}, "warnings": [], "notes": []}
 
-    # Fat-quarter feasibility: re-plan at 21" usable width.
-    fq_plan = {"fabrics": {}}
-    if pieces:
-        fq_opt = dict(options)
-        fq_opt["wof_in"] = 21.0
-        fq_plan = cutplan.plan_cutting(pieces, fq_opt)
+    use_precuts = bool(options.get("use_precuts", False))
+
+    precut_defs = [
+        ("mini_charm", "Mini Charm", 2.5, 2.5, 6.25, False),
+        ("charm", "Charm", 5.0, 5.0, 25.0, False),
+        ("fat_16th", "Fat 16th", 9.0, 11.0, 99.0, False),
+        ("layer_cake", "Layer Cake", 10.0, 10.0, 100.0, False),
+        ("jelly_roll", "Jelly Roll", wof_in, 2.5, 2.5 * wof_in, True),
+        ("fat_8th", "Fat 8th", 9.0, 21.0, 189.0, False),
+        ("fat_quarter", "Fat Quarter", 18.0, 21.0, 378.0, False),
+    ]
+
+    enabled_precuts = []
+    if use_precuts:
+        for p_id, name, w, h, area, is_jr in precut_defs:
+            if bool(options.get(f"precut_{p_id}", True)):
+                enabled_precuts.append((p_id, name, w, h, area, is_jr))
+
+    def try_fit_precut_templates(fab_pieces, opt, name, w, h, is_jr, target_fab):
+        opt1 = dict(opt)
+        opt1["wof_in"] = w
+        res1 = cutplan.plan_cutting(fab_pieces, opt1)
+        fit1 = False
+        if res1 and not res1.get("fabrics", {}).get(target_fab, {}).get("warnings"):
+            total_l = res1.get("fabrics", {}).get(target_fab, {}).get("total_length_in", 999.0)
+            if total_l <= h:
+                fit1 = True
+                
+        fit2 = False
+        res2 = None
+        if not is_jr and w != h:
+            opt2 = dict(opt)
+            opt2["wof_in"] = h
+            res2 = cutplan.plan_cutting(fab_pieces, opt2)
+            if res2 and not res2.get("fabrics", {}).get(target_fab, {}).get("warnings"):
+                total_l = res2.get("fabrics", {}).get(target_fab, {}).get("total_length_in", 999.0)
+                if total_l <= w:
+                    fit2 = True
+                    
+        if fit1 and fit2:
+            l1 = res1["fabrics"][target_fab]["total_length_in"]
+            l2 = res2["fabrics"][target_fab]["total_length_in"]
+            if l1 <= l2:
+                return res1
+            else:
+                return res2
+        elif fit1:
+            return res1
+        elif fit2:
+            return res2
+        return None
 
     per_fabric = []
     counts = {}
@@ -405,34 +512,61 @@ def calculate_template_requirements(block_data, finished_size_in, options=None,
                       key=str)
     for fab in all_fabs:
         res = plan["fabrics"].get(fab)
-        fq_res = fq_plan["fabrics"].get(fab)
         fpp_est = fpp_by_fab.get(fab)
         fpp_in = fpp_est["fixed_in"] if fpp_est else 0.0
-        tpl_in = res["total_length_in"] if res else 0.0
-
-        # Calculate total and FQ total
-        total_in = tpl_in + fpp_in
-        fq_total_in = (fq_res["total_length_in"] + fpp_in) if fq_res else (fpp_in if fpp_est else None)
-
-        suggested = suggest_purchase(total_in, fq_total_in)
-
-        if (suggested == "Fat Eighth (FE)" or suggested == "Fat Quarter (FQ)") and fq_res:
-            plan["fabrics"][fab] = fq_res
-            plan["fabrics"][fab]["wof_in"] = 21.0
-            plan["fabrics"][fab]["fq_total_in"] = fq_total_in
-            plan["fabrics"][fab]["suggested_purchase"] = suggested
-            tpl_in = fq_res["total_length_in"]
-        else:
+        
+        suggested = None
+        chosen_precut_plan = None
+        chosen_pw_in = wof_in
+        chosen_ph_in = 0.0
+        
+        if use_precuts and pieces:
+            fab_pieces = [p for p in pieces if p["fabric"] == fab]
+            if fab_pieces:
+                for p_id, name, w, h, area, is_jr in enabled_precuts:
+                    fit_plan = try_fit_precut_templates(fab_pieces, options, name, w, h, is_jr, fab)
+                    if fit_plan:
+                        chosen_precut_plan = fit_plan
+                        suggested = f"1 x {name}"
+                        sub_plan = fit_plan["fabrics"].get(fab, {})
+                        chosen_pw_in = sub_plan.get("wof_in", w)
+                        chosen_ph_in = h if abs(chosen_pw_in - w) < 1e-3 else w
+                        break
+                        
+        if suggested is None:
+            tpl_in = res["total_length_in"] if res else 0.0
+            total_in = tpl_in + fpp_in
+            eighths = max(1, math.ceil(total_in / 36.0 * 8.0))
+            suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
+            
             if res:
                 plan["fabrics"][fab]["wof_in"] = wof_in
-                plan["fabrics"][fab]["fq_total_in"] = fq_total_in
+                plan["fabrics"][fab]["fq_total_in"] = None
                 plan["fabrics"][fab]["suggested_purchase"] = suggested
-
+            total_fab_in = total_in
+            fq_total_in = None
+        else:
+            plan["fabrics"][fab] = chosen_precut_plan["fabrics"][fab]
+            plan["fabrics"][fab]["wof_in"] = chosen_pw_in
+            plan["fabrics"][fab]["precut_name"] = suggested
+            plan["fabrics"][fab]["precut_width"] = chosen_pw_in
+            plan["fabrics"][fab]["precut_height"] = chosen_ph_in
+            plan["fabrics"][fab]["suggested_purchase"] = suggested
+            
+            tpl_in = plan["fabrics"][fab]["total_length_in"]
+            total_fab_in = tpl_in + fpp_in
+            fq_total_in = fpp_in
+            
         per_fabric.append({
             "color": fab,
             "pieces_count": counts.get(fab, 0),
-            "total_in": tpl_in + fpp_in,
+            "total_in": total_fab_in,
             "fq_total_in": fq_total_in,
+            "suggested_purchase": suggested,
+            "precut_name": suggested if use_precuts and chosen_precut_plan else None,
+            "wof_in": chosen_pw_in,
+            "precut_width": chosen_pw_in if use_precuts and chosen_precut_plan else None,
+            "precut_height": chosen_ph_in if use_precuts and chosen_precut_plan else None,
             "lines": cutplan.format_ops_text(plan["fabrics"][fab]) if plan["fabrics"].get(fab) else [],
             "warnings": plan["fabrics"][fab]["warnings"] if plan["fabrics"].get(fab) else [],
             "notes": plan["fabrics"][fab]["notes"] if plan["fabrics"].get(fab) else [],
@@ -683,8 +817,8 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
     return curr_y
 
 
-def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None):
-    fabric_estimates = calculate_fabric_requirements(block_data, finished_size_in, wof_in)
+def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None, options=None):
+    fabric_estimates = calculate_fabric_requirements(block_data, finished_size_in, wof_in, options=options)
 
     if color_codes is None:
         unique_colors = sorted(list(set(est["color"] for est in fabric_estimates)))
@@ -722,21 +856,13 @@ def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data
             h = max(pt[1] for pt in padded) - min(pt[1] for pt in padded)
             boxes.append((w, h, r, padded))
 
-        total_in = est["fixed_in"]
-        fq_total_in = est["fq_fixed_in"]
-        suggested = suggest_purchase(total_in, fq_total_in)
-        is_fe = (suggested == "Fat Eighth (FE)")
-        is_fq = (suggested == "Fat Quarter (FQ)")
+        precut_name = est.get("precut_name")
+        suggested = est.get("suggested_purchase")
 
-        if is_fe:
-            current_usable_width_in = 21.0
-            draw_h_in = 9.0
-            current_usable_width_px = 21.0 * core.PX_PER_INCH
-            total_h, placements = pack_fabric_strip_with_coords([(w, h, r) for (w, h, r, p) in boxes], current_usable_width_px)
-        elif is_fq:
-            current_usable_width_in = 21.0
-            draw_h_in = 18.0
-            current_usable_width_px = 21.0 * core.PX_PER_INCH
+        if precut_name:
+            current_usable_width_in = est["fq_free_in"]
+            current_usable_width_px = current_usable_width_in * core.PX_PER_INCH
+            draw_h_in = est["free_in"]
             total_h, placements = pack_fabric_strip_with_coords([(w, h, r) for (w, h, r, p) in boxes], current_usable_width_px)
         else:
             current_usable_width_in = wof_in

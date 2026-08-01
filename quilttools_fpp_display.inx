@@ -21,6 +21,7 @@
     <option value="section">Section Colors</option>
   </param>
   <param name="group_by_color" type="bool" gui-text="Group Canvas Objects by Fabric Color">false</param>
+  <param name="fill_opacity" type="float" min="0.0" max="1.0" precision="2" gui-text="Block Fill Opacity (0.0 to 1.0)">1.0</param>
   <param name="show_sa" type="bool" gui-text="Show Seam Allowances on Canvas">false</param>
   <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
 

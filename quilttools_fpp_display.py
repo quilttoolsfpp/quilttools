@@ -21,6 +21,7 @@ class DisplayPlugin(inkex.Effect):
         pars.add_argument("--color_mode", type=str, default="piece")
         pars.add_argument("--show_sa", type=inkex.Boolean, default=False)
         pars.add_argument("--sa_in", type=float, default=0.25)
+        pars.add_argument("--fill_opacity", type=float, default=1.0)
         pars.add_argument("--group_by_color", type=inkex.Boolean, default=False)
         # Legacy args kept so stale saved dialog values never error.
         pars.add_argument("--action", type=str, default="refresh_only")
@@ -65,6 +66,7 @@ class DisplayPlugin(inkex.Effect):
         block_data.prefs["show_sa"] = self.options.show_sa
         block_data.prefs["sa_in"] = self.options.sa_in
         block_data.prefs["group_by_color"] = self.options.group_by_color
+        block_data.prefs["fill_opacity"] = self.options.fill_opacity
         # bypass_custom_colors is ONLY changed via the one-click toggle.
         core.refresh_layer(g, block_data, scrape=True)
 
