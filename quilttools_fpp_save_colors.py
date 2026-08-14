@@ -28,9 +28,11 @@ class SaveColorsPlugin(inkex.Effect):
                     count += 1
 
         block_data.prefs["custom_colors"] = user_colors
+        # Disable temporary overlay bypass mode so saved colors activate immediately
+        block_data.prefs["bypass_custom_colors"] = False
         
         # Trigger redraw and save to block metadata tag
-        core.refresh_layer(g, block_data)
+        core.refresh_layer(g, block_data, scrape=False)
         inkex.utils.debug(
             f"Quick-saved {count} canvas colour(s) into the block. "
             + qcol.context_note(ctx, "block"))

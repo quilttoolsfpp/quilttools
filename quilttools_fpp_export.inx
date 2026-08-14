@@ -18,6 +18,8 @@
       <param name="finished_size_in_fpp" type="float" min="0.0" max="200.0" precision="1" gui-text="Finished Block Size (inches) [0.0 = As Sized]">0.0</param>
       <param name="finished_sizes_fpp" type="string" gui-text="Additional Sizes (Step 2 Smart Pack only, e.g. 6,10)"></param>
       <param name="template_copies_fpp" type="int" min="1" max="50" gui-text="Template Copies (Sets per size)">1</param>
+      <param name="select_sections_fpp" type="string" gui-text="Re-print specific section(s) only (e.g. E or A,B - leave blank for All)"></param>
+      <param name="reprint_mode_fpp" type="bool" gui-text="Re-print Mode (Skip cover page, color key &amp; fabric charts)">false</param>
     </page>
 
     <page name="template_tab" gui-text="2. Pattern Template Export">

@@ -3,14 +3,14 @@
   "author_brand": "a",
   "colour_randomiser": {
     "scope": "quilt",
-    "mode": "full_random",
+    "mode": "palette",
     "palette_source": "current",
     "gpl_file": "",
-    "rule": "analogous",
+    "rule": "complementary",
     "anchor": "",
     "tolerance": 15.0,
     "block_variation": 0.05,
     "locked_colors": "",
-    "seed": "quilt-seed"
+    "seed": ""
   }
 }

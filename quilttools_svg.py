@@ -156,10 +156,9 @@ def refresh_layer(g, block_data, scrape=True):
                 )
                 color_groups[fill_color] = color_g
             container = color_groups[fill_color]
-            path_fill = "inherit"
         else:
             container = g
-            path_fill = fill_color
+        path_fill = fill_color
 
         if sa_px > 0:
             sa_poly = offset_polygon(region.polygon, sa_px, miter_limit=2.0)
@@ -201,6 +200,44 @@ def refresh_layer(g, block_data, scrape=True):
 
     desc = etree.SubElement(g, "{%s}desc" % SVG_NS, id=FPP_DATA_TAG_ID)
     desc.text = block_data.to_json()
+
+    if prefs.get("bypass_custom_colors", False):
+        all_pts = [pt for r in tree.leaf_regions() for pt in r.polygon]
+        if all_pts:
+            max_x = max(pt[0] for pt in all_pts)
+            min_y = min(pt[1] for pt in all_pts)
+            marker_x = max_x + 15.0
+            marker_y = min_y + 12.0
+            
+            badge_g = etree.SubElement(
+                g,
+                "{%s}g" % SVG_NS,
+                id="qt-temp-colors-marker",
+                style="pointer-events:none;",
+                **{
+                    "data-fpp-ignore": "true",
+                    f"{{{SODIPODI_NS}}}insensitive": "true"
+                }
+            )
+            etree.SubElement(
+                badge_g,
+                "{%s}rect" % SVG_NS,
+                x=f"{marker_x:.2f}",
+                y=f"{marker_y - 14.0:.2f}",
+                width="135",
+                height="22",
+                rx="4",
+                ry="4",
+                style="fill:#e65100;fill-opacity:0.92;stroke:#b71c1c;stroke-width:1.0;stroke-dasharray:none;"
+            )
+            badge_txt = etree.SubElement(
+                badge_g,
+                "{%s}text" % SVG_NS,
+                x=f"{marker_x + 67.5:.2f}",
+                y=f"{marker_y + 1.0:.2f}",
+                style="font-size:11px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#ffffff;"
+            )
+            badge_txt.text = "temp colours ON"
 
 
 def invert_transform(t):
@@ -927,6 +964,13 @@ def calculate_section_sewing_order(block_data):
     section_names = list(section_polys.keys())
     if len(section_names) <= 1:
         return [], False
+    if len(section_names) > 12:
+        steps = []
+        curr = section_names[0]
+        for nxt in section_names[1:]:
+            steps.append(f"Join {curr} + {nxt} -> {curr}{nxt}")
+            curr = f"{curr}{nxt}"
+        return steps, False
 
     has_warning = [False]
 

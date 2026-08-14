@@ -22,6 +22,36 @@
     "dimension": 9
   },
 
+  "line_weights": {
+    "stitch_line": 0.75,
+    "cut_line": 0.75,
+    "border": 1.0,
+    "divider": 0.5,
+    "grid": 0.5
+  },
+
+  "swatch": {
+    "shape": "rectangle"
+  },
+
+  "footer": {
+    "footer_enabled": true,
+    "show_designer": true,
+    "show_copyright": true,
+    "show_page_numbers": true,
+    "show_block_size": true,
+    "footer_text_custom": "",
+    "show_footer_divider": true,
+    "show_header_divider": true,
+    "footer_font_size_pt": 10.0
+  },
+
+  "piece_labels": {
+    "font_family": "Fraunces",
+    "font_scale": 1.0,
+    "show_code_brackets": true
+  },
+
   "palette": {
     "primary":    "#243B53",
     "background": "#EFE5D0",

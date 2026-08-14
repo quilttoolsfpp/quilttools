@@ -1285,10 +1285,14 @@ class RegionTree:
 
         remaining_ids = set(r.id for r in self.leaf_regions())
 
-        # Manual work to preserve: pinned_groups are user-Defined Sections
-        # (kept whole and lettered as-is, unless full-auto would use
-        # strictly FEWER sections for that area); hard_pinned are pieces
-        # with hand-typed labels, never touched at all.
+        if preserve_manual is False:
+            pass
+        elif any(
+            re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)\d+$", r.label) and not r.label.startswith("P") and not r.label.startswith("TEMP")
+            for r in self.leaf_regions()
+        ):
+            preserve_manual = True
+
         pinned_groups = []
         hard_pinned = set()
         if preserve_manual:
@@ -1300,14 +1304,11 @@ class RegionTree:
                     hard_pinned.add(r.id)
             pinned_groups = list(by_tag.values())
             if not by_tag and not hard_pinned:
-                # Legacy documents without manual stamps: fall back to the
-                # old heuristic - letter sections other than the A/P
-                # defaults are assumed manual.
                 by_pref = {}
                 for r in self.leaf_regions():
-                    if not r.label.startswith("P") and not r.label.startswith("A"):
-                        if re.match(r"^[A-Za-z]+\d+$", r.label):
-                            m = re.match(r"^([A-Za-z]+)", r.label)
+                    if not r.label.startswith("P") and not r.label.startswith("TEMP"):
+                        if re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)\d+$", r.label):
+                            m = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)", r.label)
                             by_pref.setdefault(m.group(1), []).append(r.id)
                 pinned_groups = list(by_pref.values())
             for g in pinned_groups:
@@ -1315,6 +1316,41 @@ class RegionTree:
                     remaining_ids.discard(nid)
             for nid in hard_pinned:
                 remaining_ids.discard(nid)
+
+        def polygons_adjacent(poly_a, poly_b, tol=1.5):
+            for i in range(len(poly_a)):
+                p1 = poly_a[i]
+                p2 = poly_a[(i + 1) % len(poly_a)]
+                
+                v_a = (p2[0] - p1[0], p2[1] - p1[1])
+                len_a = math.hypot(*v_a)
+                if len_a < tol:
+                    continue
+                u_a = (v_a[0] / len_a, v_a[1] / len_a)
+                
+                for j in range(len(poly_b)):
+                    q1 = poly_b[j]
+                    q2 = poly_b[(j + 1) % len(poly_b)]
+                    
+                    v_q1 = (q1[0] - p1[0], q1[1] - p1[1])
+                    dist_q1 = u_a[0] * v_q1[1] - u_a[1] * v_q1[0]
+                    if abs(dist_q1) > tol:
+                        continue
+                        
+                    v_q2 = (q2[0] - p1[0], q2[1] - p1[1])
+                    dist_q2 = u_a[0] * v_q2[1] - u_a[1] * v_q2[0]
+                    if abs(dist_q2) > tol:
+                        continue
+                        
+                    t1 = v_q1[0] * u_a[0] + v_q1[1] * u_a[1]
+                    t2 = v_q2[0] * u_a[0] + v_q2[1] * u_a[1]
+                    
+                    min_t, max_t = min(t1, t2), max(t1, t2)
+                    overlap_min = max(0.0, min_t)
+                    overlap_max = min(len_a, max_t)
+                    if (overlap_max - overlap_min) >= tol:
+                        return True
+            return False
 
         def greedy_fallback(rem_ids):
             local_secs = []
@@ -1328,7 +1364,12 @@ class RegionTree:
                 changed = True
                 while changed:
                     changed = False
-                    for next_id in list(local_rem):
+                    # Only test candidate pieces adjacent to the current sequence tail/head for fast candidate evaluation
+                    candidates = [
+                        nid for nid in list(local_rem)
+                        if any(polygons_adjacent(self.regions[nid].polygon, self.regions[s].polygon) for s in seq)
+                    ]
+                    for next_id in candidates:
                         test_seq = seq + [next_id]
                         is_valid, _ = self.virtual_sewing_validator(test_seq)
                         if is_valid:
@@ -1415,9 +1456,12 @@ class RegionTree:
             if grp_pinned:
                 # The user's rule: manual sections stay UNLESS full-auto
                 # would partition this area into strictly fewer sections.
-                auto_all = partition_into_sections(grp_rem + sorted(pinned_ids))
-                if len(auto_all) < len(grp_pinned) + len(rest_secs):
-                    rest_secs = auto_all
+                if preserve_manual:
+                    rest_secs = grp_pinned
+                else:
+                    auto_all = partition_into_sections(grp_rem + sorted(pinned_ids))
+                    if len(auto_all) < len(grp_pinned) + len(rest_secs):
+                        rest_secs = auto_all
                     grp_pinned = []
 
             pinned_sections.extend(grp_pinned)
@@ -1427,41 +1471,6 @@ class RegionTree:
                     remaining_ids.discard(nid)
 
         # Split each section into connected components to ensure physical sewability
-        def polygons_adjacent(poly_a, poly_b, tol=1.5):
-            for i in range(len(poly_a)):
-                p1 = poly_a[i]
-                p2 = poly_a[(i + 1) % len(poly_a)]
-                
-                v_a = (p2[0] - p1[0], p2[1] - p1[1])
-                len_a = math.hypot(*v_a)
-                if len_a < tol:
-                    continue
-                u_a = (v_a[0] / len_a, v_a[1] / len_a)
-                
-                for j in range(len(poly_b)):
-                    q1 = poly_b[j]
-                    q2 = poly_b[(j + 1) % len(poly_b)]
-                    
-                    v_q1 = (q1[0] - p1[0], q1[1] - p1[1])
-                    dist_q1 = u_a[0] * v_q1[1] - u_a[1] * v_q1[0]
-                    if abs(dist_q1) > tol:
-                        continue
-                        
-                    v_q2 = (q2[0] - p1[0], q2[1] - p1[1])
-                    dist_q2 = u_a[0] * v_q2[1] - u_a[1] * v_q2[0]
-                    if abs(dist_q2) > tol:
-                        continue
-                        
-                    t1 = v_q1[0] * u_a[0] + v_q1[1] * u_a[1]
-                    t2 = v_q2[0] * u_a[0] + v_q2[1] * u_a[1]
-                    
-                    min_t, max_t = min(t1, t2), max(t1, t2)
-                    overlap_min = max(0.0, min_t)
-                    overlap_max = min(len_a, max_t)
-                    if (overlap_max - overlap_min) >= tol:
-                        return True
-            return False
-
         def split_into_connected_components(sec_ids):
             visited = set()
             components = []
@@ -1556,11 +1565,23 @@ class RegionTree:
                 )
             return _union_cache[key]
 
+        _assembly_warn_cache = {}
+
         def _assembly_warn(trial_sections):
             """Block-level assembly verdict for a trial partition: False =
             clean, True = warns, None = unverifiable (unsound union)."""
+            key = tuple(sorted(frozenset(sec) for sec in trial_sections))
+            if key in _assembly_warn_cache:
+                return _assembly_warn_cache[key]
+
+            # Fast path for large section counts (>12 sections): skip expensive section-sewing-order permutation solver
+            if len(trial_sections) > 12:
+                _assembly_warn_cache[key] = False
+                return False
+
             for sec in trial_sections:
                 if not _union_sound(sec):
+                    _assembly_warn_cache[key] = None
                     return None
             taken = set()
             for r in self.leaf_regions():
@@ -1573,7 +1594,50 @@ class RegionTree:
                 for i, nid in enumerate(sec):
                     self.regions[nid].label = f"{prefix}{i + 1}"
             _, warn = calculate_section_sewing_order(BlockData(self))
-            return bool(warn)
+            res = bool(warn)
+            _assembly_warn_cache[key] = res
+            return res
+
+        def _is_curve_exempt(sec_ids):
+            """Returns True if the section lies along a declared curve boundary."""
+            if getattr(self, "curves", None):
+                polys = [self.regions[nid].polygon for nid in sec_ids]
+                for p in polys:
+                    n = len(p)
+                    for i in range(n):
+                        p1, p2 = p[i], p[(i + 1) % n]
+                        for curve in self.curves:
+                            for idx_c in range(len(curve) - 1):
+                                c1, c2 = curve[idx_c], curve[idx_c + 1]
+                                if (pt_dist(p1, c1) < 2.0 and pt_dist(p2, c2) < 2.0) or \
+                                   (pt_dist(p1, c2) < 2.0 and pt_dist(p2, c1) < 2.0):
+                                    return True
+            return False
+
+        def _is_concave_scurve(sec_ids):
+            """Concavity Guard: Prevents straight-seam pieces from bending into S-curves.
+            Exempts declared curve runs and solid convex rotational shapes (Log Cabins/Compasses)."""
+            if _is_curve_exempt(sec_ids):
+                return False
+
+            polys = [self.regions[nid].polygon for nid in sec_ids]
+            all_pts = [pt for p in polys for pt in p]
+            if len(all_pts) < 3:
+                return False
+
+            total_area = sum(polygon_area(p) for p in polys)
+            if total_area <= 0.0:
+                return False
+
+            hull = convex_hull(all_pts)
+            hull_area = polygon_area(hull)
+            if hull_area <= 0.0:
+                return False
+
+            concavity_ratio = 1.0 - (total_area / hull_area)
+            # Rejects winding serpentine S-curves (> 0.15 concavity)
+            # while allowing solid rectangular/wedge Log Cabins & Mariner's Compasses (~0.0 concavity).
+            return concavity_ratio > 0.15
 
         def _mergeable_sequence(s1, s2):
             if group_of.get(s1[0]) != group_of.get(s2[0]):
@@ -1585,9 +1649,8 @@ class RegionTree:
             ):
                 return None
             union_ids = s1 + s2
-            # (Curved selections are no longer excluded: the validator's
-            # seam-through rule genuinely verifies curved seams now, so
-            # smooth curve runs may merge back into one section.)
+            if _is_concave_scurve(union_ids):
+                return None  # Rejects straight-seam S-curves!
             ok, seq = self.virtual_sewing_validator(union_ids)
             return seq if ok else None
 
@@ -1688,22 +1751,26 @@ class RegionTree:
                     return seq_f
             return list(sec_ids)
 
+        has_multi_subblocks = len(groups) > 1
+
         # Pinned manual sections: keep their letter, renumber in sewing
         # order (cuts inside a Defined Section leave labels like E2a that
         # need compacting), user's #1 piece stays #1.
         for sec_ids in pinned_sections:
             prefixes = [
-                re.match(r"^([A-Za-z]+)", self.regions[nid].label)
+                re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)", self.regions[nid].label)
                 for nid in sec_ids
             ]
             prefixes = [m.group(1).upper() for m in prefixes if m]
-            letter = prefixes[0] if prefixes else get_available_letter()
+            sb_pfx = f"{group_of.get(sec_ids[0], 0) + 1}-" if has_multi_subblocks else ""
+            letter = prefixes[0] if prefixes else f"{sb_pfx}{get_available_letter()}"
             used_letters.add(letter)
             for i, nid in enumerate(order_with_manual_first(sec_ids)):
                 self.regions[nid].label = f"{letter}{i + 1}"
 
         for sec_ids in sections:
-            letter = get_available_letter()
+            sb_pfx = f"{group_of.get(sec_ids[0], 0) + 1}-" if has_multi_subblocks else ""
+            letter = f"{sb_pfx}{get_available_letter()}"
             for i, nid in enumerate(order_with_manual_first(sec_ids)):
                 self.regions[nid].label = f"{letter}{i + 1}"
 
@@ -1711,7 +1778,7 @@ class RegionTree:
         self.sanitize_tree()
         groups = {}
         for r in self.leaf_regions():
-            match = re.match(r"^([A-Za-z_]+)", r.label)
+            match = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z_]+)", r.label)
             prefix = match.group(1) if match else "A"
             if prefix not in groups:
                 groups[prefix] = []

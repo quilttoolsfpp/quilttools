@@ -17,7 +17,9 @@
         <option value="full_random">Full Random (OKLCh sane bounds)</option>
       </param>
       <param name="seed" type="string" gui-text="Optional Seed (Empty for random):"></param>
-      <param name="locked_colors" type="string" gui-text="Locked Colors (Comma-separated hex list):"></param>
+      <param name="lock_background" type="bool" gui-text="Lock Background Fabric / Colour (Keep background fixed):">true</param>
+      <param name="background_color" type="string" gui-text="Designated Background Colour Hex (Empty for auto-detect):"></param>
+      <param name="locked_colors" type="string" gui-text="Other Locked Colors (Comma-separated hex list):"></param>
       <label>To lock specific pieces, select their paths on the canvas before running this extension. They will keep their original colors.</label>
     </page>
 

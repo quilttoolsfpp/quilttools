@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-    <name>x. Theme Manager (pattern PDF styling)</name>
+    <name>00. Theme Manager (Pattern &amp; PDF Styling)</name>
     <id>org.quilttools.pattern.theme_manager</id>
     <dependency type="executable" location="extensions">quilttools_theme_manager.py</dependency>
 
     <label appearance="header">Quilt Tools Pattern — Theme Manager</label>
     
     <param name="notebook" type="notebook">
-        <page name="active_theme_tab" gui-text="Active Theme">
-            <label appearance="header">Set Active Theme</label>
+        <page name="active_theme_tab" gui-text="Theme Manager &amp; Customizer">
+            <label appearance="header">Interactive Shop Theme Control</label>
             <param name="active_theme_id" type="string" gui-text="Theme ID to Set (e.g., ifh, childrens_moments):">ifh</param>
             <param name="list_themes" type="bool" gui-text="List discovered themes on run">false</param>
-            <label>If checked, runs a discovery scan and reports all themes placed in the themes/ directory.</label>
+            <label>Launches the interactive Theme Customizer to manage system fonts, line weights, swatch shapes, and shop branding.</label>
         </page>
 
         <page name="validate_theme_tab" gui-text="Validate Theme">
@@ -36,7 +36,7 @@
     <effect>
         <object-type>all</object-type>
         <effects-menu>
-            <submenu name="Quilt Tools Colour"/>
+            <submenu name="Quilt Tools Pattern"/>
         </effects-menu>
     </effect>
     <script>

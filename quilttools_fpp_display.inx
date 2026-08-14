@@ -8,7 +8,7 @@
   <label>Tick the toggle and Apply to instantly switch between your custom colours and the default palette view. Display only - the block's saved colours never change here.</label>
   <separator/>
 
-  <label appearance="header">Display & Block Preferences (applied on Apply when the toggle is unticked)</label>
+  <label appearance="header">Display &amp; Block Preferences (applied on Apply when the toggle is unticked)</label>
   <param name="block_kind" type="optiongroup" appearance="combo" gui-text="Block Kind (Sewing Method)">
     <option value="fpp">Foundation Paper Piecing (FPP)</option>
     <option value="pieced">Traditional Piecing (Templates)</option>

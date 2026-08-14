@@ -28,6 +28,8 @@ class ColourRandomiserPlugin(inkex.Effect):
         pars.add_argument("--block_variation", type=float, default=0.05)
         pars.add_argument("--seed", type=str, default="")
         pars.add_argument("--locked_colors", type=str, default="")
+        pars.add_argument("--lock_background", type=inkex.Boolean, default=True)
+        pars.add_argument("--background_color", type=str, default="")
 
     def effect(self):
         # 1. Detect document type
@@ -105,6 +107,23 @@ class ColourRandomiserPlugin(inkex.Effect):
             if sc not in locked_list:
                 locked_list.append(sc)
 
+        # Also lock designated background color if lock_background is True
+        lock_bg = bool(getattr(self.options, "lock_background", True))
+        bg_col = (getattr(self.options, "background_color", "") or "").strip().lower()
+
+        if not bg_col:
+            if block_data and hasattr(block_data, "prefs"):
+                bg_col = (block_data.prefs.get("background_color") or "").strip().lower()
+            elif quilt_data and hasattr(quilt_data, "prefs"):
+                bg_col = (quilt_data.prefs.get("background_color") or "").strip().lower()
+
+        if not bg_col:
+            theme_obj = qtheme.resolve_active_theme(getattr(self, "options", None))
+            bg_col = theme_obj.colour("background").strip().lower()
+
+        if lock_bg and bg_col and bg_col not in locked_list:
+            locked_list.append(bg_col)
+
         # 5. Load palette if needed
         palette = []
         if mode == "palette":
@@ -175,6 +194,7 @@ class ColourRandomiserPlugin(inkex.Effect):
             for rid, col in region_colors.items():
                 slot_idx = unique_colors.index(col)
                 custom_colors[str(rid)] = new_slot_colors[slot_idx]
+            block_data.prefs["bypass_custom_colors"] = False
 
             # Redraw block
             core.refresh_layer(g_block, block_data, scrape=False)

@@ -58,17 +58,26 @@ STYLE_CONFIG = {
     "tab_stroke": "#888888",
     "tab_stroke_width": 1.0,
     "tab_stroke_dash": "4,4",
-    "tab_font_size": "12px",
+    "tab_font_size": "13px",
     "tab_font_weight": "bold",
-    "tab_text_color_glue": "#333333",
-    "tab_text_color_align": "#888888",
+    "tab_text_color_glue": "#000000",
+    "tab_text_color_align": "#000000",
 }
 
 PAGE_SIZES = {
     "letter": (8.5 * core.PX_PER_INCH, 11.0 * core.PX_PER_INCH),
     "a4": (8.27 * core.PX_PER_INCH, 11.69 * core.PX_PER_INCH),
     "a3": (11.69 * core.PX_PER_INCH, 16.54 * core.PX_PER_INCH),
+    "legal": (8.5 * core.PX_PER_INCH, 14.0 * core.PX_PER_INCH),
+    "tabloid": (11.0 * core.PX_PER_INCH, 17.0 * core.PX_PER_INCH),
 }
+
+def get_page_dimensions(page_size_str, orientation_str="portrait"):
+    key = str(page_size_str or "letter").strip().lower()
+    pw, ph = PAGE_SIZES.get(key, PAGE_SIZES["letter"])
+    if str(orientation_str or "portrait").strip().lower() == "landscape":
+        return ph, pw
+    return pw, ph
 
 
 def is_color_dark(hex_str):
@@ -153,6 +162,72 @@ def get_line_extents(poly, axis, val):
     return min(pts), max(pts)
 
 
+def draw_swatch_shape(container, shape_type, x, y, w, h, fill_color, stroke_color="#999999", stroke_width="0.5"):
+    x, y, w, h = float(x), float(y), float(w), float(h)
+    shape = (shape_type or "rectangle").lower()
+
+    if shape == "circle":
+        cx = x + w / 2.0
+        cy = y + h / 2.0
+        r = min(w, h) / 2.0
+        return etree.SubElement(
+            container,
+            "{%s}circle" % core.SVG_NS,
+            cx=f"{cx:.2f}",
+            cy=f"{cy:.2f}",
+            r=f"{r:.2f}",
+            style=f"fill:{fill_color};stroke:{stroke_color};stroke-width:{stroke_width};"
+        )
+    elif shape == "heart":
+        cx = x + w / 2.0
+        cy = y + h / 2.0
+        r = min(w, h) * 0.96
+        heart_d = (
+            f"M {cx:.2f},{cy + 0.42*r:.2f} "
+            f"C {cx - 0.58*r:.2f},{cy + 0.08*r:.2f} {cx - 0.58*r:.2f},{cy - 0.42*r:.2f} {cx - 0.28*r:.2f},{cy - 0.48*r:.2f} "
+            f"C {cx - 0.08*r:.2f},{cy - 0.48*r:.2f} {cx:.2f},{cy - 0.28*r:.2f} {cx:.2f},{cy - 0.28*r:.2f} "
+            f"C {cx:.2f},{cy - 0.28*r:.2f} {cx + 0.08*r:.2f},{cy - 0.48*r:.2f} {cx + 0.28*r:.2f},{cy - 0.48*r:.2f} "
+            f"C {cx + 0.58*r:.2f},{cy - 0.42*r:.2f} {cx + 0.58*r:.2f},{cy + 0.08*r:.2f} {cx:.2f},{cy + 0.42*r:.2f} Z"
+        )
+        return etree.SubElement(
+            container,
+            "{%s}path" % core.SVG_NS,
+            d=heart_d,
+            style=f"fill:{fill_color};stroke:{stroke_color};stroke-width:{stroke_width};stroke-linejoin:round;"
+        )
+    elif shape == "star":
+        cx = x + w / 2.0
+        cy = y + h / 2.0
+        r_out = min(w, h) * 0.96
+        r_in = r_out * 0.45
+        pts = []
+        for i in range(10):
+            angle = math.radians(-90 + i * 36)
+            r_val = r_out if i % 2 == 0 else r_in
+            px = cx + r_val * math.cos(angle)
+            py = cy + r_val * math.sin(angle)
+            pts.append(f"{px:.2f},{py:.2f}")
+        pts_str = " ".join(pts)
+        return etree.SubElement(
+            container,
+            "{%s}polygon" % core.SVG_NS,
+            points=pts_str,
+            style=f"fill:{fill_color};stroke:{stroke_color};stroke-width:{stroke_width};stroke-linejoin:round;"
+        )
+    else:  # "rectangle" (default)
+        return etree.SubElement(
+            container,
+            "{%s}rect" % core.SVG_NS,
+            x=f"{x:.2f}",
+            y=f"{y:.2f}",
+            width=f"{w:.2f}",
+            height=f"{h:.2f}",
+            rx="2",
+            ry="2",
+            style=f"fill:{fill_color};stroke:{stroke_color};stroke-width:{stroke_width};"
+        )
+
+
 class ExportPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--action", type=str, default="step2")
@@ -171,6 +246,11 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--sa_in", type=float, default=0.25)
         pars.add_argument("--spacing_in", type=float, default=0.2)
         pars.add_argument("--template_color_mode", type=str, default="tag")
+        pars.add_argument("--swatch_shape", type=str, default="rectangle", choices=["rectangle", "heart", "circle", "star"])
+        pars.add_argument("--line_weight", type=float, default=0.75, choices=[0.35, 0.5, 0.75, 1.0])
+        pars.add_argument("--tab_style", type=str, default="grey", choices=["grey", "outline", "crosshatch"])
+        pars.add_argument("--small_pieces_mode", type=str, default="fill", choices=["fill", "code_only"])
+        pars.add_argument("--fabric_grain", type=str, default="orthogonal", choices=["directional", "orthogonal", "free_rotation"])
         pars.add_argument("--mirror_templates", type=inkex.Boolean, default=True)
         pars.add_argument("--mirror_preview", type=inkex.Boolean, default=False)
         pars.add_argument("--block_name", type=str, default="My Quilt Block")
@@ -217,6 +297,32 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--squares_cutting_list_only_mixed", type=inkex.Boolean, default=False)
         pars.add_argument("--wof_draw_scale_pct", type=int, default=75)
 
+        # Section re-print & selective export options
+        pars.add_argument("--select_sections", type=str, default="")
+        pars.add_argument("--reprint_mode", type=inkex.Boolean, default=False)
+        pars.add_argument("--select_sections_fpp", type=str, default="")
+        pars.add_argument("--reprint_mode_fpp", type=inkex.Boolean, default=False)
+        pars.add_argument("--select_sections_temp", type=str, default="")
+        pars.add_argument("--reprint_mode_temp", type=inkex.Boolean, default=False)
+        pars.add_argument("--select_sections_mixed", type=str, default="")
+        pars.add_argument("--reprint_mode_mixed", type=inkex.Boolean, default=False)
+
+        # Detail Key & Reference Table options
+        pars.add_argument("--detail_key_style", type=str, default="table", choices=["table", "direct"])
+        pars.add_argument("--detail_key_placement", type=str, default="inline", choices=["inline", "separate_page"])
+        pars.add_argument("--include_reference_tables", type=inkex.Boolean, default=True)
+        pars.add_argument("--include_enlarged_diagrams", type=inkex.Boolean, default=False)
+        pars.add_argument("--edge_label_style", type=str, default="step", choices=["step", "section", "none"])
+        pars.add_argument("--detail_key_style_fpp", type=str, default="table")
+        pars.add_argument("--detail_key_placement_fpp", type=str, default="inline")
+        pars.add_argument("--include_reference_tables_fpp", type=inkex.Boolean, default=True)
+        pars.add_argument("--include_enlarged_diagrams_fpp", type=inkex.Boolean, default=False)
+        pars.add_argument("--edge_label_style_fpp", type=str, default="step")
+        pars.add_argument("--detail_key_style_temp", type=str, default="table")
+        pars.add_argument("--detail_key_placement_temp", type=str, default="inline")
+        pars.add_argument("--detail_key_style_mixed", type=str, default="table")
+        pars.add_argument("--detail_key_placement_mixed", type=str, default="inline")
+
     def _show_gtk_setup_dialog(self, block_data):
         try:
             import gi
@@ -245,6 +351,14 @@ class ExportPlugin(inkex.Effect):
                         self.options.spacing_in = float(saved_prefs["spacing_in"])
                     if "template_color_mode" in saved_prefs:
                         self.options.template_color_mode = saved_prefs["template_color_mode"]
+                    if "swatch_shape" in saved_prefs:
+                        self.options.swatch_shape = saved_prefs["swatch_shape"]
+                    if "line_weight" in saved_prefs:
+                        self.options.line_weight = float(saved_prefs["line_weight"])
+                    if "tab_style" in saved_prefs:
+                        self.options.tab_style = saved_prefs["tab_style"]
+                    if "small_pieces_mode" in saved_prefs:
+                        self.options.small_pieces_mode = saved_prefs["small_pieces_mode"]
                     if "mirror_templates" in saved_prefs:
                         self.options.mirror_templates = bool(saved_prefs["mirror_templates"])
                     if "mirror_preview" in saved_prefs:
@@ -271,6 +385,12 @@ class ExportPlugin(inkex.Effect):
                         self.options.include_pattern_test_square = bool(saved_prefs["include_pattern_test_square"])
                     if "show_page_boundaries" in saved_prefs:
                         self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
+                    if "include_reference_tables" in saved_prefs:
+                        self.options.include_reference_tables = bool(saved_prefs["include_reference_tables"])
+                    if "include_enlarged_diagrams" in saved_prefs:
+                        self.options.include_enlarged_diagrams = bool(saved_prefs["include_enlarged_diagrams"])
+                    if "edge_label_style" in saved_prefs:
+                        self.options.edge_label_style = saved_prefs["edge_label_style"]
             except Exception:
                 pass
 
@@ -364,7 +484,7 @@ class ExportPlugin(inkex.Effect):
 
         notebook.append_page(grid1, Gtk.Label(label="Credits & Page Features"))
 
-        # PAGE 2: Page Setup & Margins
+        # PAGE 2: Page Setup & Layout
         grid2 = Gtk.Grid()
         grid2.set_column_spacing(10)
         grid2.set_row_spacing(8)
@@ -418,49 +538,147 @@ class ExportPlugin(inkex.Effect):
         spin_spacing = Gtk.SpinButton(adjustment=adj_spacing, climb_rate=0.05, digits=2)
         grid2.attach(spin_spacing, 1, 4, 1, 1)
 
-        # Colour Fill Mode
-        lbl_cm = Gtk.Label(label="Template Fabric Colour Fill:")
-        lbl_cm.set_halign(Gtk.Align.START)
-        grid2.attach(lbl_cm, 0, 5, 1, 1)
-        combo_color_mode = Gtk.ComboBoxText()
-        combo_color_mode.append("none", "White (Line-Art only)")
-        combo_color_mode.append("tag", "Colour Swatch (Minimal ink)")
-        combo_color_mode.append("full", "Full Colour Fill (Ink-heavy)")
-        combo_color_mode.set_active_id(self.options.template_color_mode or "tag")
-        grid2.attach(combo_color_mode, 1, 5, 1, 1)
-
-        # Mirror Templates
-        chk_mirror_temp = Gtk.CheckButton(label="Mirror templates on Pages 2+ (Recommended for FPP)")
-        chk_mirror_temp.set_active(self.options.mirror_templates)
-        grid2.attach(chk_mirror_temp, 0, 6, 2, 1)
-
-        # Mirror Preview
-        chk_mirror_prev = Gtk.CheckButton(label="Mirror Page 1 Block Preview (Usually false)")
-        chk_mirror_prev.set_active(self.options.mirror_preview)
-        grid2.attach(chk_mirror_prev, 0, 7, 2, 1)
-
         # WOF draw scale pct
         lbl_wd = Gtk.Label(label="WOF Map Width on Page:")
         lbl_wd.set_halign(Gtk.Align.START)
-        grid2.attach(lbl_wd, 0, 8, 1, 1)
+        grid2.attach(lbl_wd, 0, 5, 1, 1)
         combo_wof_scale = Gtk.ComboBoxText()
         combo_wof_scale.append("50", "50% of available page width")
         combo_wof_scale.append("75", "75% of available page width")
         combo_wof_scale.append("100", "100% of available page width")
         combo_wof_scale.set_active_id(str(self.options.wof_draw_scale_pct or "75"))
-        grid2.attach(combo_wof_scale, 1, 8, 1, 1)
-
-        # Pattern Page Test Square
-        chk_pattern_cal = Gtk.CheckButton(label="Include 2nd test square on pattern pages (smart packed)")
-        chk_pattern_cal.set_active(self.options.include_pattern_test_square)
-        grid2.attach(chk_pattern_cal, 0, 9, 2, 1)
+        grid2.attach(combo_wof_scale, 1, 5, 1, 1)
 
         # Show Page Boundaries
         chk_boundaries = Gtk.CheckButton(label="Show printable page boundaries (blue dashed line & page labels)")
         chk_boundaries.set_active(self.options.show_page_boundaries)
-        grid2.attach(chk_boundaries, 0, 10, 2, 1)
+        grid2.attach(chk_boundaries, 0, 6, 2, 1)
 
-        notebook.append_page(grid2, Gtk.Label(label="Page Setup & Styling"))
+        notebook.append_page(grid2, Gtk.Label(label="Page Setup & Layout"))
+
+        # PAGE 3: Styling & Aesthetics
+        grid_style = Gtk.Grid()
+        grid_style.set_column_spacing(10)
+        grid_style.set_row_spacing(8)
+        grid_style.set_margin_start(15)
+        grid_style.set_margin_end(15)
+        grid_style.set_margin_top(15)
+        grid_style.set_margin_bottom(15)
+
+        # Colour Fill Mode
+        lbl_cm = Gtk.Label(label="Template Fabric Colour Fill:")
+        lbl_cm.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_cm, 0, 0, 1, 1)
+        combo_color_mode = Gtk.ComboBoxText()
+        combo_color_mode.append("none", "White (Line-Art only)")
+        combo_color_mode.append("tag", "Colour Swatch (Minimal ink)")
+        combo_color_mode.append("full", "Full Colour Fill (Ink-heavy)")
+        combo_color_mode.set_active_id(self.options.template_color_mode or "tag")
+        grid_style.attach(combo_color_mode, 1, 0, 1, 1)
+
+        # Colour Swatch Shape
+        lbl_ss = Gtk.Label(label="Colour Swatch Shape:")
+        lbl_ss.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_ss, 0, 1, 1, 1)
+        combo_swatch_shape = Gtk.ComboBoxText()
+        combo_swatch_shape.append("rectangle", "Rectangle (Default)")
+        combo_swatch_shape.append("heart", "Love Heart ❤️")
+        combo_swatch_shape.append("circle", "Circle ⚪")
+        combo_swatch_shape.append("star", "Star ⭐")
+        combo_swatch_shape.set_active_id(getattr(self.options, "swatch_shape", "rectangle") or "rectangle")
+        grid_style.attach(combo_swatch_shape, 1, 1, 1, 1)
+
+        # Line Weight
+        lbl_lw = Gtk.Label(label="Pattern Line Weight:")
+        lbl_lw.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_lw, 0, 2, 1, 1)
+        combo_line_weight = Gtk.ComboBoxText()
+        combo_line_weight.append("0.75", "Normal (0.75 pt)")
+        combo_line_weight.append("0.5", "Fine / Light (0.50 pt)")
+        combo_line_weight.append("0.35", "Extra Fine (0.35 pt)")
+        combo_line_weight.append("1.0", "Bold / Heavy (1.00 pt)")
+        cur_lw = str(getattr(self.options, "line_weight", 0.75) or 0.75)
+        combo_line_weight.set_active_id(cur_lw)
+        grid_style.attach(combo_line_weight, 1, 2, 1, 1)
+
+        # Tab Style
+        lbl_ts = Gtk.Label(label="Join/Glue Tab Style:")
+        lbl_ts.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_ts, 0, 3, 1, 1)
+        combo_tab_style = Gtk.ComboBoxText()
+        combo_tab_style.append("grey", "Grey Fill (Default)")
+        combo_tab_style.append("outline", "Outline Only (Ink-Saver)")
+        combo_tab_style.append("crosshatch", "Black & White Crosshatch")
+        combo_tab_style.set_active_id(getattr(self.options, "tab_style", "grey") or "grey")
+        grid_style.attach(combo_tab_style, 1, 3, 1, 1)
+
+        # Small Pieces Mode
+        lbl_spm = Gtk.Label(label="Small Pieces Colour Mode:")
+        lbl_spm.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_spm, 0, 4, 1, 1)
+        combo_sp_mode = Gtk.ComboBoxText()
+        combo_sp_mode.append("fill", "Solid Colour Fill (Default)")
+        combo_sp_mode.append("code_only", "Colour Code Badge Only (Ink-Saver)")
+        combo_sp_mode.set_active_id(getattr(self.options, "small_pieces_mode", "fill") or "fill")
+        grid_style.attach(combo_sp_mode, 1, 4, 1, 1)
+
+        # Detail Key Style
+        lbl_dks = Gtk.Label(label="Enlarged Detail Key Style:")
+        lbl_dks.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_dks, 0, 5, 1, 1)
+        combo_dk_style = Gtk.ComboBoxText()
+        combo_dk_style.append("table", "Streamlined Table Legend (Clean A1..An + Table)")
+        combo_dk_style.append("direct", "Direct Labels on Shapes (e.g. A1 [PU2])")
+        combo_dk_style.set_active_id(getattr(self.options, "detail_key_style", "table") or "table")
+        grid_style.attach(combo_dk_style, 1, 5, 1, 1)
+
+        # Detail Key Placement
+        lbl_dkp = Gtk.Label(label="Detail Key Table Placement:")
+        lbl_dkp.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_dkp, 0, 6, 1, 1)
+        combo_dk_place = Gtk.ComboBoxText()
+        combo_dk_place.append("inline", "Inline (Smart-packed on Section Pages)")
+        combo_dk_place.append("separate_page", "Separate Page at End")
+        combo_dk_place.set_active_id(getattr(self.options, "detail_key_placement", "inline") or "inline")
+        grid_style.attach(combo_dk_place, 1, 6, 1, 1)
+
+        # Inter-Section Edge Label Style
+        lbl_els = Gtk.Label(label="Inter-Section Edge Label Style:")
+        lbl_els.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_els, 0, 7, 1, 1)
+        combo_edge_label = Gtk.ComboBoxText()
+        combo_edge_label.append("step", "Assembly Step Number (e.g. Step 1, Step 2)")
+        combo_edge_label.append("section", "Target Section Name (e.g. Sew to Section B)")
+        combo_edge_label.append("none", "None (Turn Off Edge Labels)")
+        combo_edge_label.set_active_id(getattr(self.options, "edge_label_style", "step") or "step")
+        grid_style.attach(combo_edge_label, 1, 7, 1, 1)
+
+        # Section Reference Table Cards Toggle
+        chk_inc_ref_tables = Gtk.CheckButton(label="Include Section Reference Table cards (smart-packed inline)")
+        chk_inc_ref_tables.set_active(getattr(self.options, "include_reference_tables", True))
+        grid_style.attach(chk_inc_ref_tables, 0, 8, 2, 1)
+
+        # 2.0x Enlarged Section Diagrams Toggle
+        chk_inc_enlarged_diag = Gtk.CheckButton(label="Include 2.0x Enlarged Section Diagrams (pages at end)")
+        chk_inc_enlarged_diag.set_active(getattr(self.options, "include_enlarged_diagrams", False))
+        grid_style.attach(chk_inc_enlarged_diag, 0, 9, 2, 1)
+
+        # Pattern Page Test Square
+        chk_pattern_cal = Gtk.CheckButton(label="Include 2nd test square on pattern pages (smart packed)")
+        chk_pattern_cal.set_active(self.options.include_pattern_test_square)
+        grid_style.attach(chk_pattern_cal, 0, 10, 2, 1)
+
+        # Mirror Templates
+        chk_mirror_temp = Gtk.CheckButton(label="Mirror templates on Pages 2+ (Recommended for FPP)")
+        chk_mirror_temp.set_active(self.options.mirror_templates)
+        grid_style.attach(chk_mirror_temp, 0, 11, 2, 1)
+
+        # Mirror Preview
+        chk_mirror_prev = Gtk.CheckButton(label="Mirror Page 1 Block Preview (Usually false)")
+        chk_mirror_prev.set_active(self.options.mirror_preview)
+        grid_style.attach(chk_mirror_prev, 0, 12, 2, 1)
+
+        notebook.append_page(grid_style, Gtk.Label(label="Styling & Aesthetics"))
 
         # PAGE 3: Fabric & Precuts Setup
         grid3 = Gtk.Grid()
@@ -471,43 +689,120 @@ class ExportPlugin(inkex.Effect):
         grid3.set_margin_top(15)
         grid3.set_margin_bottom(15)
 
+        # Fabric Grain Direction
+        lbl_fg = Gtk.Label(label="Fabric Grain Direction:")
+        lbl_fg.set_halign(Gtk.Align.START)
+        grid3.attach(lbl_fg, 0, 0, 1, 1)
+        combo_fabric_grain = Gtk.ComboBoxText()
+        combo_fabric_grain.append("directional", "Directional / Fixed Grain (0° only)")
+        combo_fabric_grain.append("orthogonal", "Direction-Free Orthogonal (0° or 90°)")
+        combo_fabric_grain.append("free_rotation", "Direction-GrainFreeRotation (Free Angle - Max Efficiency)")
+        combo_fabric_grain.set_active_id(getattr(self.options, "fabric_grain", "orthogonal") or "orthogonal")
+        grid3.attach(combo_fabric_grain, 1, 0, 1, 1)
+
         chk_use_precuts = Gtk.CheckButton(label="Use Precuts (optimize suggested purchase for precut sizes)")
         chk_use_precuts.set_active(self.options.use_precuts)
-        grid3.attach(chk_use_precuts, 0, 0, 2, 1)
+        grid3.attach(chk_use_precuts, 0, 1, 2, 1)
 
         lbl_options = Gtk.Label(label="Enabled Precut Options (used when 'Use Precuts' is checked):")
         lbl_options.set_halign(Gtk.Align.START)
-        grid3.attach(lbl_options, 0, 1, 2, 1)
+        grid3.attach(lbl_options, 0, 2, 2, 1)
 
         chk_mc = Gtk.CheckButton(label="Mini Charm (2.5\" square)")
         chk_mc.set_active(self.options.precut_mini_charm)
-        grid3.attach(chk_mc, 0, 2, 2, 1)
+        grid3.attach(chk_mc, 0, 3, 2, 1)
 
         chk_ch = Gtk.CheckButton(label="Charm (5\" square)")
         chk_ch.set_active(self.options.precut_charm)
-        grid3.attach(chk_ch, 0, 3, 2, 1)
+        grid3.attach(chk_ch, 0, 4, 2, 1)
 
         chk_lc = Gtk.CheckButton(label="Layer Cake (10\" square)")
         chk_lc.set_active(self.options.precut_layer_cake)
-        grid3.attach(chk_lc, 0, 4, 2, 1)
+        grid3.attach(chk_lc, 0, 5, 2, 1)
 
         chk_jr = Gtk.CheckButton(label="Jelly Roll (2.5\" x WOF strip)")
         chk_jr.set_active(self.options.precut_jelly_roll)
-        grid3.attach(chk_jr, 0, 5, 2, 1)
+        grid3.attach(chk_jr, 0, 6, 2, 1)
 
         chk_f16 = Gtk.CheckButton(label="Fat 16th (9\" x 11\")")
         chk_f16.set_active(self.options.precut_fat_16th)
-        grid3.attach(chk_f16, 0, 6, 2, 1)
+        grid3.attach(chk_f16, 0, 7, 2, 1)
 
         chk_f8 = Gtk.CheckButton(label="Fat 8th (9\" x 21\")")
         chk_f8.set_active(self.options.precut_fat_8th)
-        grid3.attach(chk_f8, 0, 7, 2, 1)
+        grid3.attach(chk_f8, 0, 8, 2, 1)
 
         chk_fq = Gtk.CheckButton(label="Fat Quarter (18\" x 21\")")
         chk_fq.set_active(self.options.precut_fat_quarter)
-        grid3.attach(chk_fq, 0, 8, 2, 1)
+        grid3.attach(chk_fq, 0, 9, 2, 1)
 
         notebook.append_page(grid3, Gtk.Label(label="Fabric & Precuts"))
+
+        # PAGE 4: Section Selection & Re-Print
+        grid_reprint = Gtk.Grid()
+        grid_reprint.set_column_spacing(10)
+        grid_reprint.set_row_spacing(8)
+        grid_reprint.set_margin_start(15)
+        grid_reprint.set_margin_end(15)
+        grid_reprint.set_margin_top(15)
+        grid_reprint.set_margin_bottom(15)
+
+        chk_reprint_mode = Gtk.CheckButton(label="Re-print Mode (Skip cover page & fabric charts, print selected sections + 1in test square)")
+        chk_reprint_mode.set_active(getattr(self.options, "reprint_mode", False))
+        grid_reprint.attach(chk_reprint_mode, 0, 0, 2, 1)
+
+        lbl_select_secs = Gtk.Label(label="Sections to Print (e.g. E or A, B — blank for All):")
+        lbl_select_secs.set_halign(Gtk.Align.START)
+        grid_reprint.attach(lbl_select_secs, 0, 1, 1, 1)
+
+        entry_select_sections = Gtk.Entry()
+        entry_select_sections.set_text(getattr(self.options, "select_sections", "") or "")
+        grid_reprint.attach(entry_select_sections, 1, 1, 1, 1)
+
+        lbl_sec_pick = Gtk.Label(label="Quick Section Selector (click to toggle sections for re-print):")
+        lbl_sec_pick.set_halign(Gtk.Align.START)
+        grid_reprint.attach(lbl_sec_pick, 0, 2, 2, 1)
+
+        sec_prefixes = sorted(list(set(
+            re.match(r"^([A-Za-z]+)", r.label).group(1).upper()
+            for r in block_data.tree.leaf_regions()
+            if r.label and re.match(r"^([A-Za-z]+)", r.label)
+        )))
+
+        box_checks = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        sec_checks = {}
+
+        def _sync_section_entry():
+            selected = [p for p, chk in sec_checks.items() if chk.get_active()]
+            if len(selected) == len(sec_prefixes):
+                entry_select_sections.set_text("")
+            else:
+                entry_select_sections.set_text(", ".join(selected))
+
+        for pfx in sec_prefixes:
+            cbtn = Gtk.CheckButton(label=f"Section {pfx}")
+            cbtn.set_active(True)
+            cbtn.connect("toggled", lambda w: _sync_section_entry())
+            box_checks.pack_start(cbtn, False, False, 0)
+            sec_checks[pfx] = cbtn
+
+        grid_reprint.attach(box_checks, 0, 3, 2, 1)
+
+        def _select_all_secs(val):
+            for chk in sec_checks.values():
+                chk.set_active(val)
+            _sync_section_entry()
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        btn_all = Gtk.Button(label="Select All")
+        btn_all.connect("clicked", lambda w: _select_all_secs(True))
+        btn_none = Gtk.Button(label="Clear All")
+        btn_none.connect("clicked", lambda w: _select_all_secs(False))
+        btn_box.pack_start(btn_all, False, False, 0)
+        btn_box.pack_start(btn_none, False, False, 0)
+        grid_reprint.attach(btn_box, 0, 4, 2, 1)
+
+        notebook.append_page(grid_reprint, Gtk.Label(label="Re-Print / Section Filter"))
 
         # Buttons
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
@@ -540,6 +835,14 @@ class ExportPlugin(inkex.Effect):
             self.options.sa_in = spin_sa.get_value()
             self.options.spacing_in = spin_spacing.get_value()
             self.options.template_color_mode = combo_color_mode.get_active_id() or "none"
+            self.options.swatch_shape = combo_swatch_shape.get_active_id() or "rectangle"
+            try:
+                self.options.line_weight = float(combo_line_weight.get_active_id() or "0.75")
+            except Exception:
+                self.options.line_weight = 0.75
+            self.options.tab_style = combo_tab_style.get_active_id() or "grey"
+            self.options.small_pieces_mode = combo_sp_mode.get_active_id() or "fill"
+            self.options.fabric_grain = combo_fabric_grain.get_active_id() or "orthogonal"
             
             self.options.mirror_templates = chk_mirror_temp.get_active()
             self.options.mirror_preview = chk_mirror_prev.get_active()
@@ -558,6 +861,15 @@ class ExportPlugin(inkex.Effect):
             self.options.include_pattern_test_square = chk_pattern_cal.get_active()
             self.options.show_page_boundaries = chk_boundaries.get_active()
             
+            self.options.select_sections = entry_select_sections.get_text().strip()
+            self.options.reprint_mode = chk_reprint_mode.get_active()
+
+            self.options.detail_key_style = combo_dk_style.get_active_id() or "table"
+            self.options.detail_key_placement = combo_dk_place.get_active_id() or "inline"
+            self.options.edge_label_style = combo_edge_label.get_active_id() or "step"
+            self.options.include_reference_tables = chk_inc_ref_tables.get_active()
+            self.options.include_enlarged_diagrams = chk_inc_enlarged_diag.get_active()
+
             # Save sticky preferences
             prefs_to_save = {
                 "page_size": self.options.page_size,
@@ -566,6 +878,18 @@ class ExportPlugin(inkex.Effect):
                 "sa_in": self.options.sa_in,
                 "spacing_in": self.options.spacing_in,
                 "template_color_mode": self.options.template_color_mode,
+                "swatch_shape": self.options.swatch_shape,
+                "select_sections": self.options.select_sections,
+                "reprint_mode": self.options.reprint_mode,
+                "detail_key_style": self.options.detail_key_style,
+                "detail_key_placement": self.options.detail_key_placement,
+                "edge_label_style": self.options.edge_label_style,
+                "include_reference_tables": self.options.include_reference_tables,
+                "include_enlarged_diagrams": self.options.include_enlarged_diagrams,
+                "line_weight": self.options.line_weight,
+                "tab_style": self.options.tab_style,
+                "small_pieces_mode": self.options.small_pieces_mode,
+                "fabric_grain": self.options.fabric_grain,
                 "mirror_templates": self.options.mirror_templates,
                 "mirror_preview": self.options.mirror_preview,
                 "wof_draw_scale_pct": self.options.wof_draw_scale_pct,
@@ -643,6 +967,12 @@ class ExportPlugin(inkex.Effect):
                         self.options.include_pattern_test_square = bool(saved_prefs["include_pattern_test_square"])
                     if "show_page_boundaries" in saved_prefs:
                         self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
+                    if "edge_label_style" in saved_prefs:
+                        self.options.edge_label_style = saved_prefs["edge_label_style"]
+                    if "include_reference_tables" in saved_prefs:
+                        self.options.include_reference_tables = bool(saved_prefs["include_reference_tables"])
+                    if "include_enlarged_diagrams" in saved_prefs:
+                        self.options.include_enlarged_diagrams = bool(saved_prefs["include_enlarged_diagrams"])
             except Exception:
                 pass
 
@@ -705,9 +1035,9 @@ class ExportPlugin(inkex.Effect):
         var_sec_labels = tk.BooleanVar(value=bool(self.options.show_section_labels))
         ttk.Checkbutton(page1, text="Include Section Labels on Templates", variable=var_sec_labels).grid(row=8, column=0, columnspan=2, sticky="w", pady=3)
 
-        # PAGE 2: Page Setup & Styling
+        # PAGE 2: Page Setup & Layout
         page2 = ttk.Frame(notebook, padding=15)
-        notebook.add(page2, text="Page Setup & Styling")
+        notebook.add(page2, text="Page Setup & Layout")
 
         ttk.Label(page2, text="Page Size:").grid(row=0, column=0, sticky="w", pady=4)
         combo_ps = ttk.Combobox(page2, values=["letter", "a4", "legal", "tabloid", "a3"], state="readonly", width=25)
@@ -734,36 +1064,88 @@ class ExportPlugin(inkex.Effect):
         spin_spacing.set(str(self.options.spacing_in or 0.2))
         spin_spacing.grid(row=4, column=1, sticky="w", pady=4)
 
-        ttk.Label(page2, text="Template Colour Fill:").grid(row=5, column=0, sticky="w", pady=4)
-        mode_map = {"tag": "Colour Swatch (Minimal ink)", "full": "Full Colour Fill", "none": "None (Outlines only)"}
-        mode_reverse = {v: k for k, v in mode_map.items()}
-        combo_color = ttk.Combobox(page2, values=list(mode_map.values()), state="readonly", width=28)
-        combo_color.set(mode_map.get(self.options.template_color_mode, "Colour Swatch (Minimal ink)"))
-        combo_color.grid(row=5, column=1, sticky="w", pady=4)
-
-        var_mirror_temp = tk.BooleanVar(value=bool(self.options.mirror_templates))
-        ttk.Checkbutton(page2, text="Mirror templates on Pages 2+ (Recommended)", variable=var_mirror_temp).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
-
-        var_mirror_prev = tk.BooleanVar(value=bool(self.options.mirror_preview))
-        ttk.Checkbutton(page2, text="Mirror Page 1 Block Preview", variable=var_mirror_prev).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
-
-        ttk.Label(page2, text="WOF Map Width:").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Label(page2, text="WOF Map Width:").grid(row=5, column=0, sticky="w", pady=4)
         combo_wof = ttk.Combobox(page2, values=["50%", "75%", "100%"], state="readonly", width=15)
         combo_wof.set(f"{self.options.wof_draw_scale_pct or 75}%")
-        combo_wof.grid(row=8, column=1, sticky="w", pady=4)
-
-        var_test_sq = tk.BooleanVar(value=bool(self.options.include_pattern_test_square))
-        ttk.Checkbutton(page2, text="Include 2nd test square on pattern pages", variable=var_test_sq).grid(row=9, column=0, columnspan=2, sticky="w", pady=3)
+        combo_wof.grid(row=5, column=1, sticky="w", pady=4)
 
         var_boundaries = tk.BooleanVar(value=bool(self.options.show_page_boundaries))
-        ttk.Checkbutton(page2, text="Show printable page boundaries", variable=var_boundaries).grid(row=10, column=0, columnspan=2, sticky="w", pady=3)
+        ttk.Checkbutton(page2, text="Show printable page boundaries", variable=var_boundaries).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+
+        # PAGE 3: Styling & Aesthetics
+        page_style = ttk.Frame(notebook, padding=15)
+        notebook.add(page_style, text="Styling & Aesthetics")
+
+        ttk.Label(page_style, text="Template Colour Fill:").grid(row=0, column=0, sticky="w", pady=4)
+        mode_map = {"tag": "Colour Swatch (Minimal ink)", "full": "Full Colour Fill", "none": "None (Outlines only)"}
+        mode_reverse = {v: k for k, v in mode_map.items()}
+        combo_color = ttk.Combobox(page_style, values=list(mode_map.values()), state="readonly", width=28)
+        combo_color.set(mode_map.get(self.options.template_color_mode, "Colour Swatch (Minimal ink)"))
+        combo_color.grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(page_style, text="Colour Swatch Shape:").grid(row=1, column=0, sticky="w", pady=4)
+        shape_map = {"rectangle": "Rectangle (Default)", "heart": "Love Heart ❤️", "circle": "Circle ⚪", "star": "Star ⭐"}
+        shape_reverse = {v: k for k, v in shape_map.items()}
+        combo_shape = ttk.Combobox(page_style, values=list(shape_map.values()), state="readonly", width=28)
+        combo_shape.set(shape_map.get(getattr(self.options, "swatch_shape", "rectangle"), "Rectangle (Default)"))
+        combo_shape.grid(row=1, column=1, sticky="w", pady=4)
+
+        ttk.Label(page_style, text="Pattern Line Weight:").grid(row=2, column=0, sticky="w", pady=4)
+        lw_map = {"0.75": "Normal (0.75 pt)", "0.5": "Fine / Light (0.50 pt)", "0.35": "Extra Fine (0.35 pt)", "1.0": "Bold / Heavy (1.00 pt)"}
+        lw_reverse = {v: k for k, v in lw_map.items()}
+        combo_lw = ttk.Combobox(page_style, values=list(lw_map.values()), state="readonly", width=28)
+        combo_lw.set(lw_map.get(str(getattr(self.options, "line_weight", 0.75)), "Normal (0.75 pt)"))
+        combo_lw.grid(row=2, column=1, sticky="w", pady=4)
+
+        ttk.Label(page_style, text="Join/Glue Tab Style:").grid(row=3, column=0, sticky="w", pady=4)
+        tab_map = {"grey": "Grey Fill (Default)", "outline": "Outline Only (Ink-Saver)", "crosshatch": "Black & White Crosshatch"}
+        tab_reverse = {v: k for k, v in tab_map.items()}
+        combo_tab_style = ttk.Combobox(page_style, values=list(tab_map.values()), state="readonly", width=28)
+        combo_tab_style.set(tab_map.get(getattr(self.options, "tab_style", "grey"), "Grey Fill (Default)"))
+        combo_tab_style.grid(row=3, column=1, sticky="w", pady=4)
+
+        ttk.Label(page_style, text="Small Pieces Colour Mode:").grid(row=4, column=0, sticky="w", pady=4)
+        sp_map = {"fill": "Solid Colour Fill (Default)", "code_only": "Colour Code Badge Only (Ink-Saver)"}
+        sp_reverse = {v: k for k, v in sp_map.items()}
+        combo_sp_mode = ttk.Combobox(page_style, values=list(sp_map.values()), state="readonly", width=28)
+        combo_sp_mode.set(sp_map.get(getattr(self.options, "small_pieces_mode", "fill"), "Solid Colour Fill (Default)"))
+        combo_sp_mode.grid(row=4, column=1, sticky="w", pady=4)
+
+        ttk.Label(page_style, text="Inter-Section Edge Label Style:").grid(row=5, column=0, sticky="w", pady=4)
+        edge_label_map = {"step": "Assembly Step Number (e.g. Step 1, Step 2)", "section": "Target Section Name (e.g. Sew to Section B)", "none": "None (Turn Off Edge Labels)"}
+        edge_label_reverse = {v: k for k, v in edge_label_map.items()}
+        combo_edge_label = ttk.Combobox(page_style, values=list(edge_label_map.values()), state="readonly", width=35)
+        combo_edge_label.set(edge_label_map.get(getattr(self.options, "edge_label_style", "step"), "Assembly Step Number (e.g. Step 1, Step 2)"))
+        combo_edge_label.grid(row=5, column=1, sticky="w", pady=4)
+
+        var_inc_ref_tables = tk.BooleanVar(value=bool(getattr(self.options, "include_reference_tables", True)))
+        ttk.Checkbutton(page_style, text="Include Section Reference Table cards (smart-packed inline)", variable=var_inc_ref_tables).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_inc_enlarged_diag = tk.BooleanVar(value=bool(getattr(self.options, "include_enlarged_diagrams", False)))
+        ttk.Checkbutton(page_style, text="Include 2.0x Enlarged Section Diagrams (pages at end)", variable=var_inc_enlarged_diag).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_test_sq = tk.BooleanVar(value=bool(self.options.include_pattern_test_square))
+        ttk.Checkbutton(page_style, text="Include 2nd test square on pattern pages", variable=var_test_sq).grid(row=8, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_mirror_temp = tk.BooleanVar(value=bool(self.options.mirror_templates))
+        ttk.Checkbutton(page_style, text="Mirror templates on Pages 2+ (Recommended)", variable=var_mirror_temp).grid(row=9, column=0, columnspan=2, sticky="w", pady=3)
+
+        var_mirror_prev = tk.BooleanVar(value=bool(self.options.mirror_preview))
+        ttk.Checkbutton(page_style, text="Mirror Page 1 Block Preview", variable=var_mirror_prev).grid(row=10, column=0, columnspan=2, sticky="w", pady=3)
 
         # PAGE 3: Fabric & Precuts
         page3 = ttk.Frame(notebook, padding=15)
         notebook.add(page3, text="Fabric & Precuts")
 
+        ttk.Label(page3, text="Fabric Grain Direction:").grid(row=0, column=0, sticky="w", pady=4)
+        fg_map = {"directional": "Directional / Fixed Grain (0° only)", "orthogonal": "Direction-Free Orthogonal (0° or 90°)", "free_rotation": "Direction-GrainFreeRotation (Free Angle - Max Efficiency)"}
+        fg_reverse = {v: k for k, v in fg_map.items()}
+        combo_fabric_grain = ttk.Combobox(page3, values=list(fg_map.values()), state="readonly", width=35)
+        combo_fabric_grain.set(fg_map.get(getattr(self.options, "fabric_grain", "orthogonal"), "Direction-Free Orthogonal (0° or 90°)"))
+        combo_fabric_grain.grid(row=0, column=1, sticky="w", pady=4)
+
         var_use_precuts = tk.BooleanVar(value=bool(self.options.use_precuts))
-        ttk.Checkbutton(page3, text="Use Precuts Optimization", variable=var_use_precuts).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
+        ttk.Checkbutton(page3, text="Use Precuts Optimization", variable=var_use_precuts).grid(row=1, column=0, columnspan=2, sticky="w", pady=4)
 
         var_mc = tk.BooleanVar(value=bool(self.options.precut_mini_charm))
         ttk.Checkbutton(page3, text="Mini Charm (2.5\" square)", variable=var_mc).grid(row=1, column=0, columnspan=2, sticky="w", pady=3)
@@ -817,6 +1199,17 @@ class ExportPlugin(inkex.Effect):
             except Exception:
                 pass
             self.options.template_color_mode = mode_reverse.get(combo_color.get(), "tag")
+            self.options.swatch_shape = shape_reverse.get(combo_shape.get(), "rectangle")
+            try:
+                self.options.line_weight = float(lw_reverse.get(combo_lw.get(), "0.75"))
+            except Exception:
+                self.options.line_weight = 0.75
+            self.options.tab_style = tab_reverse.get(combo_tab_style.get(), "grey")
+            self.options.small_pieces_mode = sp_reverse.get(combo_sp_mode.get(), "fill")
+            self.options.edge_label_style = edge_label_reverse.get(combo_edge_label.get(), "step")
+            self.options.include_reference_tables = var_inc_ref_tables.get()
+            self.options.include_enlarged_diagrams = var_inc_enlarged_diag.get()
+            self.options.fabric_grain = fg_reverse.get(combo_fabric_grain.get(), "orthogonal")
 
             self.options.mirror_templates = var_mirror_temp.get()
             self.options.mirror_preview = var_mirror_prev.get()
@@ -845,6 +1238,14 @@ class ExportPlugin(inkex.Effect):
                 "sa_in": self.options.sa_in,
                 "spacing_in": self.options.spacing_in,
                 "template_color_mode": self.options.template_color_mode,
+                "swatch_shape": self.options.swatch_shape,
+                "line_weight": self.options.line_weight,
+                "tab_style": self.options.tab_style,
+                "small_pieces_mode": self.options.small_pieces_mode,
+                "edge_label_style": self.options.edge_label_style,
+                "include_reference_tables": self.options.include_reference_tables,
+                "include_enlarged_diagrams": self.options.include_enlarged_diagrams,
+                "fabric_grain": self.options.fabric_grain,
                 "mirror_templates": self.options.mirror_templates,
                 "mirror_preview": self.options.mirror_preview,
                 "wof_draw_scale_pct": self.options.wof_draw_scale_pct,
@@ -917,15 +1318,37 @@ class ExportPlugin(inkex.Effect):
         STYLE_CONFIG["font_size_subtitle"] = f"{theme.type_pt('subtitle')}px"
         STYLE_CONFIG["font_size_header"] = f"{theme.type_pt('heading')}px"
         STYLE_CONFIG["font_size_body"] = f"{theme.type_pt('body')}px"
-        STYLE_CONFIG["font_size_caption"] = f"{theme.type_pt('caption')}px"
-        STYLE_CONFIG["font_size_tiny"] = f"{max(6, theme.type_pt('caption') - 1)}px"
+        STYLE_CONFIG["font_size_caption"] = f"{max(9.5, float(theme.type_pt('caption')))}px"
+        STYLE_CONFIG["font_size_tiny"] = f"{max(9.0, float(theme.type_pt('caption')) - 1.0)}px"
         
-        STYLE_CONFIG["color_dark"] = theme.colour("ink")
-        STYLE_CONFIG["color_mid"] = theme.colour("muted")
-        STYLE_CONFIG["color_light"] = theme.colour("muted")
+        STYLE_CONFIG["color_dark"] = theme.colour("ink") if theme.colour("ink") else "#333333"
+        STYLE_CONFIG["color_mid"] = theme.colour("muted") if theme.colour("muted") else "#555555"
+        STYLE_CONFIG["color_light"] = "#333333"
         STYLE_CONFIG["color_warn"] = theme.colour("warning")
-        STYLE_CONFIG["color_accent"] = theme.colour("accent")
+        STYLE_CONFIG["color_accent"] = theme.colour("accent") if theme.colour("accent") else "#333333"
         STYLE_CONFIG["color_white"] = theme.colour("background")
+
+        lw = getattr(self.options, "line_weight", None)
+        if lw is not None:
+            STYLE_CONFIG["stitch_line_stroke_width"] = float(lw)
+            STYLE_CONFIG["cut_line_stroke_width"] = float(lw)
+        else:
+            STYLE_CONFIG["stitch_line_stroke_width"] = theme.line_weight("stitch_line")
+            STYLE_CONFIG["cut_line_stroke_width"] = theme.line_weight("cut_line")
+
+        STYLE_CONFIG["template_border_stroke_width"] = theme.line_weight("border")
+        STYLE_CONFIG["header_footer_line_stroke_width"] = theme.line_weight("divider")
+
+        if not getattr(self.options, "swatch_shape", None):
+            self.options.swatch_shape = theme.swatch_shape()
+
+        if not getattr(self.options, "tab_style", None):
+            self.options.tab_style = theme.tab_style()
+
+        if not getattr(self.options, "small_pieces_mode", None):
+            self.options.small_pieces_mode = theme.small_pieces_mode()
+
+        self.active_theme_footer_cfg = theme.footer_config()
 
         g, block_data = core.find_fpp_group(self.svg)
         if block_data:
@@ -978,9 +1401,7 @@ class ExportPlugin(inkex.Effect):
         num_steps = len(steps)
         
         # Calculate fit on Page 1
-        pw_pg, ph_pg = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw_pg, ph_pg = ph_pg, pw_pg
+        pw_pg, ph_pg = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin_px = self.options.margin_in * core.PX_PER_INCH
         avail_w = pw_pg - (margin_px * 2)
         avail_h = ph_pg - (margin_px * 2)
@@ -1230,9 +1651,7 @@ class ExportPlugin(inkex.Effect):
         if bad_labels:
             inkex.errormsg(f"WARNING: Invalid labels ignored: {', '.join(bad_labels)}")
 
-        pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw, ph = ph, pw
+        pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
         header_gap = 0.4 * core.PX_PER_INCH
         avail_w, avail_h = pw - (margin * 2), ph - (margin * 2) - (2 * header_gap)
@@ -1374,6 +1793,7 @@ class ExportPlugin(inkex.Effect):
                     "cx": cx,
                     "cy": cy,
                     "best_angle": best_angle,
+                    "is_mirrored": bool(self.options.mirror_templates),
                 }
             )
 
@@ -1398,11 +1818,30 @@ class ExportPlugin(inkex.Effect):
             },
         )
         defs = etree.SubElement(layout_layer, "{%s}defs" % core.SVG_NS)
+        pat = etree.SubElement(
+            defs,
+            "{%s}pattern" % core.SVG_NS,
+            id="crosshatch-pattern",
+            width="8",
+            height="8",
+            patternUnits="userSpaceOnUse",
+        )
+        etree.SubElement(
+            pat,
+            "{%s}path" % core.SVG_NS,
+            d="M 0,0 L 8,8 M 8,0 L 0,8",
+            style="stroke:#999999;stroke-width:0.75;fill:none;",
+        )
 
         namedview = self.svg.find(f".//{{{core.SODIPODI_NS}}}namedview")
-        if namedview is not None:
-            for page_node in namedview.findall(f"{{{core.INKSCAPE_NS}}}page"):
-                namedview.remove(page_node)
+        if namedview is None:
+            namedview = etree.SubElement(
+                self.svg,
+                "{%s}namedview" % core.SODIPODI_NS,
+                id="namedview1",
+            )
+        for page_node in namedview.findall(f"{{{core.INKSCAPE_NS}}}page"):
+            namedview.remove(page_node)
 
         return layout_layer, defs, namedview
 
@@ -1515,9 +1954,7 @@ class ExportPlugin(inkex.Effect):
 
         layout_layer, defs, _ = self._setup_layout_layer()
 
-        pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw, ph = ph, pw
+        pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
         header_gap = 0.4 * core.PX_PER_INCH
         avail_w, avail_h = pw - (margin * 2), ph - (margin * 2) - (2 * header_gap)
@@ -1544,9 +1981,36 @@ class ExportPlugin(inkex.Effect):
         grid_rows = math.ceil(total_pages / MAX_COLUMNS)
         grid_w, grid_h = grid_cols * avail_w, grid_rows * avail_h
 
+        block_name = (self.options.block_name or "Quilt Workspace").strip()
+        export_title = f"{block_name} Workspace" if not block_name.lower().endswith("workspace") else block_name
+        export_filename_svg = f"{export_title}.svg"
+        export_filename_pdf = f"{export_title}.pdf"
+
         self.svg.set("width", f"{grid_w}")
         self.svg.set("height", f"{grid_h}")
         self.svg.set("viewBox", f"0 0 {grid_w} {grid_h}")
+        self.svg.set(f"{{{core.SODIPODI_NS}}}docname", export_filename_svg)
+        self.svg.set(f"{{{core.INKSCAPE_NS}}}export-filename", export_filename_pdf)
+
+        if namedview is not None:
+            namedview.set(f"{{{core.SODIPODI_NS}}}docname", export_filename_svg)
+            namedview.set(f"{{{core.INKSCAPE_NS}}}export-filename", export_filename_pdf)
+
+        if namedview is not None:
+            for pi in range(total_pages):
+                px, py = (pi % MAX_COLUMNS) * (avail_w + spacing_px), (pi // MAX_COLUMNS) * (avail_h + spacing_px)
+                np = etree.SubElement(
+                    namedview,
+                    "{%s}page" % core.INKSCAPE_NS,
+                    id=f"open-canvas-page-{pi + 1}",
+                )
+                np.set("x", str(px))
+                np.set("y", str(py))
+                np.set("width", str(avail_w))
+                np.set("height", str(avail_h))
+                np.set(f"{{{core.INKSCAPE_NS}}}label", str(pi + 1))
+                np.set("margin", "0")
+                np.set("bleed", "0")
 
         if self.options.include_preview:
             px, py = 0, 0
@@ -1741,9 +2205,7 @@ class ExportPlugin(inkex.Effect):
                 "No Open Canvas layout found. Please run '1. Generate Workspace' first."
             )
 
-        pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw, ph = ph, pw
+        pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
         header_gap = 0.4 * core.PX_PER_INCH
         avail_w, avail_h = pw - (margin * 2), ph - (margin * 2) - (2 * header_gap)
@@ -1998,9 +2460,7 @@ class ExportPlugin(inkex.Effect):
                 pages_list.append({"type": "section_map"})
 
         if self.options.include_preview and self.options.include_fabric_estimation:
-            pw_pg, ph_pg = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-            if self.options.orientation == "landscape":
-                pw_pg, ph_pg = ph_pg, pw_pg
+            pw_pg, ph_pg = get_page_dimensions(self.options.page_size, self.options.orientation)
             pages_list.extend(self._fabric_pages_for_size(
                 block_data, base_size, pw_pg, ph_pg,
                 self.options.margin_in * core.PX_PER_INCH))
@@ -2034,6 +2494,20 @@ class ExportPlugin(inkex.Effect):
         g, block_data, base_sections = self._get_processed_sections(self.options.finished_size_in, allow_rotate=True)
         if not base_sections:
             return
+
+        # Section re-print & selective export handling
+        raw_sel = (getattr(self.options, "select_sections", "") or "").strip().upper()
+        sel_set = set(s.strip() for s in re.split(r"[,; ]+", raw_sel) if s.strip())
+        is_reprint = bool(getattr(self.options, "reprint_mode", False)) or len(sel_set) > 0
+
+        if sel_set:
+            base_sections = [sec for sec in base_sections if sec["prefix"].upper() in sel_set]
+
+        if is_reprint:
+            self.options.include_preview = False
+            self.options.separate_section_alignment_image = False
+            self.options.include_fabric_estimation = False
+            self.options.include_colouring_page = False
 
         # Resolve sizing (Use canvas size if <= 0.0)
         base_size = self.options.finished_size_in
@@ -2084,9 +2558,7 @@ class ExportPlugin(inkex.Effect):
             if self.options.separate_section_alignment_image:
                 pages_list.append({"type": "section_map"})
 
-        pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw, ph = ph, pw
+        pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
         header_gap = 0.4 * core.PX_PER_INCH
         avail_w = pw - (margin * 2)
@@ -2104,11 +2576,13 @@ class ExportPlugin(inkex.Effect):
             g_sz, _, sections = self._get_processed_sections(sz, allow_rotate=True)
             if sections is None:
                 continue
+            if sel_set:
+                sections = [sec for sec in sections if sec["prefix"].upper() in sel_set]
 
             size_items = []
             global_tab_counter = 1
 
-            if sz != base_size or bool(getattr(self.options, "include_pattern_test_square", False)):
+            if sz != base_size or bool(getattr(self.options, "include_pattern_test_square", False)) or is_reprint:
                 size_items.append({
                     "prefix": "CAL",
                     "part_str": "",
@@ -2128,6 +2602,36 @@ class ExportPlugin(inkex.Effect):
                     "sa_poly": [],
                     "regions": [],
                 })
+
+            # Detail Key Table tiles (Smart Packed inline with section templates)
+            dk_style = getattr(self.options, "detail_key_style", "table")
+            dk_place = getattr(self.options, "detail_key_placement", "inline")
+            inc_ref_tbl = getattr(self.options, "include_reference_tables", True)
+            if inc_ref_tbl and dk_style == "table" and (dk_place == "inline" or is_reprint):
+                needing_keys = self._detect_sections_needing_detail_key(block_data, sz, sel_set=sel_set)
+                for sec in sections:
+                    sec_pfx = sec["prefix"].upper()
+                    if is_reprint or sec_pfx in needing_keys or len(sections) <= 6:
+                        matching_regions = [r for r in block_data.tree.leaf_regions() if r.label and re.match(fr"^{re.escape(sec_pfx)}\d+$", r.label, re.IGNORECASE)]
+                        if matching_regions:
+                            n_pcs = len(matching_regions)
+                            tbl_w = 180.0
+                            tbl_h = 24.0 + (n_pcs * 18.0) + 10.0
+                            size_items.append({
+                                "prefix": f"TBL_{sec_pfx}",
+                                "sec_prefix": sec_pfx,
+                                "part_str": "",
+                                "type": "table_tile",
+                                "T_w": tbl_w,
+                                "T_h": tbl_h,
+                                "core_w": tbl_w,
+                                "core_h": tbl_h,
+                                "pad_l": 0, "pad_r": 0, "pad_t": 0, "pad_b": 0,
+                                "inner_transform": "",
+                                "right_glue": None, "left_align": None,
+                                "bottom_glue": None, "top_align": None,
+                                "sa_poly": [], "regions": [],
+                            })
 
             # HST sewing-line templates: one printable square per unique
             # 2-at-a-time HST size (draw two seams, cut on the diagonal).
@@ -2343,7 +2847,7 @@ class ExportPlugin(inkex.Effect):
             # upright and is pinned to the first page of its size.
             nest_inputs = []
             for item in size_items:
-                if item["prefix"] in ("CAL", "HST"):
+                if item["prefix"] in ("CAL", "HST") or item["prefix"].startswith("TBL_"):
                     hull = [(0.0, 0.0), (item["T_w"], 0.0), (item["T_w"], item["T_h"]), (0.0, item["T_h"])]
                     rots = [0.0]
                 elif item["part_str"]:
@@ -2420,6 +2924,11 @@ class ExportPlugin(inkex.Effect):
                 item["size"] = sz
                 all_packed_items.append(item)
 
+            sections_needing_key = self._detect_sections_needing_detail_key(block_data, sz, sel_set=sel_set)
+            inc_diag = getattr(self.options, "include_enlarged_diagrams", False)
+            if inc_diag and sections_needing_key:
+                pages_list.append({"type": "enlarged_detail_key", "sections": sorted(list(sections_needing_key)), "size": sz})
+
         if self.options.include_colouring_page:
             pages_list.append({"type": "colouring"})
 
@@ -2429,6 +2938,187 @@ class ExportPlugin(inkex.Effect):
         
 
         pass
+
+    def _detect_sections_needing_detail_key(self, block_data, sz, sel_set=None):
+        scale = quilttools_fpp_fabric._block_scale(block_data, sz)
+        if not scale:
+            return set()
+        
+        valid_sections = {}
+        for r in block_data.tree.leaf_regions():
+            match = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)(\d+)$", r.label or "")
+            if match:
+                sec = match.group(1).upper()
+                if sel_set and sec not in sel_set:
+                    continue
+                valid_sections.setdefault(sec, []).append(r)
+                
+        sp_mode = getattr(self.options, "small_pieces_mode", "fill")
+        area_thresh = 0.18 if sp_mode == "fill" else 0.35
+        side_thresh = 0.28 if sp_mode == "fill" else 0.40
+
+        needing_key = set()
+        for sec, regions in valid_sections.items():
+            for r in regions:
+                sc_poly = [(p[0] * scale, p[1] * scale) for p in r.polygon]
+                min_x = min(p[0] for p in sc_poly)
+                max_x = max(p[0] for p in sc_poly)
+                min_y = min(p[1] for p in sc_poly)
+                max_y = max(p[1] for p in sc_poly)
+                w_in = (max_x - min_x) / core.PX_PER_INCH
+                h_in = (max_y - min_y) / core.PX_PER_INCH
+                area_in2 = abs(core.polygon_area(sc_poly)) / (core.PX_PER_INCH * core.PX_PER_INCH)
+                
+                # Flag if piece area or min side falls below threshold for label fit
+                if area_in2 < area_thresh or min(w_in, h_in) < side_thresh:
+                    needing_key.add(sec)
+                    break
+        return needing_key
+
+    def _draw_enlarged_detail_keys(self, layout_layer, panel_x, panel_y, avail_w, avail_h, block_data, sz, sec_list, user_colors, color_codes):
+        scale_1x = quilttools_fpp_fabric._block_scale(block_data, sz)
+        if not scale_1x:
+            return
+        scale_2x = scale_1x * 2.0  # 2.0x Scale (200% zoom)
+        
+        valid_sections = {}
+        for r in block_data.tree.leaf_regions():
+            match = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)(\d+)$", r.label or "")
+            if match:
+                sec = match.group(1).upper()
+                valid_sections.setdefault(sec, []).append((int(match.group(2)), r))
+                
+        curr_y = panel_y
+        color_mode = block_data.prefs.get("color_mode", "piece")
+        
+        for sec in sec_list:
+            if sec not in valid_sections:
+                continue
+            valid_sections[sec].sort(key=lambda x: x[0])
+            regions = [x[1] for x in valid_sections[sec]]
+            
+            # Compute 2.0x scaled section polygon coordinates
+            sec_polys = []
+            for r in regions:
+                poly_2x = [(pt[0] * scale_2x, pt[1] * scale_2x) for pt in r.polygon]
+                sec_polys.append((r, poly_2x))
+                
+            all_pts = [p for _, poly in sec_polys for p in poly]
+            min_x, max_x = min(p[0] for p in all_pts), max(p[0] for p in all_pts)
+            min_y, max_y = min(p[1] for p in all_pts), max(p[1] for p in all_pts)
+            sec_w, sec_h = max_x - min_x, max_y - min_y
+            
+            if curr_y + sec_h + 40.0 > panel_y + avail_h:
+                # Stop if exceeding vertical page bounds
+                break
+                
+            etree.SubElement(
+                layout_layer,
+                "{%s}text" % core.SVG_NS,
+                x=str(panel_x),
+                y=str(curr_y + 14),
+                style=f"font-size:{STYLE_CONFIG['font_size_header']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+            ).text = f"Section {sec} (2.0x Scale Detail Key)"
+            
+            curr_y += 24.0
+            
+            tx = panel_x - min_x
+            ty = curr_y - min_y
+            
+            sec_g = etree.SubElement(
+                layout_layer,
+                "{%s}g" % core.SVG_NS,
+                id=f"enlarged-key-sec-{sec}",
+                transform=f"translate({tx:.2f}, {ty:.2f})"
+            )
+            
+            for r, poly in sec_polys:
+                d_str = "M {:.4f},{:.4f} ".format(*poly[0]) + " ".join("L {:.4f},{:.4f}".format(*p) for p in poly[1:]) + " Z"
+                
+                fill_color = user_colors.get(str(r.id)) or user_colors.get(r.id)
+                if not fill_color:
+                    fill_color = core.get_color_for_label(r.label, color_mode, 0)
+                    
+                etree.SubElement(
+                    sec_g,
+                    "{%s}path" % core.SVG_NS,
+                    d=d_str,
+                    style=f"fill:{fill_color};fill-opacity:0.35;stroke:#333333;stroke-width:1.5;stroke-linejoin:round;",
+                )
+                
+                cx, cy = core.polygon_centroid(poly)
+                c_code = color_codes.get(fill_color, "")
+                dk_style = getattr(self.options, "detail_key_style", "table")
+                if dk_style == "table":
+                    lbl_text = r.label
+                else:
+                    lbl_text = f"{r.label} [{c_code}]" if c_code else r.label
+                
+                etree.SubElement(
+                    sec_g,
+                    "{%s}text" % core.SVG_NS,
+                    x=f"{cx:.2f}",
+                    y=f"{cy:.2f}",
+                    style=f"font-size:11px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
+                ).text = lbl_text
+
+            if getattr(self.options, "detail_key_style", "table") == "table":
+                tbl_x = panel_x + sec_w + 35.0
+                tbl_y = curr_y - 6.0
+                if tbl_x + 180.0 <= panel_x + avail_w:
+                    tbl_g = etree.SubElement(layout_layer, "{%s}g" % core.SVG_NS, id=f"enlarged-key-tbl-{sec}")
+                    n_pcs = len(regions)
+                    tbl_h = 24.0 + (n_pcs * 18.0) + 10.0
+                    etree.SubElement(
+                        tbl_g, "{%s}rect" % core.SVG_NS,
+                        x=str(tbl_x), y=str(tbl_y),
+                        width="180", height=str(tbl_h),
+                        rx="4", ry="4",
+                        style=f"fill:#ffffff;stroke:{STYLE_CONFIG['color_mid']};stroke-width:1.0;",
+                    )
+                    etree.SubElement(
+                        tbl_g, "{%s}rect" % core.SVG_NS,
+                        x=str(tbl_x), y=str(tbl_y),
+                        width="180", height="22",
+                        rx="4", ry="4",
+                        style=f"fill:{STYLE_CONFIG['color_light']};stroke:none;",
+                    )
+                    etree.SubElement(
+                        tbl_g, "{%s}text" % core.SVG_NS,
+                        x=str(tbl_x + 8), y=str(tbl_y + 14),
+                        style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = f"Section {sec} Reference Table"
+
+                    row_y = tbl_y + 36.0
+                    for idx, r in enumerate(regions):
+                        fill_col = user_colors.get(str(r.id)) or user_colors.get(r.id)
+                        if not fill_col:
+                            fill_col = core.get_color_for_label(r.label, color_mode, 0)
+                        c_code = color_codes.get(fill_col, "")
+                        
+                        etree.SubElement(
+                            tbl_g, "{%s}text" % core.SVG_NS,
+                            x=str(tbl_x + 10), y=str(row_y),
+                            style=f"font-size:9.5px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                        ).text = r.label
+
+                        etree.SubElement(
+                            tbl_g, "{%s}rect" % core.SVG_NS,
+                            x=str(tbl_x + 62), y=str(row_y - 9),
+                            width="16", height="12", rx="2", ry="2",
+                            style=f"fill:{fill_col};stroke:#333333;stroke-width:0.75;",
+                        )
+
+                        if c_code:
+                            etree.SubElement(
+                                tbl_g, "{%s}text" % core.SVG_NS,
+                                x=str(tbl_x + 90), y=str(row_y),
+                                style=f"font-size:9px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};",
+                            ).text = f"[{c_code}]"
+
+                        row_y += 18.0
+                
+            curr_y += sec_h + 25.0
 
     def _draw_assembly_and_legend(self, layout_layer, panel_x, panel_y, block_data, side_by_side=False, right_col_x=None):
         steps, has_sewing_warning = core.calculate_section_sewing_order(block_data)
@@ -2555,14 +3245,16 @@ class ExportPlugin(inkex.Effect):
             code = color_codes.get(c_hex, "FAB")
             count = sum(1 for c in all_colors if c == c_hex)
             
-            etree.SubElement(
+            draw_swatch_shape(
                 layout_layer,
-                "{%s}rect" % core.SVG_NS,
-                x=str(item_x),
-                y=str(item_y - 10),
-                width="24",
-                height="12",
-                style=f"fill:{c_hex};stroke:#666666;stroke-width:0.5;",
+                getattr(self.options, "swatch_shape", "rectangle"),
+                item_x,
+                item_y - 10,
+                24,
+                12,
+                c_hex,
+                stroke_color="#666666",
+                stroke_width="0.5"
             )
             etree.SubElement(
                 layout_layer,
@@ -2744,14 +3436,16 @@ class ExportPlugin(inkex.Effect):
             
         row_y = header_y + 30
         for est in fabric_estimates:
-            etree.SubElement(
+            draw_swatch_shape(
                 layout_layer,
-                "{%s}rect" % core.SVG_NS,
-                x=str(table_x),
-                y=str(row_y - 10),
-                width="35",
-                height="14",
-                style=f"fill:{est['color']};stroke:#999999;stroke-width:0.5;",
+                getattr(self.options, "swatch_shape", "rectangle"),
+                table_x,
+                row_y - 10,
+                35,
+                14,
+                est['color'],
+                stroke_color="#999999",
+                stroke_width="0.5"
             )
             etree.SubElement(
                 layout_layer,
@@ -2962,7 +3656,37 @@ class ExportPlugin(inkex.Effect):
         mode paginates the row stream instead of truncating, and the
         optional cutting layout map gets its own paginated page(s)."""
         if self.options.export_type != "template":
-            return [{"type": "fabric_requirements", "size": sz}]
+            pages = [{"type": "fabric_requirements", "size": sz}]
+            if self.options.visualize_fabric_layout:
+                fabric_estimates = quilttools_fpp_fabric.calculate_fabric_requirements(
+                    block_data, sz, self.options.wof_in, options=self._cutplan_options())
+                table_h = 140.0 + len(fabric_estimates) * 24.0
+                remaining = (ph - 2 * margin) - table_h - 30.0
+                map_w = (pw - 2 * margin) * (self.options.wof_draw_scale_pct / 100.0)
+                heights = quilttools_fpp_fabric.estimate_fabric_layout_map_heights(
+                    fabric_estimates, self.options.wof_in, map_w, block_data, sz, options=self._cutplan_options())
+                total_map_h = sum(heights.values())
+                if heights and total_map_h <= remaining:
+                    pages[0]["map_inline"] = True
+                    pages[0]["map_w"] = map_w
+                elif heights:
+                    avail = ph - 2 * margin - 120
+                    groups, cur, cur_h = [], [], 0.0
+                    for fab, h in heights.items():
+                        if cur and cur_h + h > avail:
+                            groups.append(cur)
+                            cur, cur_h = [], 0.0
+                        cur.append(fab)
+                        cur_h += h
+                    if cur:
+                        groups.append(cur)
+                    for k, fabs in enumerate(groups):
+                        pages.append({"type": "cutting_map", "size": sz,
+                                      "fabrics": fabs, "chunk": k,
+                                      "nchunks": len(groups), "map_w": map_w,
+                                      "mode": "fpp"})
+            return pages
+
         rows = self._cutting_plan_rows(block_data, sz)
         rows_pp = max(18, int((ph - 2 * margin - 130) / 13.0))
         n = max(1, math.ceil(len(rows) / rows_pp)) if rows else 1
@@ -2974,9 +3698,6 @@ class ExportPlugin(inkex.Effect):
             map_w = (pw - 2 * margin) * (self.options.wof_draw_scale_pct / 100.0)
             heights = quilttools_fpp_fabric.estimate_map_heights(
                 req["plan"], self.options.wof_in, map_w)
-            # Simple blocks: tuck the whole map under the last page of
-            # instructions when it fits in the leftover space; only spill
-            # onto dedicated map page(s) when it genuinely cannot fit.
             rows_last = len(rows) - (n - 1) * rows_pp
             remaining = (ph - 2 * margin - 130) - rows_last * 13.0 - 30.0
             total_map_h = sum(heights.values())
@@ -2997,7 +3718,8 @@ class ExportPlugin(inkex.Effect):
                 for k, fabs in enumerate(groups):
                     pages.append({"type": "cutting_map", "size": sz,
                                   "fabrics": fabs, "chunk": k,
-                                  "nchunks": len(groups), "map_w": map_w})
+                                  "nchunks": len(groups), "map_w": map_w,
+                                  "mode": "template"})
         return pages
 
     def _render_cutting_plan_page(self, layout_layer, px, py, pw, ph, margin,
@@ -3025,11 +3747,16 @@ class ExportPlugin(inkex.Effect):
                 y += 6
                 continue
             if row["fab"]:
-                etree.SubElement(
-                    layout_layer, "{%s}rect" % core.SVG_NS,
-                    x=str(px + margin), y=str(y - 9), width="26",
-                    height="11",
-                    style=f"fill:{row['fab']};stroke:#999999;stroke-width:0.5;",
+                draw_swatch_shape(
+                    layout_layer,
+                    getattr(self.options, "swatch_shape", "rectangle"),
+                    px + margin,
+                    y - 9,
+                    26,
+                    11,
+                    row['fab'],
+                    stroke_color="#999999",
+                    stroke_width="0.5"
                 )
             etree.SubElement(
                 layout_layer, "{%s}text" % core.SVG_NS,
@@ -3111,9 +3838,7 @@ class ExportPlugin(inkex.Effect):
     def _render_pdf_pages(self, packable_items, pages_list, parent, block_data):
         layout_layer, defs, namedview = self._setup_layout_layer()
 
-        pw, ph = PAGE_SIZES.get(self.options.page_size, PAGE_SIZES["letter"])
-        if self.options.orientation == "landscape":
-            pw, ph = ph, pw
+        pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
         header_gap = 0.4 * core.PX_PER_INCH
         avail_w = pw - (margin * 2)
@@ -3125,11 +3850,21 @@ class ExportPlugin(inkex.Effect):
         grid_rows = math.ceil(total_pages / MAX_COLUMNS)
         grid_w, grid_h = grid_cols * pw + (grid_cols - 1) * margin, grid_rows * ph + (grid_rows - 1) * margin
 
-        # Set root SVG size to match Page 1 size. This prevents Inkscape's PDF export
-        # from making Page 1 double-width (matching the overall grid size).
+        block_name = (self.options.block_name or "Quilt Pattern").strip()
+        export_title = f"{block_name} Pattern" if not block_name.lower().endswith("pattern") else block_name
+        export_filename_svg = f"{export_title}.svg"
+        export_filename_pdf = f"{export_title}.pdf"
+
+        # Set root SVG size and export filename attributes
         self.svg.set("width", f"{pw}")
         self.svg.set("height", f"{ph}")
         self.svg.set("viewBox", f"0 0 {pw} {ph}")
+        self.svg.set(f"{{{core.SODIPODI_NS}}}docname", export_filename_svg)
+        self.svg.set(f"{{{core.INKSCAPE_NS}}}export-filename", export_filename_pdf)
+
+        if namedview is not None:
+            namedview.set(f"{{{core.SODIPODI_NS}}}docname", export_filename_svg)
+            namedview.set(f"{{{core.INKSCAPE_NS}}}export-filename", export_filename_pdf)
 
         page_offsets = {}
         for pi in range(total_pages):
@@ -3147,6 +3882,9 @@ class ExportPlugin(inkex.Effect):
                 np.set("y", str(py))
                 np.set("width", str(pw))
                 np.set("height", str(ph))
+                np.set(f"{{{core.INKSCAPE_NS}}}label", str(pi + 1))
+                np.set("margin", "0")
+                np.set("bleed", "0")
                 
             etree.SubElement(
                 layout_layer,
@@ -3157,9 +3895,22 @@ class ExportPlugin(inkex.Effect):
                 height=str(ph),
                 style="fill:#ffffff;stroke:#dddddd;stroke-width:1.0;",
             )
-            if bool(getattr(self.options, "show_page_boundaries", True)):
+
+        if bool(getattr(self.options, "show_page_boundaries", True)):
+            bounds_g = etree.SubElement(
+                layout_layer,
+                "{%s}g" % core.SVG_NS,
+                id="page-boundaries-layer",
+                **{
+                    f"{{{core.INKSCAPE_NS}}}label": "Printable Page Boundaries",
+                    f"{{{core.INKSCAPE_NS}}}groupmode": "layer",
+                    "style": "display:inline;",
+                },
+            )
+            for pi in range(total_pages):
+                px, py = page_offsets[pi]
                 etree.SubElement(
-                    layout_layer,
+                    bounds_g,
                     "{%s}rect" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin),
@@ -3168,7 +3919,7 @@ class ExportPlugin(inkex.Effect):
                     style="fill:none;stroke:#0000ff;stroke-width:1.5;stroke-dasharray:8,8;",
                 )
                 etree.SubElement(
-                    layout_layer,
+                    bounds_g,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
                     y=str(py + margin - 10),
@@ -3193,63 +3944,112 @@ class ExportPlugin(inkex.Effect):
             px, py = page_offsets[pi]
             p_type = page_info["type"]
             
+            footer_cfg = getattr(self, "active_theme_footer_cfg", {})
+            show_h_divider = footer_cfg.get("show_header_divider", True)
+            show_f_divider = footer_cfg.get("show_footer_divider", True)
+            show_designer = footer_cfg.get("show_designer", True)
+            show_copyright = footer_cfg.get("show_copyright", True)
+            show_page_num = footer_cfg.get("show_page_numbers", True)
+            custom_footer_txt = footer_cfg.get("footer_text_custom", "")
+
             if p_type != "cover":
-                header_y = py + margin + header_gap / 2
-                sz_lbl = f"  |  Size: {page_info['size']:.1f}\"" if "size" in page_info else ""
+                top_header_y = py + margin + (header_gap / 2) - 2
+                hdr_title = self.options.block_name or "Quilt Block Pattern"
+                if "size" in page_info and footer_cfg.get("show_block_size", True):
+                    hdr_title += f" ({page_info['size']:.1f}\")"
+                
+                raw_sel = (getattr(self.options, "select_sections", "") or "").strip()
+                if getattr(self.options, "reprint_mode", False) or raw_sel:
+                    if raw_sel:
+                        hdr_title += f" — Section {raw_sel} Re-Print"
+                    else:
+                        hdr_title += " — Re-Print"
+                
                 etree.SubElement(
                     layout_layer,
                     "{%s}text" % core.SVG_NS,
                     x=str(px + margin),
-                    y=str(header_y),
-                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_mid']};",
-                ).text = f"{self.options.block_name}{sz_lbl}"
-                
-                etree.SubElement(
-                    layout_layer,
-                    "{%s}line" % core.SVG_NS,
-                    x1=str(px + margin),
-                    y1=str(py + margin + header_gap - 5),
-                    x2=str(px + pw - margin),
-                    y2=str(py + margin + header_gap - 5),
-                    style=f"stroke:{STYLE_CONFIG['header_footer_line_stroke']};stroke-width:{STYLE_CONFIG['header_footer_line_stroke_width']};",
-                )
+                    y=str(top_header_y),
+                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                ).text = hdr_title
+
+                if show_designer and self.options.designer_name:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(px + pw - margin),
+                        y=str(top_header_y),
+                        style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};text-anchor:end;fill:{STYLE_CONFIG['color_mid']};",
+                    ).text = f"Designed by: {self.options.designer_name}"
+
+                if show_h_divider:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}line" % core.SVG_NS,
+                        x1=str(px + margin),
+                        y1=str(py + margin + header_gap - 5),
+                        x2=str(px + pw - margin),
+                        y2=str(py + margin + header_gap - 5),
+                        style=f"stroke:{STYLE_CONFIG['header_footer_line_stroke']};stroke-width:{STYLE_CONFIG['header_footer_line_stroke_width']};",
+                    )
                 
                 footer_y = py + ph - margin - header_gap / 2
-                credit_str = f"Designed by: {self.options.designer_name}" if self.options.designer_name else "FPP Pattern"
-                etree.SubElement(
-                    layout_layer,
-                    "{%s}text" % core.SVG_NS,
-                    x=str(px + margin),
-                    y=str(footer_y + 4),
-                    style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_light']};",
-                ).text = f"{credit_str}  |  {self.options.copyright_notice}"
+                credit_parts = []
+                if show_designer and self.options.designer_name:
+                    credit_parts.append(f"Designed by: {self.options.designer_name}")
+                elif not show_designer and not custom_footer_txt:
+                    credit_parts.append("FPP Pattern")
+
+                block_info = self.options.block_name
+                if "size" in page_info and footer_cfg.get("show_block_size", True):
+                    block_info += f" ({page_info['size']:.1f}\")"
+                credit_parts.append(block_info)
+
+                if custom_footer_txt:
+                    credit_parts.append(custom_footer_txt)
+
+                if show_copyright and self.options.copyright_notice:
+                    credit_parts.append(self.options.copyright_notice)
+
+                footer_str = "  |  ".join(credit_parts)
+                if footer_str:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(px + margin),
+                        y=str(footer_y + 4),
+                        style=f"font-size:{STYLE_CONFIG['font_size_tiny']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = footer_str
                 
-                etree.SubElement(
-                    layout_layer,
-                    "{%s}text" % core.SVG_NS,
-                    x=str(px + pw - margin),
-                    y=str(footer_y + 4),
-                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:end;fill:{STYLE_CONFIG['color_mid']};",
-                ).text = f"Page {pi + 1} of {total_pages}"
+                if show_page_num:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(px + pw - margin),
+                        y=str(footer_y + 4),
+                        style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:end;fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = f"Page {pi + 1} of {total_pages}"
                 
-                etree.SubElement(
-                    layout_layer,
-                    "{%s}line" % core.SVG_NS,
-                    x1=str(px + margin),
-                    y1=str(py + ph - margin - header_gap + 5),
-                    x2=str(px + pw - margin),
-                    y2=str(py + ph - margin - header_gap + 5),
-                    style="stroke:#dddddd;stroke-width:0.5;",
-                )
+                if show_f_divider:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}line" % core.SVG_NS,
+                        x1=str(px + margin),
+                        y1=str(py + ph - margin - header_gap + 5),
+                        x2=str(px + pw - margin),
+                        y2=str(py + ph - margin - header_gap + 5),
+                        style=f"stroke:{STYLE_CONFIG['header_footer_line_stroke']};stroke-width:{STYLE_CONFIG['header_footer_line_stroke_width']};",
+                    )
             else:
                 footer_y = py + ph - margin - header_gap / 2
-                etree.SubElement(
-                    layout_layer,
-                    "{%s}text" % core.SVG_NS,
-                    x=str(px + pw - margin),
-                    y=str(footer_y + 4),
-                    style="font-size:10px;font-family:sans-serif;font-weight:bold;text-anchor:end;fill:#666666;",
-                ).text = f"Page {pi + 1} of {total_pages}"
+                if show_page_num:
+                    etree.SubElement(
+                        layout_layer,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(px + pw - margin),
+                        y=str(footer_y + 4),
+                        style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:end;fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = f"Page {pi + 1} of {total_pages}"
             
             if p_type == "cover":
                 sizes_list = page_info["sizes"]
@@ -3468,17 +4268,19 @@ class ExportPlugin(inkex.Effect):
                         block_data, sz, self.options.wof_in, options=self._cutplan_options())
                     end_table_y = self._render_fabric_table(layout_layer, px, py, pw, margin, fabric_estimates, color_codes)
 
-                    if self.options.visualize_fabric_layout:
+                    if self.options.visualize_fabric_layout and page_info.get("map_inline"):
                         quilttools_fpp_fabric.draw_fabric_layout_map(
-                            layout_layer, px + margin, end_table_y + 30, avail_w,
+                            layout_layer, px + margin, end_table_y + 30, page_info.get("map_w", avail_w),
                             block_data, sz, self.options.wof_in, color_codes,
-                            options=self._cutplan_options()
+                            options=self._cutplan_options(),
+                            max_height=py + ph - margin - end_table_y - 40
                         )
 
             elif p_type == "cutting_map":
                 sz = page_info["size"]
                 chunk = page_info.get("chunk", 0)
                 nchunks = page_info.get("nchunks", 1)
+                mode = page_info.get("mode", self.options.export_type)
                 cont = (f" - page {chunk + 1} of {nchunks}"
                         if nchunks > 1 else "")
                 etree.SubElement(
@@ -3494,15 +4296,51 @@ class ExportPlugin(inkex.Effect):
                     x=str(px + margin),
                     y=str(py + margin + 55),
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
-                ).text = (f"Each bar is a WOF strip ({self.options.wof_in:.1f}\" usable width); "
-                          "shapes show the subcuts at scale.")
-                req = self._template_req(block_data, sz)
-                quilttools_fpp_fabric.draw_cutting_plan_map(
-                    layout_layer, px + margin, py + margin + 90,
-                    page_info.get("map_w", avail_w * (self.options.wof_draw_scale_pct / 100.0)), req["plan"],
-                    self.options.wof_in, color_codes,
-                    max_height=ph - 2 * margin - 120,
-                    fabrics=set(page_info.get("fabrics") or []))
+                ).text = (f"Each bar represents the fabric cut (length × width); "
+                          "shapes show subcuts at scale.")
+                if mode == "fpp":
+                    quilttools_fpp_fabric.draw_fabric_layout_map(
+                        layout_layer, px + margin, py + margin + 90,
+                        page_info.get("map_w", avail_w * (self.options.wof_draw_scale_pct / 100.0)),
+                        block_data, sz, self.options.wof_in, color_codes,
+                        options=self._cutplan_options(),
+                        max_height=ph - 2 * margin - 120,
+                        fabrics=set(page_info.get("fabrics") or [])
+                    )
+                else:
+                    req = self._template_req(block_data, sz)
+                    quilttools_fpp_fabric.draw_cutting_plan_map(
+                        layout_layer, px + margin, py + margin + 90,
+                        page_info.get("map_w", avail_w * (self.options.wof_draw_scale_pct / 100.0)), req["plan"],
+                        self.options.wof_in, color_codes,
+                        max_height=ph - 2 * margin - 120,
+                        fabrics=set(page_info.get("fabrics") or []))
+
+            elif p_type == "enlarged_detail_key":
+                sz = page_info.get("size", self.options.finished_size_in)
+                sec_list = page_info.get("sections", [])
+                sec_str = ", ".join(sec_list)
+                
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin + 30),
+                    style=f"font-size:{STYLE_CONFIG['font_size_subtitle']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                ).text = f"Enlarged Detail Key — 200% Scale ({sz:.1f}\" Block)"
+                
+                etree.SubElement(
+                    layout_layer,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(px + margin),
+                    y=str(py + margin + 55),
+                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
+                ).text = f"Section(s) {sec_str} contain small pieces. Drawn at 2.0x scale (200%) below for label & sewing clarity:"
+                
+                self._draw_enlarged_detail_keys(
+                    layout_layer, px + margin, py + margin + 80, avail_w, avail_h - 100,
+                    block_data, sz, sec_list, user_colors, color_codes
+                )
 
             elif p_type == "colouring":
                 etree.SubElement(
@@ -3562,16 +4400,97 @@ class ExportPlugin(inkex.Effect):
                     sq_g,
                     "{%s}text" % core.SVG_NS,
                     x=str(sq_abs_x + 48.0),
-                    y=str(sq_abs_y + 42.0),
-                    style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_black']};",
-                ).text = "1 in x 1 in"
+                    y=str(sq_abs_y + 26.0),
+                    style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_black']};",
+                ).text = "1\" x 1\""
                 etree.SubElement(
                     sq_g,
                     "{%s}text" % core.SVG_NS,
                     x=str(sq_abs_x + 48.0),
-                    y=str(sq_abs_y + 62.0),
-                    style=f"font-size:{STYLE_CONFIG['font_size_caption']};font-family:{STYLE_CONFIG['font_family']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_mid']};",
-                ).text = "Measure to verify scale"
+                    y=str(sq_abs_y + 42.0),
+                    style=f"font-size:9.5px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_black']};",
+                ).text = "Test Square"
+                etree.SubElement(
+                    sq_g,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(sq_abs_x + 48.0),
+                    y=str(sq_abs_y + 60.0),
+                    style=f"font-size:7.5px;font-family:{STYLE_CONFIG['font_family']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_mid']};",
+                ).text = "Measure to verify"
+                etree.SubElement(
+                    sq_g,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(sq_abs_x + 48.0),
+                    y=str(sq_abs_y + 74.0),
+                    style=f"font-size:7.5px;font-family:{STYLE_CONFIG['font_family']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['color_mid']};",
+                ).text = "100% scale"
+                continue
+
+            if item["prefix"].startswith("TBL_"):
+                sec_pfx = item.get("sec_prefix", item["prefix"].replace("TBL_", ""))
+                tbl_x = page_offset_x + margin + item["page_x"]
+                tbl_y = page_offset_y + margin + header_gap + item["page_y"]
+                tbl_g = etree.SubElement(layout_layer, "{%s}g" % core.SVG_NS, id=f"table-tile-{sec_pfx}-{item['target_page']}")
+                
+                etree.SubElement(
+                    tbl_g,
+                    "{%s}rect" % core.SVG_NS,
+                    x=str(tbl_x), y=str(tbl_y),
+                    width=str(item["T_w"]), height=str(item["T_h"]),
+                    rx="4", ry="4",
+                    style=f"fill:#ffffff;stroke:{STYLE_CONFIG['color_mid']};stroke-width:1.0;",
+                )
+                etree.SubElement(
+                    tbl_g,
+                    "{%s}rect" % core.SVG_NS,
+                    x=str(tbl_x), y=str(tbl_y),
+                    width=str(item["T_w"]), height="22",
+                    rx="4", ry="4",
+                    style=f"fill:{STYLE_CONFIG['color_light']};stroke:none;",
+                )
+                etree.SubElement(
+                    tbl_g,
+                    "{%s}text" % core.SVG_NS,
+                    x=str(tbl_x + 8), y=str(tbl_y + 14),
+                    style=f"font-size:10px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                ).text = f"Section {sec_pfx} Reference"
+
+                matching_regions = sorted(
+                    [r for r in block_data.tree.leaf_regions() if r.label and re.match(fr"^{sec_pfx}\d+$", r.label, re.IGNORECASE)],
+                    key=lambda r: int(re.search(r"\d+", r.label).group()) if re.search(r"\d+", r.label) else 0
+                )
+                
+                row_y = tbl_y + 36.0
+                for idx, r in enumerate(matching_regions):
+                    col_hex = user_colors.get(str(r.id)) or user_colors.get(r.id)
+                    if not col_hex:
+                        col_hex = core.get_color_for_label(r.label, color_mode, idx)
+                    c_code = color_codes.get(col_hex, "")
+
+                    etree.SubElement(
+                        tbl_g,
+                        "{%s}text" % core.SVG_NS,
+                        x=str(tbl_x + 10), y=str(row_y),
+                        style=f"font-size:9.5px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;fill:{STYLE_CONFIG['color_dark']};",
+                    ).text = r.label
+
+                    etree.SubElement(
+                        tbl_g,
+                        "{%s}rect" % core.SVG_NS,
+                        x=str(tbl_x + 62), y=str(row_y - 9),
+                        width="16", height="12", rx="2", ry="2",
+                        style=f"fill:{col_hex};stroke:#333333;stroke-width:0.75;",
+                    )
+
+                    if c_code:
+                        etree.SubElement(
+                            tbl_g,
+                            "{%s}text" % core.SVG_NS,
+                            x=str(tbl_x + 90), y=str(row_y),
+                            style=f"font-size:9px;font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};",
+                        ).text = f"[{c_code}]"
+
+                    row_y += 18.0
                 continue
 
             if item["prefix"] == "HST":
@@ -3710,6 +4629,8 @@ class ExportPlugin(inkex.Effect):
             if self.options.export_type == "template" and \
                     len(item["regions"]) == 1:
                 self._draw_template_edge_labels(shift_g, item["sa_poly"])
+            else:
+                self._draw_inter_section_edge_labels(shift_g, item, block_data)
 
             for idx, r in enumerate(item["regions"]):
                 r_d = (
@@ -3735,7 +4656,8 @@ class ExportPlugin(inkex.Effect):
                     # Combined template covering several fabrics: print it
                     # uncoloured - fabric placement is on the layout page.
                     mode = "none"
-                if mode == "full" or (mode == "tag" and is_too_small):
+                sp_mode = getattr(self.options, "small_pieces_mode", "fill")
+                if mode == "full" or (mode == "tag" and is_too_small and sp_mode == "fill"):
                     fill_col = assigned_col
                 else:
                     fill_col = "#ffffff"
@@ -3767,13 +4689,16 @@ class ExportPlugin(inkex.Effect):
                     label_text = f"{r['label']} - cut {len(dedupe_labels)}"
                 code_text = "" if is_multicolor \
                     else color_codes.get(assigned_col, "")
+                if is_too_small and fill_col != "#ffffff":
+                    # On full color fill for small piece handling, don't include the color code label [A1]
+                    code_text = ""
                 
-                # Determine text colors based on contrast
-                text_color = STYLE_CONFIG["color_black"]
-                subtext_color = STYLE_CONFIG["color_mid"]
-                if fill_col != STYLE_CONFIG["color_white"] and is_color_dark(fill_col):
-                    text_color = STYLE_CONFIG["color_white"]
-                    subtext_color = "#dddddd"
+                # Determine text colors based on high-contrast black or white
+                text_color = "#000000"
+                subtext_color = "#000000"
+                if fill_col != "#ffffff" and is_color_dark(fill_col):
+                    text_color = "#ffffff"
+                    subtext_color = "#ffffff"
 
                 is_wide_and_short = (pw_r > 1.8 * ph_r)
                 
@@ -3836,14 +4761,16 @@ class ExportPlugin(inkex.Effect):
                                 style=f"font-size:{font_sz};font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
                             ).text = label_text
                         elif el["kind"] == "swatch":
-                            etree.SubElement(
+                            draw_swatch_shape(
                                 shift_g,
-                                "{%s}rect" % core.SVG_NS,
-                                x=f"{cx - sw_w / 2.0:.2f}",
-                                y=f"{r_cy - sw_h / 2.0:.2f}",
-                                width=str(sw_w),
-                                height=str(sw_h),
-                                style=f"fill:{assigned_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:0.5;",
+                                getattr(self.options, "swatch_shape", "rectangle"),
+                                cx - sw_w / 2.0,
+                                r_cy - sw_h / 2.0,
+                                sw_w,
+                                sw_h,
+                                assigned_col,
+                                stroke_color=STYLE_CONFIG['template_border_stroke'],
+                                stroke_width="0.5"
                             )
                         elif el["kind"] == "code":
                             font_sz = "15px" if not is_too_small else STYLE_CONFIG['font_size_tiny']
@@ -3885,14 +4812,16 @@ class ExportPlugin(inkex.Effect):
                             y=f"{r_cy - 22:.2f}",
                             style=f"font-size:18px;font-family:{STYLE_CONFIG['font_family']};font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:{text_color};",
                         ).text = label_text
-                        etree.SubElement(
+                        draw_swatch_shape(
                             shift_g,
-                            "{%s}rect" % core.SVG_NS,
-                            x=f"{r_cx - 18:.2f}",
-                            y=f"{r_cy - 8:.2f}",
-                            width="36",
-                            height="24",
-                            style=f"fill:{assigned_col};stroke:{STYLE_CONFIG['template_border_stroke']};stroke-width:0.5;",
+                            getattr(self.options, "swatch_shape", "rectangle"),
+                            r_cx - 18.0,
+                            r_cy - 8.0,
+                            36.0,
+                            24.0,
+                            assigned_col,
+                            stroke_color=STYLE_CONFIG['template_border_stroke'],
+                            stroke_width="0.5"
                         )
                         if code_text:
                             etree.SubElement(
@@ -4039,17 +4968,43 @@ class ExportPlugin(inkex.Effect):
                     style="stroke:#000000;stroke-width:2.0;",
                 )
 
+            t_style = getattr(self.options, "tab_style", "grey")
+            if t_style == "crosshatch":
+                style_glue = "fill:url(#crosshatch-pattern);fill-opacity:1.0;stroke:#000000;stroke-width:1.0;"
+                style_align = "fill:url(#crosshatch-pattern);fill-opacity:1.0;stroke:#000000;stroke-width:1.0;"
+            elif t_style == "outline":
+                style_glue = "fill:none;stroke:#000000;stroke-width:1.0;stroke-dasharray:4,4;"
+                style_align = "fill:none;stroke:#000000;stroke-width:1.0;stroke-dasharray:4,4;"
+            else: # grey
+                style_glue = f"fill:{STYLE_CONFIG['glue_tab_fill']};fill-opacity:{STYLE_CONFIG['glue_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};"
+                style_align = f"fill:{STYLE_CONFIG['align_tab_fill']};fill-opacity:{STYLE_CONFIG['align_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};"
+
+            def draw_tab_poly(x0, y0, x1, y1, style_str):
+                clip = core.clip_polygon_to_rect(local_sa, x0, y0, x1, y1)
+                if clip and len(clip) >= 3:
+                    pts_str = " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in clip)
+                    etree.SubElement(
+                        pad_g,
+                        "{%s}polygon" % core.SVG_NS,
+                        points=pts_str,
+                        style=style_str,
+                    )
+                else:
+                    rx, ry = min(x0, x1), min(y0, y1)
+                    rw, rh = abs(x1 - x0), abs(y1 - y0)
+                    etree.SubElement(
+                        pad_g,
+                        "{%s}rect" % core.SVG_NS,
+                        x=f"{rx:.2f}",
+                        y=f"{ry:.2f}",
+                        width=f"{rw:.2f}",
+                        height=f"{rh:.2f}",
+                        style=style_str,
+                    )
+
             if item["right_glue"] and r_span:
                 tx, ty, tab_id = item["core_w"], r_min, item["right_glue"]
-                etree.SubElement(
-                    pad_g,
-                    "{%s}rect" % core.SVG_NS,
-                    x=str(tx),
-                    y=str(ty),
-                    width=str(overlap_px_tab),
-                    height=str(r_span),
-                    style=f"fill:{STYLE_CONFIG['glue_tab_fill']};fill-opacity:{STYLE_CONFIG['glue_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};",
-                )
+                draw_tab_poly(tx, ty, tx + overlap_px_tab, ty + r_span, style_glue)
                 num_repeats = max(1, int(r_span / 100))
                 spacing = r_span / (num_repeats + 1)
                 for i in range(1, num_repeats + 1):
@@ -4062,17 +5017,10 @@ class ExportPlugin(inkex.Effect):
                         transform=f"rotate(-90 {tx + overlap_px_tab / 2} {y_pos})",
                         style=f"font-size:{STYLE_CONFIG['tab_font_size']};font-family:{STYLE_CONFIG['font_family']};font-weight:{STYLE_CONFIG['tab_font_weight']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['tab_text_color_glue']};",
                     ).text = f"Glue {tab_id}"
+
             if item["left_align"] and l_span:
                 tx, ty, tab_id = -overlap_px_tab, l_min, item["left_align"]
-                etree.SubElement(
-                    pad_g,
-                    "{%s}rect" % core.SVG_NS,
-                    x=str(tx),
-                    y=str(ty),
-                    width=str(overlap_px_tab),
-                    height=str(l_span),
-                    style=f"fill:{STYLE_CONFIG['align_tab_fill']};fill-opacity:{STYLE_CONFIG['align_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};",
-                )
+                draw_tab_poly(tx, ty, 0, ty + l_span, style_align)
                 num_repeats = max(1, int(l_span / 100))
                 spacing = l_span / (num_repeats + 1)
                 for i in range(1, num_repeats + 1):
@@ -4084,18 +5032,11 @@ class ExportPlugin(inkex.Effect):
                         y=str(y_pos),
                         transform=f"rotate(-90 {tx + overlap_px_tab / 2} {y_pos})",
                         style=f"font-size:{STYLE_CONFIG['tab_font_size']};font-family:{STYLE_CONFIG['font_family']};font-weight:{STYLE_CONFIG['tab_font_weight']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['tab_text_color_align']};",
-                    ).text = f"Align {tab_id}"
+                    ).text = f"Cut {tab_id}"
+
             if item["bottom_glue"] and b_span:
                 tx, ty, tab_id = b_min, item["core_h"], item["bottom_glue"]
-                etree.SubElement(
-                    pad_g,
-                    "{%s}rect" % core.SVG_NS,
-                    x=str(tx),
-                    y=str(ty),
-                    width=str(b_span),
-                    height=str(overlap_px_tab),
-                    style=f"fill:{STYLE_CONFIG['glue_tab_fill']};fill-opacity:{STYLE_CONFIG['glue_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};",
-                )
+                draw_tab_poly(tx, ty, tx + b_span, ty + overlap_px_tab, style_glue)
                 num_repeats = max(1, int(b_span / 100))
                 spacing = b_span / (num_repeats + 1)
                 for i in range(1, num_repeats + 1):
@@ -4107,17 +5048,10 @@ class ExportPlugin(inkex.Effect):
                         y=str(ty + overlap_px_tab / 2),
                         style=f"font-size:{STYLE_CONFIG['tab_font_size']};font-family:{STYLE_CONFIG['font_family']};font-weight:{STYLE_CONFIG['tab_font_weight']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['tab_text_color_glue']};",
                     ).text = f"Glue {tab_id}"
+
             if item["top_align"] and t_span:
                 tx, ty, tab_id = t_min, -overlap_px_tab, item["top_align"]
-                etree.SubElement(
-                    pad_g,
-                    "{%s}rect" % core.SVG_NS,
-                    x=str(tx),
-                    y=str(ty),
-                    width=str(t_span),
-                    height=str(overlap_px_tab),
-                    style=f"fill:{STYLE_CONFIG['align_tab_fill']};fill-opacity:{STYLE_CONFIG['align_tab_fill_opacity']};stroke:{STYLE_CONFIG['tab_stroke']};stroke-width:{STYLE_CONFIG['tab_stroke_width']};stroke-dasharray:{STYLE_CONFIG['tab_stroke_dash']};",
-                )
+                draw_tab_poly(tx, ty, tx + t_span, 0, style_align)
                 num_repeats = max(1, int(t_span / 100))
                 spacing = t_span / (num_repeats + 1)
                 for i in range(1, num_repeats + 1):
@@ -4128,7 +5062,7 @@ class ExportPlugin(inkex.Effect):
                         x=str(x_pos),
                         y=str(ty + overlap_px_tab / 2),
                         style=f"font-size:{STYLE_CONFIG['tab_font_size']};font-family:{STYLE_CONFIG['font_family']};font-weight:{STYLE_CONFIG['tab_font_weight']};text-anchor:middle;dominant-baseline:middle;fill:{STYLE_CONFIG['tab_text_color_align']};",
-                    ).text = f"Align {tab_id}"
+                    ).text = f"Cut {tab_id}"
 
         # Combined multi-fabric templates: flag the affected pages and point
         # the user at the layout page for fabric placement.
@@ -4203,6 +5137,216 @@ class ExportPlugin(inkex.Effect):
                 y=f"{lbl_y:.2f}",
                 style=f"font-size:9px;font-family:{STYLE_CONFIG['font_family']};fill:#555555;text-anchor:middle;dominant-baseline:middle;",
             ).text = label_text
+
+    def transform_block_poly_to_item_local(self, poly, item):
+        scale = item.get("scale", 1.0)
+        p_local = [(pt[0] * scale, pt[1] * scale) for pt in poly]
+        
+        if item.get("is_mirrored"):
+            cx_hull = item.get("cx_hull", 0.0)
+            p_local = [(2.0 * cx_hull - pt[0], pt[1]) for pt in p_local]
+            
+        angle = item.get("best_angle", 0.0)
+        if angle != 0:
+            cx, cy = item.get("cx", 0.0), item.get("cy", 0.0)
+            p_local = rotate_poly(p_local, cx, cy, angle)
+            
+        min_x = item.get("min_x", 0.0)
+        min_y = item.get("min_y", 0.0)
+        return [(pt[0] - min_x, pt[1] - min_y) for pt in p_local]
+
+    def transform_block_poly_to_shift_g_space(self, poly, item):
+        scale = item.get("scale", 1.0)
+        p_local = [(pt[0] * scale, pt[1] * scale) for pt in poly]
+        if item.get("is_mirrored"):
+            cx_hull = item.get("cx_hull", 0.0)
+            p_local = [(2.0 * cx_hull - pt[0], pt[1]) for pt in p_local]
+        return p_local
+
+    def _draw_inter_section_edge_labels(self, container, item, block_data):
+        edge_mode = getattr(self.options, "edge_label_style", "step")
+        if edge_mode == "none":
+            return
+
+        sec_prefix = item.get("prefix", "").upper()
+        if not sec_prefix or sec_prefix in ("CAL", "HST") or sec_prefix.startswith("TBL_"):
+            return
+
+        tree = block_data.tree
+        all_regions = tree.leaf_regions()
+        
+        all_sec_prefixes = set()
+        for r in all_regions:
+            if r.label:
+                m_pfx = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)", r.label, re.IGNORECASE)
+                if m_pfx:
+                    all_sec_prefixes.add(m_pfx.group(1).upper())
+
+        steps, _ = core.calculate_section_sewing_order(block_data)
+        step_map = {}
+        for step_idx, step_str in enumerate(steps):
+            m_step = re.search(r"Join\s+([\w\-]+)\s*\+\s*([\w\-]+)", step_str, re.IGNORECASE)
+            if m_step:
+                unit_a, unit_b = m_step.group(1).upper(), m_step.group(2).upper()
+                step_num = step_idx + 1
+                secs_a = [pfx for pfx in all_sec_prefixes if pfx in unit_a]
+                secs_b = [pfx for pfx in all_sec_prefixes if pfx in unit_b]
+                for sa in secs_a:
+                    for sb in secs_b:
+                        step_map[(sa, sb)] = step_num
+                        step_map[(sb, sa)] = step_num
+
+        sec_regions = [r for r in all_regions if r.label and re.match(fr"^{re.escape(sec_prefix)}(\d+)?$", r.label, re.IGNORECASE)]
+        if not sec_regions:
+            return
+
+        sec_polys_shift = [self.transform_block_poly_to_shift_g_space(r.polygon, item) for r in sec_regions]
+
+        other_secs = {}
+        for r in all_regions:
+            if not r.label:
+                continue
+            m = re.match(r"^(\d+-[A-Za-z]+|[A-Za-z]+)(\d+)?$", r.label, re.IGNORECASE)
+            if m:
+                other_pfx = m.group(1).upper()
+                if other_pfx != sec_prefix:
+                    other_secs.setdefault(other_pfx, []).append(r)
+
+        TOL = 2.0
+        MIN_EDGE_LEN = 14.4  # 0.20 inch
+        MAX_GAP = 108.0      # 1.50 inch max gap between repeated labels
+
+        def point_segment_distance(pt, q1, q2):
+            dx, dy = q2[0] - q1[0], q2[1] - q1[1]
+            l2 = dx * dx + dy * dy
+            if l2 < 1e-9:
+                return math.hypot(pt[0] - q1[0], pt[1] - q1[1])
+            t_val = max(0.0, min(1.0, ((pt[0] - q1[0]) * dx + (pt[1] - q1[1]) * dy) / l2))
+            proj_x = q1[0] + t_val * dx
+            proj_y = q1[1] + t_val * dy
+            return math.hypot(pt[0] - proj_x, pt[1] - proj_y)
+
+        for other_pfx, other_regions in other_secs.items():
+            step_num = step_map.get((sec_prefix, other_pfx)) or step_map.get((other_pfx, sec_prefix))
+            
+            if edge_mode == "step":
+                if not step_num:
+                    lbl_text = f"Join {other_pfx}"
+                else:
+                    lbl_text = f"Step {step_num}"
+            else:
+                lbl_text = f"Sew to Sec {other_pfx}"
+
+            other_polys_shift = [self.transform_block_poly_to_shift_g_space(r_b.polygon, item) for r_b in other_regions]
+
+            for r_a, poly_a in zip(sec_regions, sec_polys_shift):
+                n_a = len(poly_a)
+                if n_a < 3:
+                    continue
+
+                shared_segments = []
+                for i in range(n_a):
+                    p1 = poly_a[i]
+                    p2 = poly_a[(i + 1) % n_a]
+                    v_seg = (p2[0] - p1[0], p2[1] - p1[1])
+                    len_seg = math.hypot(*v_seg)
+                    if len_seg < 1e-4:
+                        continue
+                    
+                    mid_p = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
+                    is_shared = False
+                    for poly_b in other_polys_shift:
+                        n_b = len(poly_b)
+                        for j in range(n_b):
+                            q1 = poly_b[j]
+                            q2 = poly_b[(j + 1) % n_b]
+                            if point_segment_distance(mid_p, q1, q2) < TOL:
+                                is_shared = True
+                                break
+                        if is_shared:
+                            break
+                            
+                    if is_shared:
+                        shared_segments.append((i, p1, p2, len_seg))
+
+                if not shared_segments:
+                    continue
+
+                chains = []
+                curr_chain = []
+                for seg in shared_segments:
+                    if not curr_chain:
+                        curr_chain.append(seg)
+                    else:
+                        prev_seg = curr_chain[-1]
+                        if seg[0] == (prev_seg[0] + 1) % n_a or seg[0] == prev_seg[0] + 1:
+                            curr_chain.append(seg)
+                        else:
+                            chains.append(curr_chain)
+                            curr_chain = [seg]
+                if curr_chain:
+                    chains.append(curr_chain)
+
+                for chain in chains:
+                    total_chain_len = sum(s[3] for s in chain)
+                    if total_chain_len < MIN_EDGE_LEN:
+                        continue
+
+                    num_lbls = max(1, int(total_chain_len / MAX_GAP))
+                    for k in range(1, num_lbls + 1):
+                        target_d = (k / (num_lbls + 1.0)) * total_chain_len
+                        
+                        accum_d = 0.0
+                        pos_x, pos_y = chain[0][1]
+                        u_x, u_y = 1.0, 0.0
+                        for seg in chain:
+                            seg_len = seg[3]
+                            if accum_d + seg_len >= target_d:
+                                rem_d = target_d - accum_d
+                                frac = rem_d / seg_len if seg_len > 1e-4 else 0.0
+                                p1, p2 = seg[1], seg[2]
+                                pos_x = p1[0] + frac * (p2[0] - p1[0])
+                                pos_y = p1[1] + frac * (p2[1] - p1[1])
+                                u_x = (p2[0] - p1[0]) / seg_len
+                                u_y = (p2[1] - p1[1]) / seg_len
+                                break
+                            accum_d += seg_len
+
+                        normal_out = (u_y, -u_x)
+                        test_pt = (pos_x + normal_out[0] * 3.0, pos_y + normal_out[1] * 3.0)
+                        if any(core.point_in_polygon(test_pt, r_poly) for r_poly in sec_polys_shift):
+                            normal_out = (-normal_out[0], -normal_out[1])
+
+                        OFFSET = 9.0
+                        lx = pos_x + normal_out[0] * OFFSET
+                        ly = pos_y + normal_out[1] * OFFSET
+
+                        is_mirrored = item.get("is_mirrored", False)
+
+                        if not is_mirrored:
+                            angle_deg = math.degrees(math.atan2(u_y, u_x))
+                            if angle_deg > 90.0:
+                                angle_deg -= 180.0
+                            elif angle_deg < -90.0:
+                                angle_deg += 180.0
+                            text_tf = f"translate({lx:.2f}, {ly:.2f}) rotate({angle_deg:.2f})"
+                        else:
+                            paper_angle_deg = math.degrees(math.atan2(u_y, -u_x))
+                            if paper_angle_deg > 90.0:
+                                paper_angle_deg -= 180.0
+                            elif paper_angle_deg < -90.0:
+                                paper_angle_deg += 180.0
+                            text_tf = f"translate({lx:.2f}, {ly:.2f}) scale(-1, 1) rotate({paper_angle_deg:.2f})"
+
+                        txt_elem = etree.SubElement(
+                            container,
+                            "{%s}text" % core.SVG_NS,
+                            x="0",
+                            y="0",
+                            transform=text_tf,
+                            style=f"font-size:7.5px;font-family:{STYLE_CONFIG['font_family']};fill:#444444;text-anchor:middle;dominant-baseline:middle;font-weight:bold;",
+                        )
+                        txt_elem.text = lbl_text
 
 
 if __name__ == "__main__":

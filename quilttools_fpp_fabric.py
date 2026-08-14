@@ -178,7 +178,7 @@ def fabric_estimate(pieces, usable_wof=41.0):
             if area < min_area:
                 min_area = area
                 best_w, best_h = w, h
-        if best_w > best_h:
+        if best_w < best_h:
             best_w, best_h = best_h, best_w
         return best_w, best_h
 
@@ -188,7 +188,7 @@ def fabric_estimate(pieces, usable_wof=41.0):
         free_boxes = [get_free_box(p, m) for p, m in polys_with_meta]
         
         fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
-        free_height_px = pack_fabric_strip(free_boxes, wof_px)
+        free_height_px = min(pack_fabric_strip(free_boxes, wof_px), fixed_height_px)
         
         exceeds_wof = any(w > wof_px and h > wof_px for w, h in fixed_boxes)
         
@@ -257,7 +257,7 @@ def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0,
             if area < min_area:
                 min_area = area
                 best_w, best_h = w, h
-        if best_w > best_h:
+        if best_w < best_h:
             best_w, best_h = best_h, best_w
         return best_w, best_h
 
@@ -337,16 +337,15 @@ def calculate_fabric_requirements(block_data, finished_size_in, wof_in=40.0,
                 chosen_h_in = ph_in
                 chosen_w_in = pw_in
 
+        fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
         if suggested is None:
-            free_height_px = pack_fabric_strip(free_boxes, wof_px)
+            free_height_px = min(pack_fabric_strip(free_boxes, wof_px), fixed_height_px)
             free_in = free_height_px / core.PX_PER_INCH
             free_yd = free_in / 36.0
             eighths = math.ceil(free_yd * 8.0)
             suggested = f"{eighths/8.0:.3f} yd ({eighths}/8 yd)"
             chosen_h_in = free_in
             chosen_w_in = wof_in
-
-        fixed_height_px = pack_fabric_strip(fixed_boxes, wof_px)
 
         fabric_estimates.append({
             "color": color_hex,
@@ -600,17 +599,64 @@ def estimate_map_heights(plan, wof_in, target_width):
         
         if is_fe or is_fq:
             draw_h_in = 9.0 if is_fe else 18.0
-            h = 8.0 + draw_h_in * s
+            h = 16.0 + draw_h_in * s
         else:
-            h = 8.0  # header label
+            h = 16.0  # header label
             for op in res["ops"]:
                 if op["op"] == "strip":
-                    h += op["height"] * s + 6.0
+                    h += op["height"] * s + 12.0
                 elif op["op"] == "pieced_strip":
-                    h += op["strips"] * (op["width"] * s + 2.0) + 14.0
+                    h += op["strips"] * (op["width"] * s + 2.0) + 16.0
                 elif op["op"] == "panel":
-                    h += op["height"] * s + 6.0
-        out[fab] = h + 14.0  # trailing gap
+                    h += op["height"] * s + 12.0
+        out[fab] = h + 16.0  # trailing gap
+    return out
+
+
+def estimate_fabric_layout_map_heights(fabric_estimates, wof_in, target_width, block_data, finished_size_in, options=None):
+    """Predicted drawn height (px) of each fabric's FPP layout map block."""
+    out = {}
+    scale = _block_scale(block_data, finished_size_in)
+    if not scale:
+        return out
+
+    for est in fabric_estimates:
+        color_hex = est["color"]
+        boxes = []
+        for r in est["regions"]:
+            sc_poly = [(pt[0]*scale, pt[1]*scale) for pt in r.polygon]
+            padded = core.offset_polygon(sc_poly, 72.0, miter_limit=2.0)
+            if not padded:
+                sc_xs = [pt[0] for pt in sc_poly]
+                sc_ys = [pt[1] for pt in sc_poly]
+                padded = [
+                    (min(sc_xs)-72.0, min(sc_ys)-72.0),
+                    (max(sc_xs)+72.0, min(sc_ys)-72.0),
+                    (max(sc_xs)+72.0, max(sc_ys)+72.0),
+                    (min(sc_xs)-72.0, max(sc_ys)+72.0)
+                ]
+            w = max(pt[0] for pt in padded) - min(pt[0] for pt in padded)
+            h = max(pt[1] for pt in padded) - min(pt[1] for pt in padded)
+            boxes.append((w, h, r, padded))
+
+        precut_name = est.get("precut_name")
+        if precut_name:
+            current_usable_width_in = est["fq_free_in"]
+            current_usable_width_px = current_usable_width_in * core.PX_PER_INCH
+            total_h, _ = pack_fabric_strip_with_coords([(w, h, r) for (w, h, r, p) in boxes], current_usable_width_px)
+            draw_h_in = est["free_in"]
+        else:
+            current_usable_width_in = wof_in
+            current_usable_width_px = wof_in * core.PX_PER_INCH
+            total_h, _ = pack_fabric_strip_with_coords([(w, h, r) for (w, h, r, p) in boxes], current_usable_width_px)
+            draw_h_in = total_h / core.PX_PER_INCH
+
+        if total_h <= 0:
+            continue
+
+        wof_px = wof_in * core.PX_PER_INCH
+        map_scale = target_width / wof_px
+        out[color_hex] = 20.0 + draw_h_in * core.PX_PER_INCH * map_scale + 20.0
     return out
 
 
@@ -647,24 +693,35 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
             ).text = "(further fabrics omitted from the map for space)"
             break
 
+        header_text = f"Fabric {code} ({fab}) - suggested: {suggested}"
         etree.SubElement(
             container, "{%s}text" % core.SVG_NS,
             x=str(start_x), y=str(curr_y),
             style="font-size:10px;font-family:sans-serif;font-weight:bold;fill:#333333;",
-        ).text = f"Fabric {code} ({fab}) - suggested: {suggested}"
-        curr_y += 8.0
+        ).text = header_text
+        curr_y += 10.0
 
         if is_fe or is_fq:
             draw_h_in = 9.0 if is_fe else 18.0
             h_px = draw_h_in * map_scale
+            w_px = current_wof_in * map_scale
             
+            # Outer dashed fabric rectangle
             etree.SubElement(
                 container, "{%s}rect" % core.SVG_NS,
                 x=str(start_x), y=str(curr_y),
-                width=str(current_wof_in * map_scale), height=str(h_px),
+                width=str(w_px), height=str(h_px),
                 style=f"fill:{fab};fill-opacity:0.08;stroke:{fab};stroke-width:1.0;stroke-dasharray:4,4;",
             )
-            
+
+            # Explicit Outer Dimension Labels
+            dim_str = f"← Length: {current_wof_in:.1f}\" × Width: {draw_h_in:.1f}\" ({suggested}) →"
+            etree.SubElement(
+                container, "{%s}text" % core.SVG_NS,
+                x=str(start_x + w_px / 2), y=str(curr_y - 2),
+                style="font-size:8px;font-family:sans-serif;font-weight:bold;text-anchor:middle;fill:#555555;",
+            ).text = dim_str
+
             for op in res["ops"]:
                 if op["op"] == "strip":
                     for cell in op.get("cells", []):
@@ -713,7 +770,7 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
                                 y=str(sum(cys) / len(cys)),
                                 style="font-size:7px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
                             ).text = pl["labels"][0]
-            curr_y += h_px + 6.0
+            curr_y += h_px + 8.0
         else:
             for op in res["ops"]:
                 if max_height is not None and curr_y - start_y > max_height:
@@ -725,12 +782,24 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
                     break
                 if op["op"] == "strip":
                     h_px = op["height"] * map_scale
+                    w_px = current_wof_in * map_scale
+
+                    # Outer dashed fabric strip rectangle
                     etree.SubElement(
                         container, "{%s}rect" % core.SVG_NS,
                         x=str(start_x), y=str(curr_y),
-                        width=str(current_wof_in * map_scale), height=str(h_px),
+                        width=str(w_px), height=str(h_px),
                         style=f"fill:{fab};fill-opacity:0.15;stroke:{fab};stroke-width:1.0;stroke-dasharray:4,4;",
                     )
+
+                    # Explicit Outer Strip Dimensions Label
+                    dim_str = f"Cut Strip: {current_wof_in:.1f}\" Length (WOF) × {op['height']:.2f}\" Width"
+                    etree.SubElement(
+                        container, "{%s}text" % core.SVG_NS,
+                        x=str(start_x + 4), y=str(curr_y - 2),
+                        style="font-size:7.5px;font-family:sans-serif;font-weight:bold;fill:#444444;",
+                    ).text = dim_str
+
                     for cell in op.get("cells", []):
                         cx = start_x + cell["x"] * map_scale
                         if cell.get("poly"):
@@ -766,14 +835,15 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
                                 y=str(curr_y + h_px / 2),
                                 style=f"font-size:{fs:.1f}px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
                             ).text = cell["labels"][0]
-                    curr_y += h_px + 6.0
+                    curr_y += h_px + 8.0
                 elif op["op"] == "pieced_strip":
                     h_px = op["width"] * map_scale
+                    w_px = current_wof_in * map_scale
                     for s in range(op["strips"]):
                         etree.SubElement(
                             container, "{%s}rect" % core.SVG_NS,
                             x=str(start_x), y=str(curr_y),
-                            width=str(current_wof_in * map_scale), height=str(h_px),
+                            width=str(w_px), height=str(h_px),
                             style=f"fill:{fab};fill-opacity:0.3;stroke:#333333;stroke-width:0.6;",
                         )
                         curr_y += h_px + 2.0
@@ -781,19 +851,29 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
                         container, "{%s}text" % core.SVG_NS,
                         x=str(start_x + 4), y=str(curr_y + 8),
                         style="font-size:8px;font-family:sans-serif;fill:#333333;",
-                    ).text = (f"{op['strips']} x {cutplan.fmt_in(op['width'])} strips, "
+                    ).text = (f"{op['strips']} x {cutplan.fmt_in(op['width'])} strips ({current_wof_in:.1f}\" Length), "
                               f"join ({op['join']}) then subcut "
                               + ", ".join(f"{c['qty']}x{cutplan.fmt_in(c['length'])}"
                                           for c in op["cuts"][:4]))
                     curr_y += 14.0
                 elif op["op"] == "panel":
                     h_px = op["height"] * map_scale
+                    w_px = current_wof_in * map_scale
+
                     etree.SubElement(
                         container, "{%s}rect" % core.SVG_NS,
                         x=str(start_x), y=str(curr_y),
-                        width=str(current_wof_in * map_scale), height=str(h_px),
+                        width=str(w_px), height=str(h_px),
                         style=f"fill:none;stroke:{fab};stroke-width:1.0;stroke-dasharray:4,4;",
                     )
+
+                    dim_str = f"Cut Panel: {current_wof_in:.1f}\" Length × {op['height']:.2f}\" Width"
+                    etree.SubElement(
+                        container, "{%s}text" % core.SVG_NS,
+                        x=str(start_x + 4), y=str(curr_y - 2),
+                        style="font-size:7.5px;font-family:sans-serif;font-weight:bold;fill:#444444;",
+                    ).text = dim_str
+
                     for pl in op["placements"]:
                         pts = " ".join(
                             f"{start_x + p[0]*map_scale:.2f},{curr_y + p[1]*map_scale:.2f}"
@@ -812,32 +892,46 @@ def draw_cutting_plan_map(container, start_x, start_y, target_width, plan,
                                 y=str(sum(cys) / len(cys)),
                                 style="font-size:7px;font-family:sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
                             ).text = pl["labels"][0]
-                    curr_y += h_px + 6.0
-        curr_y += 14.0
+                    curr_y += h_px + 8.0
+        curr_y += 12.0
     return curr_y
 
 
-def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None, options=None):
+def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data, finished_size_in, wof_in=40.0, color_codes=None, options=None, max_height=None, fabrics=None):
     fabric_estimates = calculate_fabric_requirements(block_data, finished_size_in, wof_in, options=options)
 
     if color_codes is None:
         unique_colors = sorted(list(set(est["color"] for est in fabric_estimates)))
         color_codes = core.assign_color_codes(unique_colors, block_data.prefs.get("color_code_overrides", ""))
 
-    etree.SubElement(
-        container,
-        "{%s}text" % core.SVG_NS,
-        x=str(start_x),
-        y=str(start_y),
-        style="font-size:14px;font-family:sans-serif;font-weight:bold;fill:#333333;",
-    ).text = f"Fabric Cut Layout Map (WOF = {wof_in}\", Size = {finished_size_in}\")"
+    curr_y = start_y
+    if fabrics is None:
+        etree.SubElement(
+            container,
+            "{%s}text" % core.SVG_NS,
+            x=str(start_x),
+            y=str(start_y),
+            style="font-size:12px;font-family:sans-serif;font-weight:bold;fill:#333333;",
+        ).text = f"Fabric Cut Layout Map (WOF = {wof_in}\", Size = {finished_size_in}\")"
+        curr_y += 20.0
 
-    curr_y = start_y + 25.0
     for est in fabric_estimates:
         color_hex = est["color"]
-        code = color_codes.get(color_hex, "FAB")
+        if fabrics is not None and color_hex not in fabrics:
+            continue
 
+        if max_height is not None and curr_y - start_y > max_height:
+            etree.SubElement(
+                container, "{%s}text" % core.SVG_NS,
+                x=str(start_x), y=str(curr_y + 12),
+                style="font-size:9px;font-family:sans-serif;fill:#666666;",
+            ).text = "(further fabric maps omitted from this page for space)"
+            break
+
+        code = color_codes.get(color_hex, "FAB")
         scale = _block_scale(block_data, finished_size_in)
+        if not scale:
+            continue
 
         boxes = []
         for r in est["regions"]:
@@ -875,8 +969,10 @@ def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data
 
         wof_px = wof_in * core.PX_PER_INCH
         map_scale = target_width / wof_px
+        options_dict = dict(options or {})
+        fabric_grain = options_dict.get("fabric_grain", "orthogonal")
 
-        label_text = f"Fabric {code} ({color_hex}) - suggested: {suggested}"
+        label_text = f"Fabric {code} ({color_hex}) — Suggested Purchase: {suggested}"
         etree.SubElement(
             container,
             "{%s}text" % core.SVG_NS,
@@ -885,30 +981,57 @@ def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data
             style="font-size:10px;font-family:sans-serif;font-weight:bold;fill:#333333;",
         ).text = label_text
 
-        curr_y += 8.0
+        curr_y += 14.0
 
+        w_px = current_usable_width_px * map_scale
+        h_px = draw_h_in * core.PX_PER_INCH * map_scale
+
+        # Outer dashed fabric rectangle representing the full precut / WOF piece
         etree.SubElement(
             container,
             "{%s}rect" % core.SVG_NS,
             x=str(start_x),
             y=str(curr_y),
-            width=str(current_usable_width_px * map_scale),
-            height=str(draw_h_in * core.PX_PER_INCH * map_scale),
+            width=str(w_px),
+            height=str(h_px),
             style=f"fill:{color_hex};fill-opacity:0.08;stroke:{color_hex};stroke-width:1.0;stroke-dasharray:4,4;",
         )
+
+        # External Length / Width Dimension Markings (Outside the fabric frame)
+        # Top Width Dimension Marking
+        dim_w_str = f"<- W: {current_usable_width_in:.1f}\" ->"
+        etree.SubElement(
+            container,
+            "{%s}text" % core.SVG_NS,
+            x=str(start_x + w_px / 2.0),
+            y=str(curr_y - 3),
+            style="font-size:8px;font-family:sans-serif;font-weight:bold;text-anchor:middle;fill:#444444;",
+        ).text = dim_w_str
+
+        # Side Length Dimension Marking
+        dim_l_str = f"L: {draw_h_in:.1f}\""
+        etree.SubElement(
+            container,
+            "{%s}text" % core.SVG_NS,
+            x=str(start_x + w_px + 6),
+            y=str(curr_y + h_px / 2.0),
+            style="font-size:8px;font-family:sans-serif;font-weight:bold;dominant-baseline:middle;fill:#444444;",
+        ).text = dim_l_str
 
         for idx, (w, h, r, padded) in enumerate(boxes):
             px, py, pw, ph = placements[idx]
 
-            etree.SubElement(
-                container,
-                "{%s}rect" % core.SVG_NS,
-                x=str(start_x + px * map_scale),
-                y=str(curr_y + py * map_scale),
-                width=str(pw * map_scale),
-                height=str(ph * map_scale),
-                style="fill:none;stroke:#bbbbbb;stroke-width:0.5;stroke-dasharray:2,2;",
-            )
+            # Only draw rectangle boundaries for directional and orthogonal rotary cutting modes
+            if fabric_grain != "free_rotation":
+                etree.SubElement(
+                    container,
+                    "{%s}rect" % core.SVG_NS,
+                    x=str(start_x + px * map_scale),
+                    y=str(curr_y + py * map_scale),
+                    width=str(pw * map_scale),
+                    height=str(ph * map_scale),
+                    style="fill:none;stroke:#bbbbbb;stroke-width:0.5;stroke-dasharray:2,2;",
+                )
 
             min_x = min(pt[0] for pt in padded)
             min_y = min(pt[1] for pt in padded)
@@ -935,7 +1058,7 @@ def draw_fabric_layout_map(container, start_x, start_y, target_width, block_data
                 style=f"font-size:{label_fs:.1f}px;font-family:sans-serif;font-weight:bold;text-anchor:middle;dominant-baseline:middle;fill:#000000;",
             ).text = f"{r.label}"
 
-        curr_y += draw_h_in * core.PX_PER_INCH * map_scale + 20.0
+        curr_y += h_px + 20.0
     return curr_y
 
 

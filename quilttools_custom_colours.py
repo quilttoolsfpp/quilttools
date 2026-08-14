@@ -48,12 +48,14 @@ class CustomColoursPlugin(inkex.Effect):
                         user_colors[str(rid)] = color
                         count += 1
             block_data.prefs["custom_colors"] = user_colors
+            block_data.prefs["bypass_custom_colors"] = False
             inkex.utils.debug(
                 f"Saved {count} canvas colour(s) into the block. "
                 + qcol.context_note(ctx, "block"))
 
         elif action == "clear_colors":
             block_data.prefs["custom_colors"] = {}
+            block_data.prefs["bypass_custom_colors"] = False
             inkex.utils.debug("Cleared all saved custom colours - the "
                               "block reverts to the default palette. "
                               + qcol.context_note(ctx, "block"))
@@ -61,6 +63,7 @@ class CustomColoursPlugin(inkex.Effect):
         elif action == "sample_image":
             sampled = core.sample_image_colors(self.svg, block_data)
             if sampled > 0:
+                block_data.prefs["bypass_custom_colors"] = False
                 inkex.utils.debug(
                     f"Sampled {sampled} colour(s) from the traced image. "
                     + qcol.context_note(ctx, "block"))
@@ -91,6 +94,7 @@ class CustomColoursPlugin(inkex.Effect):
                     "colors will still be preserved.")
             core.quantize_block_colors(block_data, self.options.quantize_n,
                                        locked_list)
+            block_data.prefs["bypass_custom_colors"] = False
             inkex.utils.debug(
                 f"Quantized to {self.options.quantize_n} fabric(s). "
                 + qcol.context_note(ctx, "block"))
@@ -104,6 +108,7 @@ class CustomColoursPlugin(inkex.Effect):
                     if color:
                         user_colors[str(rid)] = color
             block_data.prefs["custom_colors"] = user_colors
+            block_data.prefs["bypass_custom_colors"] = False
 
             colors = sorted(list(set(
                 c.strip() for c in user_colors.values()

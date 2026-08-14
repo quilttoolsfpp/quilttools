@@ -41,6 +41,72 @@ class Theme(dict):
         ts = self.get("type_scale_pt", {})
         return ts.get(key, 10)
 
+    def line_weight(self, key):
+        """Safe accessor for line weights in px/pt. Returns fallback if missing."""
+        weights = self.get("line_weights", {})
+        val = weights.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except Exception:
+                pass
+        defaults = {
+            "stitch_line": 0.75,
+            "cut_line": 0.75,
+            "border": 1.0,
+            "divider": 0.5,
+            "grid": 0.5,
+        }
+        return defaults.get(key, 0.75)
+
+    def swatch_shape(self):
+        """Safe accessor for colour swatch shape."""
+        swatch = self.get("swatch", {})
+        shape = swatch.get("shape", "rectangle")
+        if shape in ["rectangle", "heart", "circle", "star"]:
+            return shape
+        return "rectangle"
+
+    def footer_config(self):
+        """Safe accessor for footer and header branding configuration."""
+        footer = self.get("footer", {})
+        return {
+            "footer_enabled": bool(footer.get("footer_enabled", True)),
+            "show_designer": bool(footer.get("show_designer", True)),
+            "show_copyright": bool(footer.get("show_copyright", True)),
+            "show_page_numbers": bool(footer.get("show_page_numbers", True)),
+            "show_block_size": bool(footer.get("show_block_size", True)),
+            "footer_text_custom": str(footer.get("footer_text_custom", "")),
+            "show_footer_divider": bool(footer.get("show_footer_divider", True)),
+            "show_header_divider": bool(footer.get("show_header_divider", True)),
+            "footer_font_size_pt": float(footer.get("footer_font_size_pt", 10.0)),
+        }
+
+    def piece_label_config(self):
+        """Safe accessor for template piece label formatting."""
+        labels = self.get("piece_labels", {})
+        return {
+            "font_family": labels.get("font_family", self.font("body")["family"]),
+            "font_scale": float(labels.get("font_scale", 1.0)),
+            "show_code_brackets": bool(labels.get("show_code_brackets", True)),
+        }
+
+    def tab_style(self):
+        """Safe accessor for tab rendering style: 'grey', 'outline', or 'crosshatch'."""
+        tabs = self.get("tabs", {})
+        style = tabs.get("style", "grey")
+        if style in ["grey", "outline", "crosshatch"]:
+            return style
+        return "grey"
+
+    def small_pieces_mode(self):
+        """Safe accessor for small pieces color mode: 'fill' or 'code_only'."""
+        sp = self.get("small_pieces", {})
+        mode = sp.get("mode", "fill")
+        if mode in ["fill", "code_only"]:
+            return mode
+        return "fill"
+
 
 def merge_dicts(base, override):
     """Recursively merges override dictionary onto base dictionary."""
@@ -158,3 +224,17 @@ def resolve_active_theme(options) -> Theme:
         theme_id = prefs.get("custom_theme", "ifh")
 
     return load_theme(theme_id)
+
+
+def save_theme(theme_id, theme_data):
+    """Saves theme_data dictionary to themes/<theme_id>.json cleanly formatted."""
+    os.makedirs(THEMES_DIR, exist_ok=True)
+    clean_id = "".join(c for c in theme_id if c.isalnum() or c == "_").lower()
+    if not clean_id:
+        raise ValueError("Invalid theme ID")
+    path = os.path.join(THEMES_DIR, f"{clean_id}.json")
+    theme_data["id"] = clean_id
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(theme_data, f, indent=2, ensure_ascii=False)
+    return path
+
