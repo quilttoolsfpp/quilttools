@@ -3159,8 +3159,9 @@ class ExportPlugin(inkex.Effect):
                     x=str(panel_x),
                     y=str(curr_y),
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_dark']};",
-                ).text = f"{idx + 1}. {step}"
+                ).text = f"Step {idx + 1}. {step}"
                 curr_y += 18
+
 
         # Draw Pattern Key & Legend
         key_y = panel_y if side_by_side else curr_y + 20
@@ -3836,7 +3837,9 @@ class ExportPlugin(inkex.Effect):
                     )
 
     def _render_pdf_pages(self, packable_items, pages_list, parent, block_data):
+        self._all_packable_items = packable_items
         layout_layer, defs, namedview = self._setup_layout_layer()
+
 
         pw, ph = get_page_dimensions(self.options.page_size, self.options.orientation)
         margin = self.options.margin_in * core.PX_PER_INCH
@@ -4626,11 +4629,13 @@ class ExportPlugin(inkex.Effect):
                 d=sa_d,
                 style="fill:none;stroke:#000000;stroke-width:1.5;stroke-dasharray:6,6;",
             )
+            sec_tf = inkex.Transform(sec_g.get("transform"))
+            pad_tf = inkex.Transform(f"translate({item['pad_l']}, {item['pad_t']})")
+            cum_tf = sec_tf @ pad_tf @ inner_transform
+
             if self.options.export_type == "template" and \
                     len(item["regions"]) == 1:
                 self._draw_template_edge_labels(shift_g, item["sa_poly"])
-            else:
-                self._draw_inter_section_edge_labels(shift_g, item, block_data)
 
             for idx, r in enumerate(item["regions"]):
                 r_d = (
@@ -4681,8 +4686,9 @@ class ExportPlugin(inkex.Effect):
                     block_data,
                     self.options.mirror_templates
                 )
-                
+
                 r_cx, r_cy = core.polygon_centroid(r["polygon"])
+
                 label_text = r["label"]
                 dedupe_labels = getattr(self, "_template_dedupe", {}).get(r["label"])
                 if dedupe_labels:
@@ -4899,7 +4905,22 @@ class ExportPlugin(inkex.Effect):
                             style=f"font-size:13.5px;font-family:{STYLE_CONFIG['font_family']};font-style:italic;text-anchor:middle;fill:{subtext_color};",
                         ).text = "mixed fabrics - see layout page"
 
+            self._draw_inter_section_edge_labels(
+                shift_g,
+                item,
+                block_data,
+                item.get("scale", 1.0),
+                item.get("cx_hull", 0.0),
+                item.get("cx", 0.0),
+                item.get("cy", 0.0),
+                item.get("best_angle", 0.0),
+                self.options.mirror_templates,
+            )
+
             local_sa = [
+
+
+
                 inner_transform.apply_to_point((p[0], p[1])) for p in item["sa_poly"]
             ]
 
@@ -5161,11 +5182,64 @@ class ExportPlugin(inkex.Effect):
         if item.get("is_mirrored"):
             cx_hull = item.get("cx_hull", 0.0)
             p_local = [(2.0 * cx_hull - pt[0], pt[1]) for pt in p_local]
-        return p_local
+        
+        sa_poly = item.get("sa_poly") or []
+        calc_min_x = min((pt[0] for pt in sa_poly), default=0.0)
+        calc_min_y = min((pt[1] for pt in sa_poly), default=0.0)
+        
+        hx0, hy0, _, _ = item.get("hull_bbox") or (calc_min_x, calc_min_y, 0.0, 0.0)
+        min_x = item.get("min_x") if item.get("min_x") is not None else hx0
+        min_y = item.get("min_y") if item.get("min_y") is not None else hy0
+        return [(pt[0] - min_x, pt[1] - min_y) for pt in p_local]
 
-    def _draw_inter_section_edge_labels(self, container, item, block_data):
+
+
+    def _estimate_chain_radius_and_center(self, chain):
+        if len(chain) < 2:
+            return 1e9, False, (0.0, 0.0)
+        p1 = chain[0][1]
+        p2 = chain[len(chain)//2][1]
+        p3 = chain[-1][2]
+        
+        ax, ay = p1[0] - p2[0], p1[1] - p2[1]
+        bx, by = p3[0] - p2[0], p3[1] - p2[1]
+        cx, cy = p1[0] - p3[0], p1[1] - p3[1]
+        
+        a = math.hypot(ax, ay)
+        b = math.hypot(bx, by)
+        c = math.hypot(cx, cy)
+        
+        cross = abs(ax * by - ay * bx)
+        if cross < 1e-4:
+            return 1e9, False, (0.0, 0.0)
+            
+        R = (a * b * c) / (2.0 * cross)
+        D = 2.0 * (p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]))
+        if abs(D) < 1e-4:
+            return 1e9, False, (0.0, 0.0)
+        center_x = ((p1[0]**2 + p1[1]**2)*(p2[1] - p3[1]) + (p2[0]**2 + p2[1]**2)*(p3[1] - p1[1]) + (p3[0]**2 + p3[1]**2)*(p1[1] - p2[1])) / D
+        center_y = ((p1[0]**2 + p1[1]**2)*(p3[0] - p2[0]) + (p2[0]**2 + p2[1]**2)*(p1[0] - p3[0]) + (p3[0]**2 + p3[1]**2)*(p2[0] - p1[0])) / D
+        
+        return R, True, (center_x, center_y)
+
+    def _draw_inter_section_edge_labels(
+        self,
+        container,
+        item,
+        block_data,
+        scale,
+        cx_hull,
+        cx,
+        cy,
+        best_angle,
+        mirror_templates,
+    ):
         edge_mode = getattr(self.options, "edge_label_style", "step")
         if edge_mode == "none":
+            return
+
+        sa_val = getattr(self.options, "sa_in", getattr(self.options, "seam_allowance", 0.25))
+        if isinstance(sa_val, (int, float)) and sa_val < 0.249:
             return
 
         sec_prefix = item.get("prefix", "").upper()
@@ -5200,8 +5274,6 @@ class ExportPlugin(inkex.Effect):
         if not sec_regions:
             return
 
-        sec_polys_shift = [self.transform_block_poly_to_shift_g_space(r.polygon, item) for r in sec_regions]
-
         other_secs = {}
         for r in all_regions:
             if not r.label:
@@ -5214,7 +5286,7 @@ class ExportPlugin(inkex.Effect):
 
         TOL = 2.0
         MIN_EDGE_LEN = 14.4  # 0.20 inch
-        MAX_GAP = 108.0      # 1.50 inch max gap between repeated labels
+        MAX_GAP = 216.0      # 3.0 inch max gap between repeated labels
 
         def point_segment_distance(pt, q1, q2):
             dx, dy = q2[0] - q1[0], q2[1] - q1[1]
@@ -5230,21 +5302,21 @@ class ExportPlugin(inkex.Effect):
             step_num = step_map.get((sec_prefix, other_pfx)) or step_map.get((other_pfx, sec_prefix))
             
             if edge_mode == "step":
-                if not step_num:
-                    lbl_text = f"Join {other_pfx}"
-                else:
+                if step_num:
                     lbl_text = f"Step {step_num}"
+                else:
+                    lbl_text = f"Join {other_pfx}"
+            elif edge_mode == "section":
+                lbl_text = f"{other_pfx}"
             else:
                 lbl_text = f"Sew to Sec {other_pfx}"
 
-            other_polys_shift = [self.transform_block_poly_to_shift_g_space(r_b.polygon, item) for r_b in other_regions]
-
-            for r_a, poly_a in zip(sec_regions, sec_polys_shift):
+            raw_shared = []
+            for r_a in sec_regions:
+                poly_a = r_a.polygon
                 n_a = len(poly_a)
                 if n_a < 3:
                     continue
-
-                shared_segments = []
                 for i in range(n_a):
                     p1 = poly_a[i]
                     p2 = poly_a[(i + 1) % n_a]
@@ -5255,7 +5327,8 @@ class ExportPlugin(inkex.Effect):
                     
                     mid_p = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
                     is_shared = False
-                    for poly_b in other_polys_shift:
+                    for r_b in other_regions:
+                        poly_b = r_b.polygon
                         n_b = len(poly_b)
                         for j in range(n_b):
                             q1 = poly_b[j]
@@ -5265,88 +5338,134 @@ class ExportPlugin(inkex.Effect):
                                 break
                         if is_shared:
                             break
-                            
                     if is_shared:
-                        shared_segments.append((i, p1, p2, len_seg))
+                        raw_shared.append((p1, p2, len_seg))
 
-                if not shared_segments:
+            if not raw_shared:
+                continue
+
+            unused = list(raw_shared)
+            chains = []
+            while unused:
+                curr = [unused.pop(0)]
+                changed = True
+                while changed:
+                    changed = False
+                    end_p = curr[-1][1]
+                    for idx, seg in enumerate(unused):
+                        p1, p2, l_s = seg
+                        if math.hypot(end_p[0] - p1[0], end_p[1] - p1[1]) < TOL:
+                            curr.append(unused.pop(idx))
+                            changed = True
+                            break
+                        elif math.hypot(end_p[0] - p2[0], end_p[1] - p2[1]) < TOL:
+                            curr.append((p2, p1, l_s))
+                            unused.pop(idx)
+                            changed = True
+                            break
+                    if not changed:
+                        start_p = curr[0][0]
+                        for idx, seg in enumerate(unused):
+                            p1, p2, l_s = seg
+                            if math.hypot(start_p[0] - p2[0], start_p[1] - p2[1]) < TOL:
+                                curr.insert(0, unused.pop(idx))
+                                changed = True
+                                break
+                            elif math.hypot(start_p[0] - p1[0], start_p[1] - p1[1]) < TOL:
+                                curr.insert(0, (p2, p1, l_s))
+                                unused.pop(idx)
+                                changed = True
+                                break
+                chains.append([(0, seg[0], seg[1], seg[2]) for seg in curr])
+
+            for chain in chains:
+                total_chain_len = sum(s[3] for s in chain)
+                if total_chain_len < MIN_EDGE_LEN:
                     continue
 
-                chains = []
-                curr_chain = []
-                for seg in shared_segments:
-                    if not curr_chain:
-                        curr_chain.append(seg)
+                R, is_curved, center_pt = self._estimate_chain_radius_and_center(chain)
+                num_lbls = max(1, int(total_chain_len / MAX_GAP))
+                for k in range(1, num_lbls + 1):
+                    target_d = (k / (num_lbls + 1.0)) * total_chain_len
+                    
+                    accum_d = 0.0
+                    pos_x, pos_y = chain[0][1]
+                    u_x, u_y = 1.0, 0.0
+                    for seg in chain:
+                        seg_len = seg[3]
+                        if accum_d + seg_len >= target_d:
+                            rem_d = target_d - accum_d
+                            frac = rem_d / seg_len if seg_len > 1e-4 else 0.0
+                            p1, p2 = seg[1], seg[2]
+                            pos_x = p1[0] + frac * (p2[0] - p1[0])
+                            pos_y = p1[1] + frac * (p2[1] - p1[1])
+                            u_x = (p2[0] - p1[0]) / seg_len
+                            u_y = (p2[1] - p1[1]) / seg_len
+                            break
+                        accum_d += seg_len
+
+                    normal_out = (u_y, -u_x)
+                    test_pt = (pos_x + normal_out[0] * 3.0, pos_y + normal_out[1] * 3.0)
+                    sec_raw_polys = [r.polygon for r in sec_regions]
+                    if any(core.point_in_polygon(test_pt, r_poly) for r_poly in sec_raw_polys):
+                        normal_out = (-normal_out[0], -normal_out[1])
+
+                    OFFSET = 12.0
+                    if is_curved and 20.0 < R < 1000.0:
+                        v_c = (center_pt[0] - pos_x, center_pt[1] - pos_y)
+                        dot_c = normal_out[0] * v_c[0] + normal_out[1] * v_c[1]
+                        if dot_c > 0:
+                            text_w = 36.0
+                            half_w = text_w / 2.0
+                            if R > half_w:
+                                sagitta = R - math.sqrt(R * R - half_w * half_w)
+                                OFFSET += sagitta
+
+                    raw_pt = (pos_x + normal_out[0] * OFFSET, pos_y + normal_out[1] * OFFSET)
+                    raw_u = (u_x, u_y)
+                    
+                    px_s, py_s = raw_pt[0] * scale, raw_pt[1] * scale
+                    ux_s, uy_s = raw_u[0], raw_u[1]
+                    
+                    if mirror_templates:
+                        px_m = 2.0 * cx_hull - px_s
+                        py_m = py_s
+                        ux_m, uy_m = -ux_s, uy_s
                     else:
-                        prev_seg = curr_chain[-1]
-                        if seg[0] == (prev_seg[0] + 1) % n_a or seg[0] == prev_seg[0] + 1:
-                            curr_chain.append(seg)
-                        else:
-                            chains.append(curr_chain)
-                            curr_chain = [seg]
-                if curr_chain:
-                    chains.append(curr_chain)
+                        px_m, py_m = px_s, py_s
+                        ux_m, uy_m = ux_s, uy_s
+                    
+                    if best_angle != 0:
+                        rad = math.radians(best_angle)
+                        cos_a, sin_a = math.cos(rad), math.sin(rad)
+                        tx, ty = px_m - cx, py_m - cy
+                        px_r = tx * cos_a - ty * sin_a + cx
+                        py_r = tx * sin_a + ty * cos_a + cy
+                        ux_r = ux_m * cos_a - uy_m * sin_a
+                        uy_r = ux_m * sin_a + uy_m * cos_a
+                    else:
+                        px_r, py_r = px_m, py_m
+                        ux_r, uy_r = ux_m, uy_m
 
-                for chain in chains:
-                    total_chain_len = sum(s[3] for s in chain)
-                    if total_chain_len < MIN_EDGE_LEN:
-                        continue
+                    angle_deg = math.degrees(math.atan2(uy_r, ux_r))
+                    if angle_deg > 90.0:
+                        angle_deg -= 180.0
+                    elif angle_deg < -90.0:
+                        angle_deg += 180.0
+                    text_tf = f"translate({px_r:.2f}, {py_r:.2f}) rotate({angle_deg:.2f})"
 
-                    num_lbls = max(1, int(total_chain_len / MAX_GAP))
-                    for k in range(1, num_lbls + 1):
-                        target_d = (k / (num_lbls + 1.0)) * total_chain_len
-                        
-                        accum_d = 0.0
-                        pos_x, pos_y = chain[0][1]
-                        u_x, u_y = 1.0, 0.0
-                        for seg in chain:
-                            seg_len = seg[3]
-                            if accum_d + seg_len >= target_d:
-                                rem_d = target_d - accum_d
-                                frac = rem_d / seg_len if seg_len > 1e-4 else 0.0
-                                p1, p2 = seg[1], seg[2]
-                                pos_x = p1[0] + frac * (p2[0] - p1[0])
-                                pos_y = p1[1] + frac * (p2[1] - p1[1])
-                                u_x = (p2[0] - p1[0]) / seg_len
-                                u_y = (p2[1] - p1[1]) / seg_len
-                                break
-                            accum_d += seg_len
+                    txt_elem = etree.SubElement(
+                        container,
+                        "{%s}text" % core.SVG_NS,
+                        x="0",
+                        y="0",
+                        transform=text_tf,
+                        style=f"font-size:7.5px;font-family:{STYLE_CONFIG['font_family']};fill:#444444;text-anchor:middle;dominant-baseline:middle;font-weight:bold;",
+                    )
+                    txt_elem.text = lbl_text
 
-                        normal_out = (u_y, -u_x)
-                        test_pt = (pos_x + normal_out[0] * 3.0, pos_y + normal_out[1] * 3.0)
-                        if any(core.point_in_polygon(test_pt, r_poly) for r_poly in sec_polys_shift):
-                            normal_out = (-normal_out[0], -normal_out[1])
 
-                        OFFSET = 9.0
-                        lx = pos_x + normal_out[0] * OFFSET
-                        ly = pos_y + normal_out[1] * OFFSET
 
-                        is_mirrored = item.get("is_mirrored", False)
-
-                        if not is_mirrored:
-                            angle_deg = math.degrees(math.atan2(u_y, u_x))
-                            if angle_deg > 90.0:
-                                angle_deg -= 180.0
-                            elif angle_deg < -90.0:
-                                angle_deg += 180.0
-                            text_tf = f"translate({lx:.2f}, {ly:.2f}) rotate({angle_deg:.2f})"
-                        else:
-                            paper_angle_deg = math.degrees(math.atan2(u_y, -u_x))
-                            if paper_angle_deg > 90.0:
-                                paper_angle_deg -= 180.0
-                            elif paper_angle_deg < -90.0:
-                                paper_angle_deg += 180.0
-                            text_tf = f"translate({lx:.2f}, {ly:.2f}) scale(-1, 1) rotate({paper_angle_deg:.2f})"
-
-                        txt_elem = etree.SubElement(
-                            container,
-                            "{%s}text" % core.SVG_NS,
-                            x="0",
-                            y="0",
-                            transform=text_tf,
-                            style=f"font-size:7.5px;font-family:{STYLE_CONFIG['font_family']};fill:#444444;text-anchor:middle;dominant-baseline:middle;font-weight:bold;",
-                        )
-                        txt_elem.text = lbl_text
 
 
 if __name__ == "__main__":

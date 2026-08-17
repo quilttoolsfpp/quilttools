@@ -197,7 +197,7 @@ class BlockLibraryPlugin(inkex.Effect):
                 path = qpick.pick_block_tk("Quilt Tools - Block Library", blocks)
                 if path:
                     return self._load_path(path)
-                return inkex.utils.debug("No block selected.")
+                return
             except Exception:
                 return self._catalogue(
                     note="(Opened the browser catalogue instead - or set the "
@@ -266,7 +266,7 @@ class BlockLibraryPlugin(inkex.Effect):
                 path = qpick.pick_block_tk("Quilt Tools - Block Library", blocks)
                 if path:
                     return self._load_path(path)
-                return inkex.utils.debug("No block selected.")
+                return
             except Exception:
                 return self._catalogue(
                     note=f"(Thumbnail window error: {e}. Opened the browser "
@@ -274,7 +274,7 @@ class BlockLibraryPlugin(inkex.Effect):
                 )
 
         if not chosen["path"]:
-            return inkex.utils.debug("No block selected.")
+            return
         return self._load_path(chosen["path"])
 
     # ------------------------------------------------------------------

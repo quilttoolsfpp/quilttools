@@ -537,7 +537,7 @@ def pick_block_tk(title, blocks, thumb_size=120, columns=4):
                     lbl_cap.pack()
 
                 def make_select(p, c):
-                    return lambda e: select_item(p, c)
+                    return lambda e: (select_item(p, c), on_ok())
                 def make_dbl(p):
                     return lambda e: (select_item(p, card), on_ok())
 
