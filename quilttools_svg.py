@@ -42,12 +42,15 @@ def find_fpp_group(svg):
 
 def get_color_for_label(label, mode, idx):
     if mode == "section":
-        match = re.search(r"^([A-Za-z]+)", label)
-        if match and not match.group(0).startswith("TEMP"):
-            char = match.group(0).upper()
-            pal_idx = (ord(char[0]) - 65) % len(SECTION_PALETTE)
+        match = re.search(r"(\d+-[A-Za-z]+|[A-Za-z]+)", label)
+        if match and not match.group(0).upper().startswith("TEMP"):
+            sec_str = match.group(0).upper()
+            m_letter = re.search(r"[A-Za-z]+", sec_str)
+            char = m_letter.group(0) if m_letter else sec_str
+            pal_idx = (ord(char[0]) - 65) % len(SECTION_PALETTE_LIST)
             return SECTION_PALETTE.get(char[0], SECTION_PALETTE_LIST[pal_idx])
     return PIECE_COLORS[idx % len(PIECE_COLORS)]
+
 
 
 def build_fpp_layer(block_data):

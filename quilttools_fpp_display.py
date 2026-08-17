@@ -15,18 +15,20 @@ import quilttools_fpp_core as core
 
 class DisplayPlugin(inkex.Effect):
     def add_arguments(self, pars):
+        # Streamlined mode: by default alternates between block colour and section overlay
+        pars.add_argument("--mode", type=str, default="toggle",
+                          choices=["toggle", "block", "section"])
+        # Legacy args kept so any existing saved parameters never error
         pars.add_argument("--toggle_bypass", type=inkex.Boolean, default=False)
         pars.add_argument("--block_kind", type=str, default="fpp")
         pars.add_argument("--bg_color", type=str, default="#ffffff")
-        pars.add_argument("--color_mode", type=str, default="piece")
+        pars.add_argument("--color_mode", type=str, default="section")
         pars.add_argument("--show_sa", type=inkex.Boolean, default=False)
         pars.add_argument("--sa_in", type=float, default=0.25)
         pars.add_argument("--fill_opacity", type=float, default=1.0)
         pars.add_argument("--group_by_color", type=inkex.Boolean, default=False)
-        # Legacy args kept so stale saved dialog values never error.
-        pars.add_argument("--action", type=str, default="refresh_only")
-        pars.add_argument("--bypass_custom_colors", type=inkex.Boolean,
-                          default=False)
+        pars.add_argument("--action", type=str, default="toggle")
+        pars.add_argument("--bypass_custom_colors", type=inkex.Boolean, default=False)
         pars.add_argument("--quantize_n", type=int, default=6)
         pars.add_argument("--locked_colors", type=str, default="")
         pars.add_argument("--color_code_overrides", type=str, default="")
@@ -39,37 +41,47 @@ class DisplayPlugin(inkex.Effect):
                 "(This is a block drafting aid - quilt layouts are "
                 "recoloured via the Quilt Tools Colour menu.)")
 
-        # One-click bypass toggle: when ticked, ONLY flip the stored
-        # bypass state and redraw - every other input is ignored.
-        # scrape=False in both directions so the default-palette canvas
-        # can never overwrite saved custom colours on the way back.
-        if self.options.toggle_bypass:
-            new_state = not bool(
-                block_data.prefs.get("bypass_custom_colors", False))
-            block_data.prefs["bypass_custom_colors"] = new_state
+        is_currently_overlay = bool(
+            block_data.prefs.get("bypass_custom_colors", False)
+        )
+
+        mode = getattr(self.options, "mode", "toggle")
+        if mode == "block":
+            switch_to_overlay = False
+        elif mode == "section":
+            switch_to_overlay = True
+        else:  # toggle
+            switch_to_overlay = not is_currently_overlay
+
+        if switch_to_overlay:
+            # Switching from Block Colours to Section Overlay:
+            # 1. Scrape any canvas custom colours painted by the user so they are saved
+            custom_colors = block_data.prefs.setdefault("custom_colors", {})
+            for path in g.findall(f".//{{{core.SVG_NS}}}path"):
+                rid = path.get(core.FPP_REGION_ATTR)
+                if rid:
+                    col = core.resolve_element_fill(path)
+                    if col:
+                        custom_colors[str(rid)] = col
+
+            # 2. Activate section overlay mode
+            block_data.prefs["color_mode"] = "section"
+            block_data.prefs["bypass_custom_colors"] = True
             core.refresh_layer(g, block_data, scrape=False)
             inkex.utils.debug(
-                "Temporary bypass is now %s - showing %s. (Display only: "
-                "the block's saved colours are untouched.)" % (
-                    "ON" if new_state else "OFF",
-                    "the default palette" if new_state
-                    else "your custom colours"))
-            return
-
-        block_data.prefs["block_kind"] = self.options.block_kind
-        bg_col = self.options.bg_color.strip()
-        if bg_col.startswith("#"):
-            block_data.prefs["bg_color"] = bg_col
-        elif bg_col:
-            block_data.prefs["bg_color"] = "#" + bg_col.lstrip("#")
-        block_data.prefs["color_mode"] = self.options.color_mode
-        block_data.prefs["show_sa"] = self.options.show_sa
-        block_data.prefs["sa_in"] = self.options.sa_in
-        block_data.prefs["group_by_color"] = self.options.group_by_color
-        block_data.prefs["fill_opacity"] = self.options.fill_opacity
-        # bypass_custom_colors is ONLY changed via the one-click toggle.
-        core.refresh_layer(g, block_data, scrape=True)
+                "FPP Display: Section Overlay ON (Coloured by Section A, B, C...).\n"
+                "Run FPP Display Toggle again to return to Block Colours."
+            )
+        else:
+            # Switching from Section Overlay back to Block Colours:
+            block_data.prefs["bypass_custom_colors"] = False
+            core.refresh_layer(g, block_data, scrape=False)
+            inkex.utils.debug(
+                "FPP Display: Block Colours ON (Showing Saved Block Palette).\n"
+                "Run FPP Display Toggle again to switch to Section Overlay."
+            )
 
 
 if __name__ == "__main__":
     DisplayPlugin().run()
+

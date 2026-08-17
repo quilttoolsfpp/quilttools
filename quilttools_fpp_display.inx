@@ -4,29 +4,16 @@
   <id>org.quilttoolsplugin.quilttools_fpp_display</id>
   <dependency type="executable" location="extensions">quilttools_fpp_display.py</dependency>
 
-  <param name="toggle_bypass" type="bool" gui-text="TOGGLE Temporary Bypass Custom Colors (one click: flips on/off, ignores EVERYTHING below)">false</param>
-  <label>Tick the toggle and Apply to instantly switch between your custom colours and the default palette view. Display only - the block's saved colours never change here.</label>
+  <label appearance="header">FPP Display Toggle</label>
+  <label>Click Apply to instantly alternate between your Block Colours (saved fabric palette) and the Section Colour Overlay (colour-coded by Section A, B, C...).</label>
   <separator/>
-
-  <label appearance="header">Display &amp; Block Preferences (applied on Apply when the toggle is unticked)</label>
-  <param name="block_kind" type="optiongroup" appearance="combo" gui-text="Block Kind (Sewing Method)">
-    <option value="fpp">Foundation Paper Piecing (FPP)</option>
-    <option value="pieced">Traditional Piecing (Templates)</option>
-    <option value="applique">Applique (Shapes on Background)</option>
+  <param name="mode" type="optiongroup" appearance="combo" gui-text="Display Action">
+    <option value="toggle">Alternate / Toggle View (Default)</option>
+    <option value="block">Show Block Colours</option>
+    <option value="section">Show Section Colour Overlay</option>
   </param>
-  <param name="bg_color" type="string" gui-text="Applique Background Color (Hex)">#ffffff</param>
   <separator/>
-  <param name="color_mode" type="optiongroup" appearance="combo" gui-text="Default Palette View">
-    <option value="piece">Rainbow Pieces</option>
-    <option value="section">Section Colors</option>
-  </param>
-  <param name="group_by_color" type="bool" gui-text="Group Canvas Objects by Fabric Color">false</param>
-  <param name="fill_opacity" type="float" min="0.0" max="1.0" precision="2" gui-text="Block Fill Opacity (0.0 to 1.0)">1.0</param>
-  <param name="show_sa" type="bool" gui-text="Show Seam Allowances on Canvas">false</param>
-  <param name="sa_in" type="float" min="0.125" max="1.0" precision="3" gui-text="Seam Allowance Size (inches)">0.25</param>
-
-  <separator/>
-  <label>Looking for saving / sampling / quantizing / palette export? Those edit the block's PERMANENT colours and moved to: Extensions &gt; Quilt Tools Colour &gt; 03. Custom Block Colours.</label>
+  <label>Display only — your block's saved colours are never lost or overwritten.</label>
 
   <effect needs-live-preview="false">
     <object-type>all</object-type>
