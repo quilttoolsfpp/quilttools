@@ -5,8 +5,9 @@
   <dependency type="executable" location="extensions">eqimport_to_guide.py</dependency>
 
   <label appearance="header">Action</label>
-  <param name="action" type="optiongroup" appearance="radio" gui-text="">
+  <param name="action" type="optiongroup" appearance="radio" gui-text="Action">
     <option value="scan">Scan and list blocks (no import)</option>
+
     <option value="import">Import blocks as guide layers</option>
     <option value="import_library">Import blocks into the Block Library (Quilt Tools)</option>
   </param>

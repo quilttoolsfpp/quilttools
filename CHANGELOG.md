@@ -5,14 +5,38 @@ are listed first.
 
 ---
 
-## Changes in v2.2 (Planned / Upcoming) - TBA
+## Changes in v2.5.0 (Inter-Section Edge Labels, Placement Controls, Mirrored Section Map, Streamlined Display) - August 2026
 
-### 🎨 Applique Block Kind & Layering
-* **Applique Block Kind**: A new block kind option to designate applique blocks, generating a backing fabric block base and calculating yardage for individual applique shapes.
-* **Applique Backdrops & Scraping**: Applique blocks automatically render a background bounding polygon (`qt-block-bg`) on the canvas for direct coloring and automatic color scraping.
-* **Applique Base Seam Extensions**: Implemented `resolve_appliques` to automatically union (`quilttools_geometry.get_polygon_union`) background pieces with the applique shapes they support, ensuring backing fabrics extend under applique shapes without raw gaps.
+### 🏷️ Inter-Section Edge Labels
+* **Unified Geometric Transformation Pipeline**: Completely re-architected `_draw_inter_section_edge_labels` in `quilttools_fpp_export.py` to use a scale $\rightarrow$ mirror $\rightarrow$ centroid-rotation matrix pipeline matching alignment ticks. Eliminates all coordinate offset drift across tiled/split parts, rotations, and mirrored templates.
+* **Dual-Sided Seam Labelling**: Labels are automatically generated inside seam allowances on **both sides** of every shared inter-section seam (straight and curved), ensuring joining instructions are visible regardless of which piece is laid down first.
+* **Seam Allowance Safety Gate & Curve Clearance**: Added a strict $\ge 0.25″$ (24px) seam allowance gate and automatic sagitta offset calculations for curved concave edges to guarantee edge labels never overlap stitch lines.
+* **Step-Numbered Assembly Sequence**: Updated Page 2 assembly instructions to print as `Step 1. Join B + C -> BC`, `Step 2. Join A + BC -> ABC` to perfectly correspond with template edge labels.
+
+### 📄 Section Reference Cards Placement
+* **3-Way Placement Selector**: Added a dedicated option in *Finalize Export Settings -> Template Styling & Aesthetics*:
+  * **`Smart-packed inline`**: Reference table cards are packed alongside section templates on the pattern pages.
+  * **`Separated`**: Reference table cards are smart-packed onto dedicated page(s) at the very end of the PDF, keeping template pages exclusively for fabric pieces.
+  * **`None`**: Reference table cards are omitted completely.
+* **Full GUI & Sticky Preferences Support**: Configurable across both GTK and Tkinter setup dialogs and remembered across sessions.
+
+### 🪞 Mirrored Section Map
+* **Reverse Sewing Side View**: Section Map previews on Page 2 are now horizontally mirrored about the block center to match the physical orientation of printed foundation papers as seen from the reverse (sewing) side.
+* **Explanatory Subtitle**: Added caption: *"Mirrored to match the foundation paper pattern as viewed from the reverse (sewing side)."*
+
+### 🎨 Display & Colour Suite Enhancements
+* **Streamlined FPP Display Toggle (`05. FPP Display Toggle`)**: Simplified to a direct 1-click toggle that alternates between Block Colours (custom fabrics) and Section Colour Overlay. Non-destructive: temporarily painted canvas colors are preserved and restored.
+* **Display Controls in Custom Block Colours (`03. Custom Block Colours`)**: Added Block Fill Opacity slider (`0.00` to `1.00`), canvas seam allowance preview toggle, and fabric color grouping into *Quilt Tools Colour*.
+
+### 📂 Block Library & Cross-Platform Reliability
+* **Direct Block Loading**: Added direct block name/path input on both *Load Block* and *Web Catalogue* tabs in *00. Block Library*.
+* **Batch Auto-Labeling**: Ran Fully Auto-Label across 79 standard blocks in the Block Library.
+* **Layer Selection Fix (`01. New Block`)**: Prevented layer elements from being appended into child clipping groups when creating new blocks with active selections.
+* **Localization Cleanup**: Fixed empty `gui-text` attribute in *Import EQ8 Block as Guide* (`eqimport_to_guide.inx`) preventing gettext warnings.
+* **System Requirements**: Added GTK3 (`python3-gi`, `gir1.2-gtk-3.0`) and Tkinter (`python3-tk`) installation instructions for Linux and WSL users in `README.md`.
 
 ---
+
 
 ## Changes in v2.1 (Traditional Piecing, Colour Suite, Y-Seam Separability, SVG Importer) - July 2026
 

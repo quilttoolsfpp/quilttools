@@ -70,10 +70,29 @@ def _block_info(full_path):
         return (None, None, None, "", [])
 
 
+def _find_block_by_name(query, blocks):
+    if not query:
+        return None
+    q = query.strip().replace("\\", "/").rstrip(".svg").lower()
+    if not q:
+        return None
+    if os.path.isfile(query.strip()):
+        return query.strip()
+    for rel_label, full_path in blocks:
+        if rel_label.lower() == q or os.path.splitext(os.path.basename(full_path))[0].lower() == q:
+            return full_path
+    for rel_label, full_path in blocks:
+        if q in rel_label.lower() or q in os.path.basename(full_path).lower():
+            return full_path
+    return None
+
+
 class BlockLibraryPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--notebook", type=str, default="load")
         pars.add_argument("--action", type=str, default="load")
+        pars.add_argument("--direct_name", type=str, default="")
+        pars.add_argument("--catalogue_block_name", type=str, default="")
         pars.add_argument("--svg_file", type=str, default="")
         pars.add_argument("--save_name", type=str, default="")
         pars.add_argument("--save_description", type=str, default="")
@@ -83,6 +102,7 @@ class BlockLibraryPlugin(inkex.Effect):
         pars.add_argument("--import_w_in", type=float, default=6.0)
         pars.add_argument("--load_size", type=str, default="original")
         pars.add_argument("--load_w_in", type=float, default=12.0)
+
 
     def effect(self):
         # Resolve action from active notebook tab, falling back to CLI action if explicit
@@ -182,6 +202,17 @@ class BlockLibraryPlugin(inkex.Effect):
                 f"The library is empty.\nLibrary folder:\n  {LIB_DIR}"
             )
 
+        # 1. Direct name or path entry
+        direct = (getattr(self.options, "direct_name", "") or getattr(self.options, "svg_file", "") or "").strip()
+        if direct:
+            matched = _find_block_by_name(direct, blocks)
+            if matched:
+                return self._load_path(matched)
+            return inkex.errormsg(
+                f"Could not find block '{direct}' in the library.\n"
+                f"Leave the block name field blank to open the visual thumbnail picker."
+            )
+
         try:
             import gi
 
@@ -189,9 +220,6 @@ class BlockLibraryPlugin(inkex.Effect):
             from gi.repository import Gtk, GdkPixbuf
         except Exception:
             # No GTK (e.g. macOS): use native Tkinter visual picker
-            f = (self.options.svg_file or "").strip()
-            if f and os.path.isfile(f):
-                return self._load_path(f)
             try:
                 import quilttools_blockpicker as qpick
                 path = qpick.pick_block_tk("Quilt Tools - Block Library", blocks)
@@ -200,9 +228,10 @@ class BlockLibraryPlugin(inkex.Effect):
                 return
             except Exception:
                 return self._catalogue(
-                    note="(Opened the browser catalogue instead - or set the "
-                    "'SVG file to import' field to load a specific block.)"
+                    note="(Opened the browser catalogue instead - or paste a "
+                    "block name to load directly.)"
                 )
+
 
         chosen = {"path": None}
         try:
@@ -455,6 +484,17 @@ function pick(n){{
         return out_path, len(blocks)
 
     def _catalogue(self, note=""):
+        cat_name = (getattr(self.options, "catalogue_block_name", "") or "").strip()
+        if cat_name:
+            blocks = _scan_library()
+            matched = _find_block_by_name(cat_name, blocks)
+            if matched:
+                return self._load_path(matched)
+            return inkex.errormsg(
+                f"Could not find block '{cat_name}' in the library.\n"
+                f"Leave the field blank to open the visual catalogue in your browser."
+            )
+
         try:
             out_path, count = self._build_catalogue_html()
         except Exception as e:
@@ -474,6 +514,7 @@ function pick(n){{
                 f"browser automatically. Open this file manually:\n  {out_path}"
             )
         inkex.utils.debug(msg)
+
 
     # ------------------------------------------------------------------
     # IMPORT FOREIGN SVG (tracing background)

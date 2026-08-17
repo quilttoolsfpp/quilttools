@@ -1,9 +1,9 @@
 {
   "page_size": "a4",
   "orientation": "portrait",
-  "margin_in": 0.4,
+  "margin_in": 0.5,
   "sa_in": 0.25,
-  "spacing_in": 0.25,
+  "spacing_in": 0.3,
   "template_color_mode": "tag",
   "swatch_shape": "rectangle",
   "select_sections": "",
@@ -29,5 +29,5 @@
   "precut_fat_8th": true,
   "precut_fat_quarter": true,
   "include_pattern_test_square": true,
-  "show_page_boundaries": true
+  "show_page_boundaries": false
 }

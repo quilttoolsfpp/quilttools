@@ -22,6 +22,10 @@ import quilttools_colour as qcol
 class CustomColoursPlugin(inkex.Effect):
     def add_arguments(self, pars):
         pars.add_argument("--action", type=str, default="save_colors")
+        pars.add_argument("--fill_opacity", type=float, default=1.0)
+        pars.add_argument("--show_sa", type=inkex.Boolean, default=False)
+        pars.add_argument("--sa_in", type=float, default=0.25)
+        pars.add_argument("--group_by_color", type=inkex.Boolean, default=False)
         pars.add_argument("--quantize_n", type=int, default=6)
         pars.add_argument("--locked_colors", type=str, default="")
         pars.add_argument("--color_code_overrides", type=str, default="")
@@ -34,6 +38,12 @@ class CustomColoursPlugin(inkex.Effect):
         g, block_data = core.find_fpp_group(self.svg)
         if g is None:
             return inkex.errormsg(qcol.CONTEXT_HELP["need_block"])
+
+        # Update display settings
+        block_data.prefs["fill_opacity"] = self.options.fill_opacity
+        block_data.prefs["show_sa"] = self.options.show_sa
+        block_data.prefs["sa_in"] = self.options.sa_in
+        block_data.prefs["group_by_color"] = self.options.group_by_color
 
         action = self.options.action
 
@@ -52,6 +62,14 @@ class CustomColoursPlugin(inkex.Effect):
             inkex.utils.debug(
                 f"Saved {count} canvas colour(s) into the block. "
                 + qcol.context_note(ctx, "block"))
+
+        elif action == "set_display":
+            inkex.utils.debug(
+                f"Updated block display preferences: fill opacity={self.options.fill_opacity:.2f}, "
+                f"seam allowances={'ON' if self.options.show_sa else 'OFF'}, "
+                f"group by color={'ON' if self.options.group_by_color else 'OFF'}."
+            )
+
 
         elif action == "clear_colors":
             block_data.prefs["custom_colors"] = {}

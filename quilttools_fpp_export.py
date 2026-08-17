@@ -310,9 +310,11 @@ class ExportPlugin(inkex.Effect):
         # Detail Key & Reference Table options
         pars.add_argument("--detail_key_style", type=str, default="table", choices=["table", "direct"])
         pars.add_argument("--detail_key_placement", type=str, default="inline", choices=["inline", "separate_page"])
+        pars.add_argument("--ref_cards_placement", type=str, default="inline", choices=["inline", "separated", "none"])
         pars.add_argument("--include_reference_tables", type=inkex.Boolean, default=True)
         pars.add_argument("--include_enlarged_diagrams", type=inkex.Boolean, default=False)
         pars.add_argument("--edge_label_style", type=str, default="step", choices=["step", "section", "none"])
+        pars.add_argument("--ref_cards_placement_fpp", type=str, default="inline")
         pars.add_argument("--detail_key_style_fpp", type=str, default="table")
         pars.add_argument("--detail_key_placement_fpp", type=str, default="inline")
         pars.add_argument("--include_reference_tables_fpp", type=inkex.Boolean, default=True)
@@ -322,6 +324,7 @@ class ExportPlugin(inkex.Effect):
         pars.add_argument("--detail_key_placement_temp", type=str, default="inline")
         pars.add_argument("--detail_key_style_mixed", type=str, default="table")
         pars.add_argument("--detail_key_placement_mixed", type=str, default="inline")
+
 
     def _show_gtk_setup_dialog(self, block_data):
         try:
@@ -387,10 +390,13 @@ class ExportPlugin(inkex.Effect):
                         self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
                     if "include_reference_tables" in saved_prefs:
                         self.options.include_reference_tables = bool(saved_prefs["include_reference_tables"])
+                    if "ref_cards_placement" in saved_prefs:
+                        self.options.ref_cards_placement = saved_prefs["ref_cards_placement"]
                     if "include_enlarged_diagrams" in saved_prefs:
                         self.options.include_enlarged_diagrams = bool(saved_prefs["include_enlarged_diagrams"])
                     if "edge_label_style" in saved_prefs:
                         self.options.edge_label_style = saved_prefs["edge_label_style"]
+
             except Exception:
                 pass
 
@@ -653,10 +659,20 @@ class ExportPlugin(inkex.Effect):
         combo_edge_label.set_active_id(getattr(self.options, "edge_label_style", "step") or "step")
         grid_style.attach(combo_edge_label, 1, 7, 1, 1)
 
-        # Section Reference Table Cards Toggle
-        chk_inc_ref_tables = Gtk.CheckButton(label="Include Section Reference Table cards (smart-packed inline)")
-        chk_inc_ref_tables.set_active(getattr(self.options, "include_reference_tables", True))
-        grid_style.attach(chk_inc_ref_tables, 0, 8, 2, 1)
+        # Section Reference Cards Placement
+        lbl_rcp = Gtk.Label(label="Section Reference Cards:")
+        lbl_rcp.set_halign(Gtk.Align.START)
+        grid_style.attach(lbl_rcp, 0, 8, 1, 1)
+        combo_ref_cards = Gtk.ComboBoxText()
+        combo_ref_cards.append("inline", "Smart-packed inline (with templates)")
+        combo_ref_cards.append("separated", "Separated (Smart-packed on pages at end)")
+        combo_ref_cards.append("none", "None (Turn Off Reference Cards)")
+        init_rcp = getattr(self.options, "ref_cards_placement", None)
+        if not init_rcp:
+            init_rcp = "inline" if getattr(self.options, "include_reference_tables", True) else "none"
+        combo_ref_cards.set_active_id(init_rcp)
+        grid_style.attach(combo_ref_cards, 1, 8, 1, 1)
+
 
         # 2.0x Enlarged Section Diagrams Toggle
         chk_inc_enlarged_diag = Gtk.CheckButton(label="Include 2.0x Enlarged Section Diagrams (pages at end)")
@@ -867,7 +883,8 @@ class ExportPlugin(inkex.Effect):
             self.options.detail_key_style = combo_dk_style.get_active_id() or "table"
             self.options.detail_key_placement = combo_dk_place.get_active_id() or "inline"
             self.options.edge_label_style = combo_edge_label.get_active_id() or "step"
-            self.options.include_reference_tables = chk_inc_ref_tables.get_active()
+            self.options.ref_cards_placement = combo_ref_cards.get_active_id() or "inline"
+            self.options.include_reference_tables = self.options.ref_cards_placement != "none"
             self.options.include_enlarged_diagrams = chk_inc_enlarged_diag.get_active()
 
             # Save sticky preferences
@@ -884,9 +901,11 @@ class ExportPlugin(inkex.Effect):
                 "detail_key_style": self.options.detail_key_style,
                 "detail_key_placement": self.options.detail_key_placement,
                 "edge_label_style": self.options.edge_label_style,
+                "ref_cards_placement": self.options.ref_cards_placement,
                 "include_reference_tables": self.options.include_reference_tables,
                 "include_enlarged_diagrams": self.options.include_enlarged_diagrams,
                 "line_weight": self.options.line_weight,
+
                 "tab_style": self.options.tab_style,
                 "small_pieces_mode": self.options.small_pieces_mode,
                 "fabric_grain": self.options.fabric_grain,
@@ -967,10 +986,10 @@ class ExportPlugin(inkex.Effect):
                         self.options.include_pattern_test_square = bool(saved_prefs["include_pattern_test_square"])
                     if "show_page_boundaries" in saved_prefs:
                         self.options.show_page_boundaries = bool(saved_prefs["show_page_boundaries"])
-                    if "edge_label_style" in saved_prefs:
-                        self.options.edge_label_style = saved_prefs["edge_label_style"]
                     if "include_reference_tables" in saved_prefs:
                         self.options.include_reference_tables = bool(saved_prefs["include_reference_tables"])
+                    if "ref_cards_placement" in saved_prefs:
+                        self.options.ref_cards_placement = saved_prefs["ref_cards_placement"]
                     if "include_enlarged_diagrams" in saved_prefs:
                         self.options.include_enlarged_diagrams = bool(saved_prefs["include_enlarged_diagrams"])
             except Exception:
@@ -1116,10 +1135,19 @@ class ExportPlugin(inkex.Effect):
         edge_label_reverse = {v: k for k, v in edge_label_map.items()}
         combo_edge_label = ttk.Combobox(page_style, values=list(edge_label_map.values()), state="readonly", width=35)
         combo_edge_label.set(edge_label_map.get(getattr(self.options, "edge_label_style", "step"), "Assembly Step Number (e.g. Step 1, Step 2)"))
-        combo_edge_label.grid(row=5, column=1, sticky="w", pady=4)
-
-        var_inc_ref_tables = tk.BooleanVar(value=bool(getattr(self.options, "include_reference_tables", True)))
-        ttk.Checkbutton(page_style, text="Include Section Reference Table cards (smart-packed inline)", variable=var_inc_ref_tables).grid(row=6, column=0, columnspan=2, sticky="w", pady=3)
+        ttk.Label(page_style, text="Section Reference Cards:").grid(row=6, column=0, sticky="w", pady=4)
+        rcp_map = {
+            "inline": "Smart-packed inline (with templates)",
+            "separated": "Separated (Smart-packed on pages at end)",
+            "none": "None (Turn Off Reference Cards)"
+        }
+        rcp_reverse = {v: k for k, v in rcp_map.items()}
+        combo_rcp = ttk.Combobox(page_style, values=list(rcp_map.values()), state="readonly", width=35)
+        init_rcp = getattr(self.options, "ref_cards_placement", None)
+        if not init_rcp:
+            init_rcp = "inline" if getattr(self.options, "include_reference_tables", True) else "none"
+        combo_rcp.set(rcp_map.get(init_rcp, "Smart-packed inline (with templates)"))
+        combo_rcp.grid(row=6, column=1, sticky="w", pady=4)
 
         var_inc_enlarged_diag = tk.BooleanVar(value=bool(getattr(self.options, "include_enlarged_diagrams", False)))
         ttk.Checkbutton(page_style, text="Include 2.0x Enlarged Section Diagrams (pages at end)", variable=var_inc_enlarged_diag).grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
@@ -1207,7 +1235,8 @@ class ExportPlugin(inkex.Effect):
             self.options.tab_style = tab_reverse.get(combo_tab_style.get(), "grey")
             self.options.small_pieces_mode = sp_reverse.get(combo_sp_mode.get(), "fill")
             self.options.edge_label_style = edge_label_reverse.get(combo_edge_label.get(), "step")
-            self.options.include_reference_tables = var_inc_ref_tables.get()
+            self.options.ref_cards_placement = rcp_reverse.get(combo_rcp.get(), "inline")
+            self.options.include_reference_tables = self.options.ref_cards_placement != "none"
             self.options.include_enlarged_diagrams = var_inc_enlarged_diag.get()
             self.options.fabric_grain = fg_reverse.get(combo_fabric_grain.get(), "orthogonal")
 
@@ -1243,6 +1272,7 @@ class ExportPlugin(inkex.Effect):
                 "tab_style": self.options.tab_style,
                 "small_pieces_mode": self.options.small_pieces_mode,
                 "edge_label_style": self.options.edge_label_style,
+                "ref_cards_placement": self.options.ref_cards_placement,
                 "include_reference_tables": self.options.include_reference_tables,
                 "include_enlarged_diagrams": self.options.include_enlarged_diagrams,
                 "fabric_grain": self.options.fabric_grain,
@@ -2603,21 +2633,22 @@ class ExportPlugin(inkex.Effect):
                     "regions": [],
                 })
 
-            # Detail Key Table tiles (Smart Packed inline with section templates)
-            dk_style = getattr(self.options, "detail_key_style", "table")
-            dk_place = getattr(self.options, "detail_key_placement", "inline")
-            inc_ref_tbl = getattr(self.options, "include_reference_tables", True)
-            if inc_ref_tbl and dk_style == "table" and (dk_place == "inline" or is_reprint):
-                needing_keys = self._detect_sections_needing_detail_key(block_data, sz, sel_set=sel_set)
+            # Detail Key Table tiles (Section Reference Cards)
+            ref_placement = getattr(self.options, "ref_cards_placement", None)
+            if not ref_placement:
+                ref_placement = "inline" if getattr(self.options, "include_reference_tables", True) else "none"
+
+            separated_table_items = []
+            if ref_placement in ("inline", "separated"):
                 for sec in sections:
                     sec_pfx = sec["prefix"].upper()
-                    if is_reprint or sec_pfx in needing_keys or len(sections) <= 6:
-                        matching_regions = [r for r in block_data.tree.leaf_regions() if r.label and re.match(fr"^{re.escape(sec_pfx)}\d+$", r.label, re.IGNORECASE)]
-                        if matching_regions:
+                    matching_regions = [r for r in block_data.tree.leaf_regions() if r.label and re.match(fr"^{re.escape(sec_pfx)}\d+$", r.label, re.IGNORECASE)]
+                    if matching_regions:
+
                             n_pcs = len(matching_regions)
                             tbl_w = 180.0
                             tbl_h = 24.0 + (n_pcs * 18.0) + 10.0
-                            size_items.append({
+                            tile_dict = {
                                 "prefix": f"TBL_{sec_pfx}",
                                 "sec_prefix": sec_pfx,
                                 "part_str": "",
@@ -2631,7 +2662,11 @@ class ExportPlugin(inkex.Effect):
                                 "right_glue": None, "left_align": None,
                                 "bottom_glue": None, "top_align": None,
                                 "sa_poly": [], "regions": [],
-                            })
+                            }
+                            if ref_placement == "inline":
+                                size_items.append(tile_dict)
+                            else:
+                                separated_table_items.append(tile_dict)
 
             # HST sewing-line templates: one printable square per unique
             # 2-at-a-time HST size (draw two seams, cut on the diagonal).
@@ -2923,6 +2958,29 @@ class ExportPlugin(inkex.Effect):
                 item["target_page"] = template_start_page_idx + item["local_page_idx"]
                 item["size"] = sz
                 all_packed_items.append(item)
+
+            if ref_placement == "separated" and separated_table_items:
+                tbl_inputs = []
+                for item in separated_table_items:
+                    hull = [(0.0, 0.0), (item["T_w"], 0.0), (item["T_w"], item["T_h"]), (0.0, item["T_h"])]
+                    tbl_inputs.append({"hull": hull, "rotations": [0.0], "item": item})
+                tbl_placements = nesting.nest_pack(
+                    [{"hull": ni["hull"], "rotations": ni["rotations"]} for ni in tbl_inputs],
+                    avail_w,
+                    avail_h,
+                    spacing_px,
+                )
+                tbl_pages_used = max((pl["page"] for pl in tbl_placements), default=0)
+                ref_page_start = len(pages_list)
+                for p in range(tbl_pages_used + 1):
+                    pages_list.append({"type": "templates", "size": sz, "local_page_idx": num_temp_pages + p})
+                for ni, pl in zip(tbl_inputs, tbl_placements):
+                    item = ni["item"]
+                    item["target_page"] = ref_page_start + pl["page"]
+                    item["page_x"] = pl["x"]
+                    item["page_y"] = pl["y"]
+                    item["size"] = sz
+                    all_packed_items.append(item)
 
             sections_needing_key = self._detect_sections_needing_detail_key(block_data, sz, sel_set=sel_set)
             inc_diag = getattr(self.options, "include_enlarged_diagrams", False)
@@ -3298,7 +3356,7 @@ class ExportPlugin(inkex.Effect):
         for idx, r in enumerate(tree.leaf_regions()):
             scaled_poly = [
                 (
-                    center_x + (p[0] - block_cx) * scale,
+                    center_x - (p[0] - block_cx) * scale,
                     center_y + (p[1] - block_cy) * scale,
                 )
                 for p in r.polygon
@@ -3335,7 +3393,7 @@ class ExportPlugin(inkex.Effect):
             if hull_poly:
                 scaled_hull = [
                     (
-                        center_x + (p[0] - block_cx) * scale,
+                        center_x - (p[0] - block_cx) * scale,
                         center_y + (p[1] - block_cy) * scale,
                     )
                     for p in hull_poly
@@ -4176,7 +4234,7 @@ class ExportPlugin(inkex.Effect):
                     x=str(px + margin),
                     y=str(py + margin + 55),
                     style=f"font-size:{STYLE_CONFIG['font_size_body']};font-family:{STYLE_CONFIG['font_family']};fill:{STYLE_CONFIG['color_mid']};",
-                ).text = "Use this map to assemble the printed sections in the correct sequence."
+                ).text = "Mirrored to match the foundation paper pattern as viewed from the reverse (sewing side)."
                 
                 # Center the preview map at the top of Page 2
                 preview_side = min(int(avail_w * 0.90), int(avail_h * 0.42))

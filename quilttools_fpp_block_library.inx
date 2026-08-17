@@ -7,6 +7,8 @@
   <param name="notebook" type="notebook">
     <page name="load" gui-text="Load Block">
       <label appearance="header">Load a Library Block</label>
+      <param name="direct_name" type="string" gui-text="Block name (leave blank to open visual picker popup)"></param>
+      <separator/>
       <param name="load_size" type="optiongroup" appearance="combo" gui-text="When loading, size the block to:">
         <option value="original">Use original (saved) dimensions</option>
         <option value="match">Match current block dimensions</option>
@@ -18,8 +20,10 @@
     </page>
 
     <page name="catalogue" gui-text="Web Catalogue">
-      <label appearance="header">Open Visual Library in Browser</label>
-      <label>Click Apply to generate and open the visual block catalogue in your web browser. You can search, filter by description or tags, and copy block names to your clipboard.</label>
+      <label appearance="header">Visual Web Catalogue</label>
+      <label>Search, filter, and view the entire library in your web browser. Clicking any block in the browser copies its name to your clipboard.</label>
+      <separator/>
+      <param name="catalogue_block_name" type="string" gui-text="Paste block name to load directly (leave blank to open browser)"></param>
     </page>
 
     <page name="save" gui-text="Save Block">

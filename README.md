@@ -27,15 +27,27 @@ Quilt Tools FPP is a vector-based extension suite for **Inkscape** designed for 
 
 ---
 
-## 🛠️ Installation
+## 🛠️ Installation & Requirements
 
-1. Copy all `.py` and `.inx` files (and the `BlockLibrary`, `FabricLibrary`, `LayoutLibrary`, and `themes` folders) into your Inkscape user extensions directory:
+### 1. Requirements & System Dependencies
+* **Windows**: Works out-of-the-box. Inkscape's bundled Python includes all required libraries.
+* **macOS**: Works out-of-the-box. Uses native macOS Tkinter windows bundled with Inkscape.
+* **Linux (Ubuntu / Debian / WSL)**: Secondary popup dialogs (Block Picker, Export Linting, Theme Manager) require Python GTK3 and Tkinter packages. Install them via:
+  ```bash
+  sudo apt update
+  sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-gdkpixbuf-2.0 python3-tk
+  ```
+
+### 2. Installing the Extension
+1. Copy all `.py` and `.inx` files (along with `BlockLibrary`, `FabricLibrary`, `LayoutLibrary`, and `themes`) into your Inkscape user extensions directory:
    * **Windows**: `%APPDATA%\inkscape\extensions`
-   * **macOS/Linux**: `~/.config/inkscape/extensions`
+   * **macOS/Linux**: `~/.config/inkscape/extensions/quilttools`
+   *(Note for WSL users: Copy files into the native Linux filesystem path `~/.config/inkscape/extensions/quilttools` rather than symlinking over `/mnt/c`)*
 2. Restart Inkscape. The tools will appear under the `Extensions` menu in three submenus:
    * **Quilt Tools Block**
    * **Quilt Tools Colour**
    * **Quilt Tools Pattern**
+
 
 ---
 

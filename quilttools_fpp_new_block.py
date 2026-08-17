@@ -106,31 +106,40 @@ class NewBlockPlugin(inkex.Effect):
                 if not self.svg.selection:
                     inkex.errormsg("Note: 'Selected object scaling' is active, but no objects were selected on the canvas. Generating blank block anyway.")
                 else:
-                    clip_id = self.svg.get_unique_id('block_clip')
-                    clip_path = etree.SubElement(self.svg.defs, "{%s}clipPath" % core.SVG_NS, id=clip_id, clipPathUnits="userSpaceOnUse")
-                    etree.SubElement(clip_path, "{%s}rect" % core.SVG_NS, x="0", y="0", width=str(w), height=str(h))
-                    clip_group = etree.SubElement(self.svg.get_current_layer(), "{%s}g" % core.SVG_NS)
-                    clip_group.set("clip-path", f"url(#{clip_id})")
+                    current_layer = self.svg.get_current_layer()
+                    valid_elements = [
+                        el for el in self.svg.selection.values()
+                        if el != current_layer and el != self.svg and el.getparent() is not None
+                    ]
+                    if valid_elements:
+                        clip_id = self.svg.get_unique_id('block_clip')
+                        clip_path = etree.SubElement(self.svg.defs, "{%s}clipPath" % core.SVG_NS, id=clip_id, clipPathUnits="userSpaceOnUse")
+                        etree.SubElement(clip_path, "{%s}rect" % core.SVG_NS, x="0", y="0", width=str(w), height=str(h))
+                        clip_group = etree.SubElement(current_layer, "{%s}g" % core.SVG_NS)
+                        clip_group.set("clip-path", f"url(#{clip_id})")
 
-                    for el in list(self.svg.selection.values()):
-                        bbox = el.bounding_box()
-                        if bbox and bbox.width > 0 and bbox.height > 0:
-                            scale_x, scale_y = w / bbox.width, h / bbox.height
-                            if self.options.scale_mode == "fit": final_scale_x = final_scale_y = min(scale_x, scale_y)
-                            elif self.options.scale_mode == "crop": final_scale_x = final_scale_y = max(scale_x, scale_y)
-                            elif self.options.scale_mode == "stretch": final_scale_x, final_scale_y = scale_x, scale_y
-                            else: final_scale_x = final_scale_y = 1.0
+                        for el in valid_elements:
+                            bbox = el.bounding_box()
+                            if bbox and bbox.width > 0 and bbox.height > 0:
+                                scale_x, scale_y = w / bbox.width, h / bbox.height
+                                if self.options.scale_mode == "fit": final_scale_x = final_scale_y = min(scale_x, scale_y)
+                                elif self.options.scale_mode == "crop": final_scale_x = final_scale_y = max(scale_x, scale_y)
+                                elif self.options.scale_mode == "stretch": final_scale_x, final_scale_y = scale_x, scale_y
+                                else: final_scale_x = final_scale_y = 1.0
 
-                            cx, cy = (w - (bbox.width * final_scale_x)) / 2, (h - (bbox.height * final_scale_y)) / 2
-                            transform = inkex.Transform()
-                            transform.add_translate(cx, cy)
-                            transform.add_scale(final_scale_x, final_scale_y)
-                            transform.add_translate(-bbox.left, -bbox.top)
-                            el.transform = transform @ el.transform
-                            clip_group.append(el)
+                                cx, cy = (w - (bbox.width * final_scale_x)) / 2, (h - (bbox.height * final_scale_y)) / 2
+                                transform = inkex.Transform()
+                                transform.add_translate(cx, cy)
+                                transform.add_scale(final_scale_x, final_scale_y)
+                                transform.add_translate(-bbox.left, -bbox.top)
+                                el.transform = transform @ el.transform
+                                clip_group.append(el)
+
 
             tree = core.RegionTree([(0,0),(w,0),(w,h),(0,h)])
             min_x, min_y = 0.0, 0.0
+            max_x, max_y = w, h
+
 
         rows, cols = self.options.grid_rows, self.options.grid_cols
         for i in range(1, rows):
